@@ -33,6 +33,10 @@ import javax.inject.Singleton
 
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
+/** Google Gemini through its chat-completions compatible address. Both can be changed in Settings. */
+const val GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
+const val GEMINI_MODEL = "gemini-2.5-flash"
+
 data class Prefs(
     val loaded: Boolean = false,
     val onboardingDone: Boolean = false,
@@ -48,6 +52,8 @@ data class Prefs(
     val lowStockAlerts: Boolean = true,
     val currencyCode: String = "INR",
     val currencySymbol: String = "₹",
+    /** The "import your Excel file" offer has been shown after setup. */
+    val importOffered: Boolean = false,
 ) {
     val tamil: Boolean get() = language == "ta"
     val cloudReady: Boolean get() = cloudEndpoint.startsWith("https://") && cloudModel.isNotBlank() && cloudKeySaved
@@ -69,6 +75,7 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
         val alerts = booleanPreferencesKey("low_stock_alerts")
         val currencyCode = stringPreferencesKey("currency_code")
         val currencySymbol = stringPreferencesKey("currency_symbol")
+        val importOffered = booleanPreferencesKey("import_offered")
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -81,13 +88,14 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
             theme = p[K.theme] ?: "system",
             ttsEnabled = p[K.tts] ?: true,
             aiMode = p[K.aiMode] ?: "local",
-            cloudEndpoint = p[K.endpoint] ?: "",
-            cloudModel = p[K.model] ?: "",
+            cloudEndpoint = p[K.endpoint]?.ifBlank { null } ?: GEMINI_ENDPOINT,
+            cloudModel = p[K.model]?.ifBlank { null } ?: GEMINI_MODEL,
             cloudKeySaved = !p[K.key].isNullOrEmpty(),
             allowNegativeStock = p[K.negative] ?: false,
             lowStockAlerts = p[K.alerts] ?: true,
             currencyCode = p[K.currencyCode] ?: "INR",
             currencySymbol = p[K.currencySymbol] ?: "₹",
+            importOffered = p[K.importOffered] ?: false,
         )
     }
 
@@ -112,6 +120,8 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
         it[K.currencyCode] = code; it[K.currencySymbol] = symbol
     }.let { }
 
+    suspend fun setImportOffered() = context.dataStore.edit { it[K.importOffered] = true }.let { }
+
     suspend fun setAiMode(mode: String) = context.dataStore.edit { it[K.aiMode] = mode }.let { }
 
     /** Saves the cloud AI settings. A blank key keeps the key that is already stored. Returns false if the key could not be protected. */
@@ -120,7 +130,7 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
         context.dataStore.edit {
             it[K.endpoint] = endpoint.trim()
             it[K.model] = model.trim()
-            if (enc != null) it[K.key] = enc
+            if (enc != null) { it[K.key] = enc; it[K.aiMode] = "cloud" }
         }
         return true
     }

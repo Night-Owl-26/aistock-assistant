@@ -68,6 +68,9 @@ class AssistantViewModel @Inject constructor(
     private val _speak = MutableSharedFlow<String>(extraBufferCapacity = 4)
     /** Sentences to read aloud (only after a spoken command). */
     val speak: SharedFlow<String> = _speak
+    private val _relisten = MutableSharedFlow<Int>(extraBufferCapacity = 2)
+    /** After a spoken exchange the microphone opens again by itself; the value is the length of the reply being read out. */
+    val relisten: SharedFlow<Int> = _relisten
     private val _source = MutableStateFlow("local")
     /** Which engine understood the last command: local or cloud. */
     val source: StateFlow<String> = _source
@@ -184,7 +187,10 @@ class AssistantViewModel @Inject constructor(
                 ReplyKind.ERROR -> VoiceState.ERROR
                 else -> VoiceState.IDLE
             }
-            if (fromVoice) _speak.tryEmit(reply.spoken)
+            if (fromVoice) {
+                _speak.tryEmit(reply.spoken)
+                if (reply.kind != ReplyKind.ERROR) _relisten.tryEmit(reply.spoken.length)
+            }
             if (_voice.value == VoiceState.SUCCESS || _voice.value == VoiceState.ERROR) settle()
             persist(userText, reply)
         }

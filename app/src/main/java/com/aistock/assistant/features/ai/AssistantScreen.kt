@@ -70,6 +70,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.delay
 import com.aistock.assistant.R
 import com.aistock.assistant.ai.ReplyKind
 import com.aistock.assistant.data.Prefs
@@ -96,6 +97,8 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
     var input by rememberSaveable { mutableStateOf("") }
     var autoStarted by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
+    // True while the microphone was reopened automatically to continue a spoken conversation.
+    var autoListening by remember { mutableStateOf(false) }
 
     val recognizer = remember { VoiceRecognizer(ctx) }
     val speaker = remember { Speaker(ctx) }
@@ -113,9 +116,11 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
         recognizer.start(languageTag, object : VoiceRecognizer.Callback {
             override fun onListening() = vm.onListening()
             override fun onPartial(text: String) = vm.onPartial(text)
-            override fun onResult(text: String) { vm.onVoiceStopped(); vm.send(text, fromVoice = true) }
+            override fun onResult(text: String) { autoListening = false; vm.onVoiceStopped(); vm.send(text, fromVoice = true) }
             override fun onError(code: Int) {
                 vm.onVoiceStopped()
+                // Silence after an automatic re-listen just ends the spoken conversation quietly.
+                if (autoListening) { autoListening = false; return }
                 vm.onVoiceError(
                     when (code) {
                         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> msgNoPermission
@@ -134,6 +139,7 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
     }
 
     fun micPressed() {
+        autoListening = false
         if (voice == VoiceState.LISTENING) { recognizer.stop(); vm.onVoiceStopped(); return }
         if (busy) return
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startVoice()
@@ -145,6 +151,17 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
         if (startListening && !autoStarted) { autoStarted = true; micPressed() }
     }
     LaunchedEffect(Unit) { vm.speak.collect { text -> if (prefs.ttsEnabled) speaker.speak(text, prefs.tamil) } }
+    LaunchedEffect(Unit) {
+        vm.relisten.collect { length ->
+            // Wait for the reply to be read out, then listen again so the user does not have to press the button each time.
+            delay(if (prefs.ttsEnabled) minOf(9_000L, 1_200L + length * 75L) else 600L)
+            val granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+            if (granted && !vm.busy.value && vm.voice.value != VoiceState.LISTENING && recognizer.isAvailable()) {
+                autoListening = true
+                startVoice()
+            }
+        }
+    }
     LaunchedEffect(items.size, busy) { if (items.isNotEmpty()) listState.animateScrollToItem(items.size - 1 + if (busy) 1 else 0) }
 
     Scaffold(

@@ -19,14 +19,19 @@ data class CloudConfig(val endpoint: String, val model: String, val apiKey: Stri
  * service can be used: the endpoint URL, model name and key are entered in Settings and are never built into the app.
  * The reply is only ever read as an [AICommand]; it cannot run SQL or bypass business rules.
  */
-class CloudAIProvider(private val config: suspend () -> CloudConfig?) : AIProvider {
+class CloudAIProvider(
+    private val config: suspend () -> CloudConfig?,
+    /** A short text snapshot of the business (products, parties, today) so the model can answer questions about it. */
+    private val snapshot: suspend () -> String = { "" },
+) : AIProvider {
     override val name: String = "cloud"
 
     override suspend fun understand(conversation: List<ChatTurn>, input: String): AICommand = withContext(Dispatchers.IO) {
         val cfg = config() ?: throw IllegalStateException("Cloud AI is not configured")
         if (!cfg.endpoint.startsWith("https://")) throw IllegalStateException("Endpoint must use https")
         val messages = JSONArray()
-        messages.put(JSONObject().put("role", "system").put("content", AICommandJson.SYSTEM_PROMPT))
+        val data = try { snapshot() } catch (e: Exception) { "" }
+        messages.put(JSONObject().put("role", "system").put("content", AICommandJson.SYSTEM_PROMPT + (if (data.isBlank()) "" else "\n\nBUSINESS DATA RIGHT NOW (read-only):\n" + data.take(12000))))
         for (t in conversation.takeLast(8).dropLast(1)) {
             messages.put(JSONObject().put("role", if (t.role == "user") "user" else "assistant").put("content", t.text.take(500)))
         }
@@ -37,7 +42,7 @@ class CloudAIProvider(private val config: suspend () -> CloudConfig?) : AIProvid
         try {
             conn.requestMethod = "POST"
             conn.connectTimeout = 8_000
-            conn.readTimeout = 15_000
+            conn.readTimeout = 25_000
             conn.doOutput = true
             conn.setRequestProperty("Content-Type", "application/json")
             conn.setRequestProperty("Authorization", "Bearer ${cfg.apiKey}")
@@ -67,7 +72,8 @@ Schema:
    "dateRange": one of [TODAY, YESTERDAY, THIS_WEEK, LAST_WEEK, THIS_MONTH, LAST_MONTH, ALL],
    "paid": boolean, "sellingPrice": number, "purchasePrice": number, "minimumStock": number, "usesContext": boolean},
  "missingFields": [string], "response": short sentence}
-Rules: include only entities that were actually said. Never invent a product, name, quantity or price. If the user refers to "it" or "them", set usesContext true and omit productName. For STOCK_ADJUST, quantity is the new counted stock. Payments and deletions are not supported: use UNKNOWN. If unsure, use UNKNOWN with low confidence.
+Rules: include only entities that were actually said. Never invent a product, name, quantity or price. If the user refers to "it" or "them", set usesContext true and omit productName. For STOCK_ADJUST, quantity is the new counted stock. Payments and deletions cannot be done by you: explain that they are done from the Transactions screen.
+CONVERSATION: you are also a friendly business assistant called AIStock Assistant. When the user greets you, chats, asks for advice, or asks something you can answer from BUSINESS DATA (for example "list my tea products", "which customer owes the most", "what should I reorder"), set intent UNKNOWN, confidence 1, and write your complete, natural, helpful answer in "response" (plain text, short lines, may use "• " bullets, no markdown). Reply in the language the user wrote in (English, Tamil, or mixed). Use only the numbers in BUSINESS DATA; if something is not there, say you do not have it. Never say that you saved, added, sold or changed anything: the app does that only after the user confirms a command.
 """.trim()
 
     fun parse(text: String): AICommand {
@@ -105,7 +111,7 @@ Rules: include only entities that were actually said. Never invent a product, na
         val missing = ArrayList<String>()
         o.optJSONArray("missingFields")?.let { arr -> for (i in 0 until arr.length()) missing.add(arr.optString(i)) }
         // Writes always need confirmation, whatever the service says.
-        val cmd = AICommand(intent, confidence, intent.isWrite, entities, missing.filter { it != LocalParser.FIELD_RECORD_TYPE }, o.optString("response").take(300), "cloud")
+        val cmd = AICommand(intent, confidence, intent.isWrite, entities, missing.filter { it != LocalParser.FIELD_RECORD_TYPE }, o.optString("response").take(3000), "cloud")
         val v = CommandValidator.validate(cmd)
         if (!v.ok) throw IllegalArgumentException(v.errors.joinToString("; "))
         return cmd
@@ -133,7 +139,7 @@ class RoutingAIProvider(
             } catch (e: Exception) {
                 null
             }
-            if (r != null && r.intent != Intent.UNKNOWN) {
+            if (r != null && (r.intent != Intent.UNKNOWN || r.response.isNotBlank())) {
                 lastSource = "cloud"
                 return r
             }

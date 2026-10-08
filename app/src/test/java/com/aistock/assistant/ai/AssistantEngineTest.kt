@@ -334,4 +334,32 @@ class AssistantEngineTest {
         assertTrue(a[1], a[1].contains("\"productName\":\"Blue Shirt\""))
         assertEquals("SUCCESS", a[3])
     }
+
+    @Test
+    fun cloudModelCanChatButNeverWrites(): Unit = runBlocking {
+        val chatty = object : AIProvider {
+            override val name = "cloud"
+            override suspend fun understand(conversation: List<ChatTurn>, input: String) =
+                AICommand(Intent.UNKNOWN, 1.0, false, response = "Hi Bharath! You have 3 tea products: Green Tea, Masala Tea and Lemon Tea.", source = "cloud")
+        }
+        val b = FakeBackend()
+        val r = engine(b, chatty).handle("give me the list of tea products")
+        assertEquals(ReplyKind.ANSWER, r.kind)
+        assertTrue(r.text, r.text.contains("Masala Tea"))
+        assertTrue(b.executed.isEmpty())
+    }
+
+    @Test
+    fun offlineGreetingAndProductListAreFriendly(): Unit = runBlocking {
+        val b = FakeBackend()
+        b.addProduct("Green Tea", stock = 12)
+        b.addProduct("Masala Tea", stock = 7)
+        b.addProduct("Blue Shirt", stock = 3)
+        val e = engine(b)
+        assertTrue(e.handle("hey").text.startsWith("Hello"))
+        val r = e.handle("give me the list of tea products")
+        assertTrue(r.text, r.text.contains("Green Tea") && r.text.contains("Masala Tea"))
+        assertFalse(r.text, r.text.contains("Blue Shirt"))
+        assertTrue(e.handle("list my products").text.contains("Blue Shirt"))
+    }
 }

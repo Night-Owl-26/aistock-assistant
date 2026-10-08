@@ -16,6 +16,8 @@ class LocalFallbackAIProvider : AIProvider {
 object LocalParser {
     const val GUIDE_PAYMENT = "GUIDE_PAYMENT"
     const val GUIDE_DELETE = "GUIDE_DELETE"
+    const val GUIDE_GREETING = "GUIDE_GREETING"
+    const val GUIDE_THANKS = "GUIDE_THANKS"
     const val FIELD_RECORD_TYPE = "recordType"
 
     private const val NUM = "(\\d+(?:\\.\\d+)?)"
@@ -74,8 +76,15 @@ object LocalParser {
         val startsQ = STARTS_Q.containsMatchIn(s)
         val hasNum = ANY_NUM.containsMatchIn(noDate) || QTY.containsMatchIn(noDate)
 
-        if (Regex("^(help|hi|hello|hey|vanakkam|what can you do|how to use|how do i use|commands|examples)\\b").containsMatchIn(s)) {
+        if (Regex("^(hi|hii+|hello|hey|vanakkam|good (morning|afternoon|evening)|namaste)( there| aistock| assistant)?$").containsMatchIn(s)) return unknown(GUIDE_GREETING)
+        if (Regex("^(thanks|thank you|thankyou|nandri|super|ok thanks|great)( you| a lot| so much)?$").containsMatchIn(s)) return unknown(GUIDE_THANKS)
+        if (Regex("^(help|what can you do|how to use|how do i use|commands|examples)\\b").containsMatchIn(s)) {
             return cmd(Intent.HELP, 0.99)
+        }
+        // "list my products", "show all items", "give me the list of tea products"
+        Regex("^(?:please )?(?:list|show|give|display|view|tell)(?: me)?(?: the| a)?(?: list of| names of)?(?: all| my| our| the)* ?(.*?) ?(?:products|items)(?: list)?$").find(s)?.let { m ->
+            val word = m.groupValues[1].trim()
+            return if (word.isEmpty()) cmd(Intent.REPORT_STOCK, 0.95) else cmd(Intent.STOCK_QUERY, 0.93, Entities(productName = restoreCase(raw, word)))
         }
         if (Regex("^(delete|erase|cancel)\\b").containsMatchIn(s)) {
             return unknown(GUIDE_DELETE)

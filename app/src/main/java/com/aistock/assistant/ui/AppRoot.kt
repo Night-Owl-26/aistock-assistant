@@ -6,7 +6,10 @@ import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.consumeWindowInsets
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -16,7 +19,11 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
@@ -68,7 +75,7 @@ private val TOP_LEVEL = listOf(
 )
 
 @Composable
-fun AppRoot(vm: MainViewModel = hiltViewModel()) {
+fun AppRoot(startTalking: Boolean = false, vm: MainViewModel = hiltViewModel()) {
     val prefs by vm.prefs.collectAsStateWithLifecycle()
     val hasPin by vm.hasPin.collectAsStateWithLifecycle()
     val unlocked by vm.unlocked.collectAsStateWithLifecycle()
@@ -78,14 +85,14 @@ fun AppRoot(vm: MainViewModel = hiltViewModel()) {
                 !prefs.loaded || (prefs.onboardingDone && hasPin == null) -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
                 !prefs.onboardingDone -> OnboardingScreen(vm)
                 hasPin == true && !unlocked -> LockScreen(vm)
-                else -> MainScaffold(vm)
+                else -> MainScaffold(vm, startTalking)
             }
         }
     }
 }
 
 @Composable
-private fun MainScaffold(vm: MainViewModel) {
+private fun MainScaffold(vm: MainViewModel, startTalking: Boolean) {
     val prefs by vm.prefs.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val snackbar = remember { SnackbarHostState() }
@@ -107,6 +114,23 @@ private fun MainScaffold(vm: MainViewModel) {
                 snackbar.showSnackbar(message)
             }
         }
+    }
+
+    var talked by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(startTalking) {
+        if (startTalking && !talked) { talked = true; navController.navigate("ai?listen=true") { launchSingleTop = true } }
+    }
+
+    if (prefs.loaded && !prefs.importOffered && !startTalking) {
+        AlertDialog(
+            onDismissRequest = { scope.launch { vm.setImportOffered() } },
+            title = { Text(stringResource(R.string.import_offer_title)) },
+            text = { Text(stringResource(R.string.import_offer_body)) },
+            confirmButton = {
+                Button(onClick = { scope.launch { vm.setImportOffered() }; nav.go("data") }) { Text(stringResource(R.string.import_offer_yes)) }
+            },
+            dismissButton = { TextButton(onClick = { scope.launch { vm.setImportOffered() } }) { Text(stringResource(R.string.import_offer_later)) } },
+        )
     }
 
     CompositionLocalProvider(LocalToast provides toast) {

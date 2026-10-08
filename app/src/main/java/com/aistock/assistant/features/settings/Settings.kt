@@ -128,6 +128,7 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
     var endpoint by remember(prefs.cloudEndpoint) { mutableStateOf(prefs.cloudEndpoint) }
     var model by remember(prefs.cloudModel) { mutableStateOf(prefs.cloudModel) }
     var apiKey by remember { mutableStateOf("") }
+    var advanced by remember { mutableStateOf(false) }
 
     val notifyPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         scope.launch { vm.setLowStockAlerts(granted) }
@@ -183,15 +184,18 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
                 Spacer(Modifier.height(10.dp))
                 Text(stringResource(R.string.ai_cloud_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(8.dp))
-                TextInput(stringResource(R.string.ai_endpoint), endpoint, { endpoint = it.trim() }, keyboard = KeyboardType.Uri, capitalize = false)
-                Spacer(Modifier.height(8.dp))
-                TextInput(stringResource(R.string.ai_model), model, { model = it.trim() }, capitalize = false)
-                Spacer(Modifier.height(8.dp))
                 OutlinedTextField(
                     value = apiKey, onValueChange = { apiKey = it.trim() }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                     label = { Text(stringResource(if (prefs.cloudKeySaved) R.string.ai_key_saved else R.string.ai_key)) },
                     visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 )
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = { advanced = !advanced }) { Text(stringResource(R.string.ai_advanced)) }
+                if (advanced) {
+                    TextInput(stringResource(R.string.ai_endpoint), endpoint, { endpoint = it.trim() }, keyboard = KeyboardType.Uri, capitalize = false)
+                    Spacer(Modifier.height(8.dp))
+                    TextInput(stringResource(R.string.ai_model), model, { model = it.trim() }, capitalize = false)
+                }
                 Spacer(Modifier.height(10.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     Button(onClick = {

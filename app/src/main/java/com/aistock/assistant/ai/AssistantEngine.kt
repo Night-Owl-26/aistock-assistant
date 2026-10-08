@@ -187,9 +187,13 @@ class AssistantEngine(
         }
         return when {
             cmd.intent == Intent.UNKNOWN -> AssistantReply(
-                when (cmd.entities.note) {
-                    LocalParser.GUIDE_PAYMENT -> p.paymentGuide()
-                    LocalParser.GUIDE_DELETE -> p.deleteGuide()
+                when {
+                    cmd.entities.note == LocalParser.GUIDE_PAYMENT -> p.paymentGuide()
+                    cmd.entities.note == LocalParser.GUIDE_DELETE -> p.deleteGuide()
+                    // A cloud model answered in its own words (chat, advice, questions about the data).
+                    cmd.source == "cloud" && cmd.response.isNotBlank() -> cmd.response
+                    cmd.entities.note == LocalParser.GUIDE_GREETING -> p.greeting()
+                    cmd.entities.note == LocalParser.GUIDE_THANKS -> p.welcome()
                     else -> p.unknown()
                 }, ReplyKind.ANSWER, Intent.UNKNOWN
             )
@@ -659,7 +663,11 @@ class AssistantEngine(
             Intent.REPORT_STOCK -> {
                 val s = backend.stockSummary()
                 if (s.productCount == 0) return AssistantReply(p.noProducts(), ReplyKind.ANSWER, d.intent)
-                return AssistantReply(p.stockReport(s.productCount, money(s.valuePaise), s.lowCount, s.outCount), ReplyKind.ANSWER, d.intent)
+                val head = p.stockReport(s.productCount, money(s.valuePaise), s.lowCount, s.outCount)
+                val all = backend.products().sortedBy { it.name.lowercase() }
+                val shown = all.take(20)
+                val more = if (all.size > shown.size) "\n" + p.andMore(all.size - shown.size) else ""
+                return AssistantReply(head + "\n" + shown.joinToString("\n") { "• ${it.name}: ${qty(it.stockMilli, it.unit)}" } + more, ReplyKind.ANSWER, d.intent, spoken = head)
             }
             Intent.CUSTOMER_BALANCE, Intent.SUPPLIER_BALANCE -> return balanceAnswer(d)
             Intent.CUSTOMER_QUERY, Intent.SUPPLIER_QUERY -> return partyAnswer(d)

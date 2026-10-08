@@ -242,6 +242,21 @@ S = {
 "get_started_button": ("Get started", "தொடங்கு"),
 }
 
+S.update({
+"import_offer_title": ("Already keep your stock in Excel?", "ஏற்கனவே Excel-ல் ஸ்டாக் வைத்திருக்கிறீர்களா?"),
+"import_offer_body": ("You can bring in your products, customers, suppliers and opening stock from your .xlsx or .csv file now, so you do not have to type them again. You can also do it later from More > Import / Export.", "உங்கள் .xlsx அல்லது .csv கோப்பிலிருந்து பொருட்கள், வாடிக்கையாளர்கள், சப்ளையர்கள், தொடக்க ஸ்டாக்கை இப்போதே கொண்டுவரலாம்; மீண்டும் தட்டச்சு செய்ய வேண்டாம். பின்னர் மேலும் > இறக்குமதி / ஏற்றுமதி-யிலும் செய்யலாம்."),
+"import_offer_yes": ("Import my file", "என் கோப்பை இறக்குமதி செய்"), "import_offer_later": ("Later", "பின்னர்"),
+"ai_advanced": ("Use a different AI service", "வேறு AI சேவையைப் பயன்படுத்து"),
+"ai_mode_cloud": ("Gemini AI when online (real conversation)", "இணையம் இருக்கும்போது Gemini AI (இயல்பான உரையாடல்)"),
+"ai_cloud_help": ("For ChatGPT-style conversation, paste a Google Gemini API key. Create one free at aistudio.google.com/apikey (sign in with Google, tap Create API key). The key is stored encrypted on this phone only. Your product and customer names are sent to Google to answer your questions.", "ChatGPT போன்ற உரையாடலுக்கு Google Gemini API key-ஐ ஒட்டவும். aistudio.google.com/apikey-ல் இலவசமாக உருவாக்கலாம் (Google-ல் உள்நுழைந்து Create API key தட்டவும்). Key இந்த போனில் மட்டும் குறியாக்கம் செய்து சேமிக்கப்படும். உங்கள் கேள்விகளுக்கு பதிலளிக்க பொருள், வாடிக்கையாளர் பெயர்கள் Google-க்கு அனுப்பப்படும்."),
+"ai_key": ("Gemini API key", "Gemini API key"),
+"ai_key_saved": ("Gemini API key (saved · type to replace)", "Gemini API key (சேமிக்கப்பட்டது · மாற்ற தட்டச்சு செய்யவும்)"),
+"ai_status_cloud": ("Gemini AI is on. The on-device assistant takes over when you are offline.", "Gemini AI இயக்கத்தில் உள்ளது. ஆஃப்லைனில் போனிலேயே இயங்கும் உதவியாளர் செயல்படும்."),
+"ai_status_cloud_missing": ("Paste a Gemini API key below to turn on real conversation. Until then the on-device assistant is active.", "இயல்பான உரையாடலுக்கு கீழே Gemini API key-ஐ ஒட்டவும். அதுவரை போனிலேயே இயங்கும் உதவியாளர் செயலில் இருக்கும்."),
+"shortcut_talk_short": ("Talk", "பேசு"), "shortcut_talk_long": ("Talk to AIStock", "AIStock-இடம் பேசு"),
+"ai_cloud_ready": ("Gemini AI on", "Gemini AI இயக்கத்தில்"), "ai_cloud_active": ("Gemini AI", "Gemini AI"),
+})
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def esc(s):
@@ -263,6 +278,7 @@ for dp, _, fs in os.walk(os.path.join(ROOT, "app/src/main/java")):
         if fn.endswith(".kt"):
             used |= set(re.findall(r"R\.string\.([a-z_0-9]+)", open(os.path.join(dp, fn), encoding="utf-8").read()))
 missing = sorted(used - set(S))
+used |= {"shortcut_talk_short", "shortcut_talk_long"}
 unused = sorted(set(S) - used)
 bad = [k for k, (en, ta) in S.items() if sorted(re.findall(r"%\d\$[sd]", en)) != sorted(re.findall(r"%\d\$[sd]", ta))]
 write(os.path.join(ROOT, "app/src/main/res/values/strings.xml"), 0)

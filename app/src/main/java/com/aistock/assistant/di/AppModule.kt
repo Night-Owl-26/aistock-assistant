@@ -58,12 +58,15 @@ object AppModule {
      */
     @Provides
     @Singleton
-    fun routingProvider(settings: SettingsStore, connectivity: Connectivity): RoutingAIProvider {
-        val cloud = CloudAIProvider {
-            val p = settings.current.value
-            val key = settings.cloudKey()
-            if (p.cloudReady && key != null) CloudConfig(p.cloudEndpoint, p.cloudModel, key) else null
-        }
+    fun routingProvider(settings: SettingsStore, connectivity: Connectivity, backend: RoomAssistantBackend): RoutingAIProvider {
+        val cloud = CloudAIProvider(
+            config = {
+                val p = settings.current.value
+                val key = settings.cloudKey()
+                if (p.cloudReady && key != null) CloudConfig(p.cloudEndpoint, p.cloudModel, key) else null
+            },
+            snapshot = { backend.snapshotText(settings.current.value.currencySymbol) },
+        )
         return RoutingAIProvider(
             useCloud = { settings.current.value.let { it.aiMode == "cloud" && it.cloudReady } },
             online = { connectivity.isOnline() },

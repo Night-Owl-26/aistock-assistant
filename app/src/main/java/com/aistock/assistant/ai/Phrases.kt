@@ -5,9 +5,11 @@ class Phrases(private val ta: Boolean) {
     private fun t(en: String, tam: String) = if (ta) tam else en
 
     fun didntCatch() = t("I couldn't hear that. Please try again.", "சரியாகக் கேட்கவில்லை. மீண்டும் சொல்லுங்கள்.")
+    fun greeting() = t("Hello! Tell me what happened in your shop today, or ask me about your stock, sales or dues.", "வணக்கம்! இன்று கடையில் நடந்ததைச் சொல்லுங்கள், அல்லது ஸ்டாக், விற்பனை, நிலுவை பற்றி கேளுங்கள்.")
+    fun welcome() = t("You're welcome. Anything else?", "நன்றி. வேறு ஏதாவது?")
     fun unknown() = t(
-        "I didn't understand that. Try something like \"Add 50 pieces of Blue Shirt\" or \"What were today's sales?\"",
-        "புரியவில்லை. \"Blue Shirt 50 pieces add pannunga\" அல்லது \"இன்றைய விற்பனை எவ்வளவு?\" போல சொல்லுங்கள்."
+        "I didn't understand that. On this phone I only know stock and money commands, like \"Add 50 pieces of Blue Shirt\" or \"What were today's sales?\". For free-flowing conversation, add a Gemini key in More > Settings > AI Provider.",
+        "புரியவில்லை. இந்த போனில் ஸ்டாக், பணம் தொடர்பான கட்டளைகள் மட்டுமே தெரியும்: \"Blue Shirt 50 pieces add pannunga\" அல்லது \"இன்றைய விற்பனை எவ்வளவு?\". இயல்பான உரையாடலுக்கு மேலும் > அமைப்புகள் > AI வழங்குநர்-ல் Gemini key சேர்க்கவும்."
     )
     fun notSure() = t("I'm not sure what you want me to do, so I haven't changed anything. Please say it another way.",
         "நீங்கள் என்ன சொல்கிறீர்கள் என்று உறுதியாக தெரியவில்லை. எதுவும் மாற்றவில்லை. வேறு விதமாக சொல்லுங்கள்.")

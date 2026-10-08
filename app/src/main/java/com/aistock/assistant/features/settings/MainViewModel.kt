@@ -70,6 +70,7 @@ class MainViewModel @Inject constructor(
     suspend fun setAllowNegative(on: Boolean) = settings.setAllowNegative(on)
     suspend fun setLowStockAlerts(on: Boolean) = settings.setLowStockAlerts(on)
     suspend fun setAiMode(mode: String) = settings.setAiMode(mode)
+    suspend fun setImportOffered() = settings.setImportOffered()
     suspend fun saveCloud(endpoint: String, model: String, key: String): Boolean = settings.setCloud(endpoint, model, key)
     suspend fun clearCloudKey() = settings.clearCloudKey()
 

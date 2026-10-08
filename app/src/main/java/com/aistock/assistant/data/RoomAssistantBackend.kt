@@ -12,6 +12,9 @@ import com.aistock.assistant.ai.SummaryLine
 import com.aistock.assistant.ai.TxnSummary
 import com.aistock.assistant.database.AppDatabase
 import com.aistock.assistant.database.AuditLogEntity
+import com.aistock.assistant.utils.DateKey
+import com.aistock.assistant.utils.DateRanges
+import com.aistock.assistant.utils.Money
 import com.aistock.assistant.utils.Qty
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -155,6 +158,32 @@ class RoomAssistantBackend @Inject constructor(
     override suspend fun stockSummary(): StockSummary {
         val all = inventory.activeProducts()
         return StockSummary(all.size, db.productDao().stockValue(), all.count { it.currentStock <= it.minimumStock }, all.count { it.currentStock <= 0 })
+    }
+
+    /** Plain-text summary of the business for a conversational AI model. Read-only; never contains the PIN or keys. */
+    suspend fun snapshotText(symbol: String): String {
+        fun m(p: Long) = Money.format(p, symbol)
+        val today = DateRanges.range(DateKey.TODAY)
+        val month = DateRanges.range(DateKey.THIS_MONTH)
+        val sb = StringBuilder()
+        db.metaDao().business()?.let { sb.append("Business: ${it.name}, owner ${it.ownerName}\n") }
+        val st = db.tradeDao().saleTotals(today.start, today.end)
+        val sm = db.tradeDao().saleTotals(month.start, month.end)
+        val pt = db.tradeDao().purchaseTotals(today.start, today.end)
+        val et = expenses(today.start, today.end)
+        sb.append("Today: sales ${m(st.total)} (${st.count}), purchases ${m(pt.total)} (${pt.count}), expenses ${m(et.totalPaise)}. This month sales ${m(sm.total)} (${sm.count}).\n")
+        val prods = products()
+        sb.append("Products (${prods.size}) as name | stock | minimum | selling price | cost:\n")
+        for (p in prods.take(200)) {
+            sb.append("- ${p.name} | ${Qty.format(p.stockMilli)} ${p.unit}${if (p.isLow) " LOW" else ""} | ${Qty.format(p.minMilli)} | ${m(p.sellPaise)} | ${m(p.buyPaise)}\n")
+        }
+        val cust = parties(PartyKind.CUSTOMER)
+        sb.append("Customers (${cust.size}) as name | owes you:\n")
+        for (c in cust.take(100)) sb.append("- ${c.name} | ${m(c.balancePaise)}\n")
+        val sup = parties(PartyKind.SUPPLIER)
+        sb.append("Suppliers (${sup.size}) as name | you owe:\n")
+        for (c in sup.take(100)) sb.append("- ${c.name} | ${m(c.balancePaise)}\n")
+        return sb.toString()
     }
 
     override suspend fun audit(intent: String, command: String, result: String, status: String) {
