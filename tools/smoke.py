@@ -42,7 +42,14 @@ def nodes():
 
 def find(label, exact=False, last=False):
     hits = []
-    for n in nodes():
+    all_nodes = nodes()
+    # A slow emulator sometimes shows "System UI isn't responding": press Wait and look again.
+    if any("isn't responding" in n["text"] for n in all_nodes):
+        for n in all_nodes:
+            if n["text"] == "Wait":
+                adb("shell", "input", "tap", str(n["x"]), str(n["y"])); time.sleep(3)
+        all_nodes = nodes()
+    for n in all_nodes:
         for v in (n["text"], n["desc"]):
             if (v == label) if exact else (label.lower() in v.lower()):
                 hits.append(n); break
@@ -129,6 +136,7 @@ def step(name):
     say("==", name)
 
 # ---------------------------------------------------------------- run
+time.sleep(25)  # let the freshly booted emulator settle
 say(adb("install", "-r", APK, timeout=180).strip())
 adb("logcat", "-c")
 adb("shell", "settings", "put", "secure", "show_ime_with_hard_keyboard", "1")
