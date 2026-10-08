@@ -176,7 +176,7 @@ tap_field("Type what happened"); type_text("Remove 10 because they were damaged"
 expect("Confirm", "damage confirmation"); hide_keyboard(); tap("Confirm", exact=True); expect("You now have 20 pieces", "damage done")
 tap_field("Type what happened"); type_text("Show low stock products"); tap("Send", exact=True)
 expect("Black Shirt", "low stock answer"); hide_keyboard(); shot("assistant-low-stock")
-tap_field("Type what happened"); type_text("hello"); tap("Send", exact=True); expect("Hello!", "greeting"); hide_keyboard()
+tap_field("Type what happened"); type_text("hello"); tap("Send", exact=True); time.sleep(3); hide_keyboard(); shot("assistant-greeting")  # the greeting changes with the time of day
 tap_field("Type what happened"); type_text("give me the list of shirt products"); tap("Send", exact=True); expect("Black Shirt", "product list by word"); hide_keyboard(); shot("assistant-chat")
 tap_field("Type what happened"); type_text("Add 50"); tap("Send", exact=True)
 expect("Which product", "clarification"); hide_keyboard(); shot("assistant-clarify")
