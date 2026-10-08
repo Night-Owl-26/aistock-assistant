@@ -1,0 +1,182 @@
+package com.aistock.assistant.ui
+
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.painterResource
+import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
+import com.aistock.assistant.R
+import com.aistock.assistant.features.ai.AssistantScreen
+import com.aistock.assistant.features.ai.ConversationsScreen
+import com.aistock.assistant.features.data.BackupScreen
+import com.aistock.assistant.features.data.ImportExportScreen
+import com.aistock.assistant.features.home.DashboardScreen
+import com.aistock.assistant.features.inventory.InventoryScreen
+import com.aistock.assistant.features.inventory.ProductFormScreen
+import com.aistock.assistant.features.inventory.StockMoveScreen
+import com.aistock.assistant.features.onboarding.LockScreen
+import com.aistock.assistant.features.onboarding.OnboardingScreen
+import com.aistock.assistant.features.parties.PartyFormScreen
+import com.aistock.assistant.features.parties.PartyListScreen
+import com.aistock.assistant.features.reports.ReportsScreen
+import com.aistock.assistant.features.settings.MainViewModel
+import com.aistock.assistant.features.settings.MoreScreen
+import com.aistock.assistant.features.settings.SettingsScreen
+import com.aistock.assistant.features.transactions.ExpenseFormScreen
+import com.aistock.assistant.features.transactions.PaymentFormScreen
+import com.aistock.assistant.features.transactions.TradeFormScreen
+import com.aistock.assistant.features.transactions.TransactionsScreen
+import com.aistock.assistant.ui.components.LocalCurrency
+import com.aistock.assistant.ui.components.LocalToast
+import com.aistock.assistant.ui.theme.AIStockTheme
+import kotlinx.coroutines.launch
+
+private data class TopLevel(val route: String, val base: String, val label: Int, val icon: Int)
+
+private val TOP_LEVEL = listOf(
+    TopLevel("home", "home", R.string.nav_home, R.drawable.ic_home),
+    TopLevel("inventory", "inventory", R.string.nav_inventory, R.drawable.ic_inventory),
+    TopLevel("transactions", "transactions", R.string.nav_transactions, R.drawable.ic_receipt),
+    TopLevel("ai", "ai", R.string.nav_ai, R.drawable.ic_ai),
+    TopLevel("more", "more", R.string.nav_more, R.drawable.ic_more),
+)
+
+@Composable
+fun AppRoot(vm: MainViewModel = hiltViewModel()) {
+    val prefs by vm.prefs.collectAsStateWithLifecycle()
+    val hasPin by vm.hasPin.collectAsStateWithLifecycle()
+    val unlocked by vm.unlocked.collectAsStateWithLifecycle()
+    AIStockTheme(prefs.theme) {
+        CompositionLocalProvider(LocalCurrency provides prefs.currencySymbol, LocalTamil provides prefs.tamil) {
+            when {
+                !prefs.loaded || (prefs.onboardingDone && hasPin == null) -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
+                !prefs.onboardingDone -> OnboardingScreen(vm)
+                hasPin == true && !unlocked -> LockScreen(vm)
+                else -> MainScaffold(vm)
+            }
+        }
+    }
+}
+
+@Composable
+private fun MainScaffold(vm: MainViewModel) {
+    val prefs by vm.prefs.collectAsStateWithLifecycle()
+    val navController = rememberNavController()
+    val snackbar = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+    val entry by navController.currentBackStackEntryAsState()
+    val currentRoute = entry?.destination?.route.orEmpty()
+    val showBar = TOP_LEVEL.any { it.base == currentRoute.substringBefore('?') }
+
+    val nav = remember(navController) {
+        AppNav(
+            go = { route -> navController.navigate(route) { launchSingleTop = true } },
+            back = { if (!navController.popBackStack()) navController.navigate("home") },
+        )
+    }
+    val toast: (String) -> Unit = remember(snackbar) {
+        { message ->
+            scope.launch {
+                snackbar.currentSnackbarData?.dismiss()
+                snackbar.showSnackbar(message)
+            }
+        }
+    }
+
+    CompositionLocalProvider(LocalToast provides toast) {
+        Scaffold(
+            contentWindowInsets = WindowInsets(0, 0, 0, 0),
+            snackbarHost = { SnackbarHost(snackbar) },
+            bottomBar = {
+                if (showBar) NavigationBar {
+                    for (item in TOP_LEVEL) {
+                        NavigationBarItem(
+                            selected = currentRoute.substringBefore('?') == item.base,
+                            onClick = {
+                                navController.navigate(item.route) {
+                                    popUpTo(navController.graph.findStartDestination().id) { saveState = false }
+                                    launchSingleTop = true
+                                }
+                            },
+                            icon = { Icon(painterResource(item.icon), contentDescription = null) },
+                            label = { Text(stringResource(item.label), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                        )
+                    }
+                }
+            },
+        ) { padding ->
+            NavHost(navController, startDestination = "home", modifier = Modifier.padding(padding).consumeWindowInsets(padding)) {
+                composable("home") { DashboardScreen(nav) }
+                composable("inventory?tab={tab}", arguments = listOf(navArgument("tab") { type = NavType.IntType; defaultValue = 0 })) {
+                    InventoryScreen(nav, it.arguments?.getInt("tab") ?: 0)
+                }
+                composable("transactions?tab={tab}", arguments = listOf(navArgument("tab") { type = NavType.IntType; defaultValue = 0 })) {
+                    TransactionsScreen(nav, it.arguments?.getInt("tab") ?: 0)
+                }
+                composable(
+                    "ai?conv={conv}&listen={listen}",
+                    arguments = listOf(
+                        navArgument("conv") { type = NavType.StringType; nullable = true; defaultValue = null },
+                        navArgument("listen") { type = NavType.BoolType; defaultValue = false },
+                    ),
+                ) { AssistantScreen(nav, prefs, it.arguments?.getString("conv"), it.arguments?.getBoolean("listen") ?: false) }
+                composable("more") { MoreScreen(nav, vm) }
+
+                composable("product?id={id}", arguments = listOf(navArgument("id") { type = NavType.StringType; nullable = true; defaultValue = null })) {
+                    ProductFormScreen(nav, it.arguments?.getString("id"))
+                }
+                composable("stockmove/{mode}?productId={productId}", arguments = listOf(
+                    navArgument("mode") { type = NavType.StringType },
+                    navArgument("productId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                )) { StockMoveScreen(nav, it.arguments?.getString("mode") ?: "in", it.arguments?.getString("productId")) }
+                composable("trade/{kind}", arguments = listOf(navArgument("kind") { type = NavType.StringType })) {
+                    TradeFormScreen(nav, it.arguments?.getString("kind") ?: "sale")
+                }
+                composable("expense") { ExpenseFormScreen(nav) }
+                composable("payment?kind={kind}&partyId={partyId}", arguments = listOf(
+                    navArgument("kind") { type = NavType.StringType; defaultValue = "customer" },
+                    navArgument("partyId") { type = NavType.StringType; nullable = true; defaultValue = null },
+                )) { PaymentFormScreen(nav, it.arguments?.getString("kind") ?: "customer", it.arguments?.getString("partyId")) }
+                composable("parties/{kind}", arguments = listOf(navArgument("kind") { type = NavType.StringType })) {
+                    PartyListScreen(nav, it.arguments?.getString("kind") ?: "customer")
+                }
+                composable("party/{kind}?id={id}", arguments = listOf(
+                    navArgument("kind") { type = NavType.StringType },
+                    navArgument("id") { type = NavType.StringType; nullable = true; defaultValue = null },
+                )) { PartyFormScreen(nav, it.arguments?.getString("kind") ?: "customer", it.arguments?.getString("id")) }
+                composable("reports") { ReportsScreen(nav) }
+                composable("data") { ImportExportScreen(nav) }
+                composable("backup") { BackupScreen(nav) }
+                composable("settings") { SettingsScreen(nav, vm) }
+                composable("conversations") { ConversationsScreen(nav) }
+            }
+        }
+    }
+}

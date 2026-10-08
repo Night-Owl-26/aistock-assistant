@@ -1,0 +1,216 @@
+package com.aistock.assistant.data
+
+import android.content.Context
+import android.security.keystore.KeyGenParameterSpec
+import android.security.keystore.KeyProperties
+import androidx.datastore.preferences.core.booleanPreferencesKey
+import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.stringPreferencesKey
+import androidx.datastore.preferences.preferencesDataStore
+import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.catch
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import java.security.KeyStore
+import java.security.SecureRandom
+import java.util.Base64
+import javax.crypto.Cipher
+import javax.crypto.KeyGenerator
+import javax.crypto.SecretKey
+import javax.crypto.SecretKeyFactory
+import javax.crypto.spec.GCMParameterSpec
+import javax.crypto.spec.PBEKeySpec
+import javax.inject.Inject
+import javax.inject.Singleton
+
+private val Context.dataStore by preferencesDataStore(name = "settings")
+
+data class Prefs(
+    val loaded: Boolean = false,
+    val onboardingDone: Boolean = false,
+    val language: String = "en",
+    val theme: String = "system",
+    val ttsEnabled: Boolean = true,
+    /** local = on-device rules only, cloud = use the configured AI service when online */
+    val aiMode: String = "local",
+    val cloudEndpoint: String = "",
+    val cloudModel: String = "",
+    val cloudKeySaved: Boolean = false,
+    val allowNegativeStock: Boolean = false,
+    val lowStockAlerts: Boolean = true,
+    val currencyCode: String = "INR",
+    val currencySymbol: String = "₹",
+) {
+    val tamil: Boolean get() = language == "ta"
+    val cloudReady: Boolean get() = cloudEndpoint.startsWith("https://") && cloudModel.isNotBlank() && cloudKeySaved
+}
+
+/** App preferences (DataStore). Nothing here is secret except the AI key, which is encrypted with the Android Keystore. */
+@Singleton
+class SettingsStore @Inject constructor(@ApplicationContext private val context: Context) : StockRules {
+    private object K {
+        val onboarding = booleanPreferencesKey("onboarding_done")
+        val language = stringPreferencesKey("language")
+        val theme = stringPreferencesKey("theme")
+        val tts = booleanPreferencesKey("tts_enabled")
+        val aiMode = stringPreferencesKey("ai_mode")
+        val endpoint = stringPreferencesKey("cloud_endpoint")
+        val model = stringPreferencesKey("cloud_model")
+        val key = stringPreferencesKey("cloud_key_enc")
+        val negative = booleanPreferencesKey("allow_negative_stock")
+        val alerts = booleanPreferencesKey("low_stock_alerts")
+        val currencyCode = stringPreferencesKey("currency_code")
+        val currencySymbol = stringPreferencesKey("currency_symbol")
+    }
+
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
+    val flow: Flow<Prefs> = context.dataStore.data.catch { emit(emptyPreferences()) }.map { p ->
+        Prefs(
+            loaded = true,
+            onboardingDone = p[K.onboarding] ?: false,
+            language = p[K.language] ?: "en",
+            theme = p[K.theme] ?: "system",
+            ttsEnabled = p[K.tts] ?: true,
+            aiMode = p[K.aiMode] ?: "local",
+            cloudEndpoint = p[K.endpoint] ?: "",
+            cloudModel = p[K.model] ?: "",
+            cloudKeySaved = !p[K.key].isNullOrEmpty(),
+            allowNegativeStock = p[K.negative] ?: false,
+            lowStockAlerts = p[K.alerts] ?: true,
+            currencyCode = p[K.currencyCode] ?: "INR",
+            currencySymbol = p[K.currencySymbol] ?: "₹",
+        )
+    }
+
+    /** Latest preferences for code that cannot suspend. */
+    val current: StateFlow<Prefs> = flow.stateIn(scope, SharingStarted.Eagerly, Prefs())
+
+    override fun allowNegativeStock(): Boolean = current.value.allowNegativeStock
+
+    suspend fun setOnboardingDone(done: Boolean) = context.dataStore.edit { it[K.onboarding] = done }.let { }
+
+    suspend fun setLanguage(language: String) {
+        context.dataStore.edit { it[K.language] = language }
+        LocaleHelper.saveLanguage(context, language)
+    }
+
+    suspend fun setTheme(theme: String) = context.dataStore.edit { it[K.theme] = theme }.let { }
+    suspend fun setTts(enabled: Boolean) = context.dataStore.edit { it[K.tts] = enabled }.let { }
+    suspend fun setAllowNegative(allow: Boolean) = context.dataStore.edit { it[K.negative] = allow }.let { }
+    suspend fun setLowStockAlerts(on: Boolean) = context.dataStore.edit { it[K.alerts] = on }.let { }
+
+    suspend fun setCurrency(code: String, symbol: String) = context.dataStore.edit {
+        it[K.currencyCode] = code; it[K.currencySymbol] = symbol
+    }.let { }
+
+    suspend fun setAiMode(mode: String) = context.dataStore.edit { it[K.aiMode] = mode }.let { }
+
+    /** Saves the cloud AI settings. A blank key keeps the key that is already stored. Returns false if the key could not be protected. */
+    suspend fun setCloud(endpoint: String, model: String, apiKey: String): Boolean {
+        val enc = if (apiKey.isBlank()) null else (SecretBox.encrypt(apiKey.trim()) ?: return false)
+        context.dataStore.edit {
+            it[K.endpoint] = endpoint.trim()
+            it[K.model] = model.trim()
+            if (enc != null) it[K.key] = enc
+        }
+        return true
+    }
+
+    suspend fun clearCloudKey() = context.dataStore.edit { it.remove(K.key) }.let { }
+
+    suspend fun cloudKey(): String? {
+        val enc = context.dataStore.data.catch { emit(emptyPreferences()) }.first()[K.key] ?: return null
+        return SecretBox.decrypt(enc)
+    }
+
+    suspend fun reset() {
+        context.dataStore.edit { it.clear() }
+        LocaleHelper.saveLanguage(context, "en")
+    }
+}
+
+/** AES-GCM with a key that never leaves the Android Keystore. */
+object SecretBox {
+    private const val ALIAS = "aistock_secret_v1"
+
+    private fun key(): SecretKey {
+        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
+        (ks.getKey(ALIAS, null) as? SecretKey)?.let { return it }
+        val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
+        gen.init(
+            KeyGenParameterSpec.Builder(ALIAS, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
+                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
+                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
+                .build()
+        )
+        return gen.generateKey()
+    }
+
+    fun encrypt(plain: String): String? = try {
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.ENCRYPT_MODE, key())
+        val ct = cipher.doFinal(plain.toByteArray(Charsets.UTF_8))
+        Base64.getEncoder().encodeToString(cipher.iv) + ":" + Base64.getEncoder().encodeToString(ct)
+    } catch (e: Exception) {
+        null
+    }
+
+    fun decrypt(stored: String): String? = try {
+        val (iv, ct) = stored.split(":").let { Base64.getDecoder().decode(it[0]) to Base64.getDecoder().decode(it[1]) }
+        val cipher = Cipher.getInstance("AES/GCM/NoPadding")
+        cipher.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, iv))
+        String(cipher.doFinal(ct), Charsets.UTF_8)
+    } catch (e: Exception) {
+        null
+    }
+}
+
+/** PINs are never stored or logged: only a salted PBKDF2 hash is kept. */
+object PinHasher {
+    private const val ITERATIONS = 60_000
+
+    fun newSalt(): String = ByteArray(16).also { SecureRandom().nextBytes(it) }.let { Base64.getEncoder().encodeToString(it) }
+
+    fun hash(pin: String, salt: String): String {
+        val spec = PBEKeySpec(pin.toCharArray(), Base64.getDecoder().decode(salt), ITERATIONS, 256)
+        val bytes = SecretKeyFactory.getInstance("PBKDF2WithHmacSHA256").generateSecret(spec).encoded
+        return Base64.getEncoder().encodeToString(bytes)
+    }
+
+    fun verify(pin: String, salt: String, expected: String): Boolean {
+        if (salt.isEmpty() || expected.isEmpty()) return false
+        val a = hash(pin, salt).toByteArray()
+        val b = expected.toByteArray()
+        return java.security.MessageDigest.isEqual(a, b)
+    }
+
+    fun isValidPin(pin: String): Boolean = pin.length in 4..8 && pin.all { it.isDigit() }
+}
+
+/** Per-app language. The choice is mirrored in plain SharedPreferences so it can be read before the UI starts. */
+object LocaleHelper {
+    private const val FILE = "boot"
+
+    fun saveLanguage(context: Context, language: String) {
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).edit().putString("language", language).apply()
+    }
+
+    fun language(context: Context): String =
+        context.getSharedPreferences(FILE, Context.MODE_PRIVATE).getString("language", "en") ?: "en"
+
+    fun wrap(base: Context): Context {
+        val locale = java.util.Locale.forLanguageTag(if (language(base) == "ta") "ta-IN" else "en-IN")
+        val config = android.content.res.Configuration(base.resources.configuration)
+        config.setLocale(locale)
+        return base.createConfigurationContext(config)
+    }
+}
