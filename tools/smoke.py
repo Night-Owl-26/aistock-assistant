@@ -72,6 +72,20 @@ def tap(label, secs=20, exact=False, last=False, required=True):
     time.sleep(1.0)
     return True
 
+def tap_field(label, index=0, secs=8):
+    """Taps a text field by its label or placeholder; falls back to the n-th edit box on screen."""
+    end = time.time() + secs
+    while time.time() < end:
+        n = find(label)
+        if n:
+            adb("shell", "input", "tap", str(n["x"]), str(n["y"])); time.sleep(1.0); return True
+        time.sleep(0.7)
+    edits = [n for n in nodes() if "EditText" in n["cls"]]
+    if len(edits) > index:
+        adb("shell", "input", "tap", str(edits[index]["x"]), str(edits[index]["y"])); time.sleep(1.0); return True
+    problems.append(f"could not find field '{label}'"); say("  !! missing field:", label); shot("missing-field")
+    return False
+
 def type_text(text):
     adb("shell", "input", "text", text.replace(" ", "%s").replace("'", "").replace("?", "\\?"))
     time.sleep(0.6)
@@ -119,8 +133,8 @@ expect("Welcome to AIStock Assistant", "first launch", 40); shot("onboarding-1")
 tap("Next", exact=True); expect("simply talking", "onboarding 2"); shot("onboarding-2")
 tap("Next", exact=True); expect("Excel", "onboarding 3"); shot("onboarding-3")
 tap("Next", exact=True); expect("Business Setup", "onboarding 4")
-tap("Business name"); type_text("Sri Murugan Textiles"); hide_keyboard()
-tap("Owner name"); type_text("Bharath"); hide_keyboard()
+tap_field("Business name", 0); type_text("Sri Murugan Textiles"); hide_keyboard()
+tap_field("Owner name", 1); type_text("Bharath"); hide_keyboard()
 adb("shell", "input", "swipe", "500", "1500", "500", "600", "300"); time.sleep(1)
 tap("Load sample data"); shot("business-setup")
 tap("Get started", exact=True)
@@ -136,18 +150,18 @@ check("inventory")
 
 step("assistant by text")
 tap("AI", exact=True); expect("Tell me what happened", "assistant"); shot("assistant-empty")
-tap("Type what happened"); type_text("Sold 20 Blue Shirts to Kumar Traders"); tap("Send", exact=True)
+tap_field("Type what happened"); type_text("Sold 20 Blue Shirts to Kumar Traders"); tap("Send", exact=True)
 expect("Confirm", "sale confirmation"); hide_keyboard(); shot("assistant-confirm")
 tap("Confirm", exact=True); expect("Sale saved", "sale done"); shot("assistant-done")
-tap("Type what happened"); type_text("How many Blue Shirts do I have"); tap("Send", exact=True)
+tap_field("Type what happened"); type_text("How many Blue Shirts do I have"); tap("Send", exact=True)
 expect("30 pieces", "stock answer"); hide_keyboard(); shot("assistant-answer")
-tap("Type what happened"); type_text("Remove 10 because they were damaged"); tap("Send", exact=True)
+tap_field("Type what happened"); type_text("Remove 10 because they were damaged"); tap("Send", exact=True)
 expect("Confirm", "damage confirmation"); hide_keyboard(); tap("Confirm", exact=True); expect("You now have 20 pieces", "damage done")
-tap("Type what happened"); type_text("Show low stock products"); tap("Send", exact=True)
+tap_field("Type what happened"); type_text("Show low stock products"); tap("Send", exact=True)
 expect("Black Shirt", "low stock answer"); hide_keyboard(); shot("assistant-low-stock")
-tap("Type what happened"); type_text("Add 50"); tap("Send", exact=True)
+tap_field("Type what happened"); type_text("Add 50"); tap("Send", exact=True)
 expect("Which product", "clarification"); hide_keyboard(); shot("assistant-clarify")
-tap("Type what happened"); type_text("cancel"); tap("Send", exact=True); hide_keyboard()
+tap_field("Type what happened"); type_text("cancel"); tap("Send", exact=True); hide_keyboard()
 check("assistant text")
 
 step("assistant by voice")
@@ -165,7 +179,7 @@ tap("INV-0001"); expect("Cancel sale", "sale detail"); shot("sale-detail"); tap(
 tap("New sale"); expect("Add item", "sale form"); tap("Add item"); tap("A4 Paper"); expect("Paid in full", "sale form with item")
 shot("sale-form"); tap("Save ·"); expect("INV-0002", "second sale saved")
 tap("Expenses", exact=True); tap("New expense"); expect("Payment method", "expense form")
-tap("Amount"); type_text("2500"); hide_keyboard(); tap("Transport", exact=True); shot("expense-form"); tap("Save", exact=True)
+tap_field("Amount", 0); type_text("2500"); hide_keyboard(); tap("Transport", exact=True); shot("expense-form"); tap("Save", exact=True)
 expect("Transport", "expense list"); shot("expenses")
 tap("Payments", exact=True); expect("No payments yet", "payments tab")
 tap("Purchases", exact=True); expect("No purchases yet", "purchases tab")
@@ -194,7 +208,7 @@ shot("settings-tamil"); back()
 tap("முகப்பு", exact=True); expect("இன்றைய விற்பனை", "tamil dashboard"); shot("dashboard-tamil")
 tap("ஸ்டாக்", exact=True); time.sleep(1); shot("inventory-tamil")
 tap("AI", exact=True); time.sleep(1); shot("assistant-tamil")
-tap("Type what happened", required=False) or tap("நடந்ததை எழுதுங்கள்")
+tap_field("நடந்ததை எழுதுங்கள்")
 type_text("blue shirt evlo irukku"); tap("அனுப்பு", exact=True); expect("பீஸ்", "tamil answer"); hide_keyboard(); shot("assistant-tamil-answer")
 check("tamil")
 
