@@ -136,7 +136,9 @@ def step(name):
     say("==", name)
 
 # ---------------------------------------------------------------- run
-time.sleep(25)  # let the freshly booted emulator settle
+time.sleep(40)  # let the freshly booted emulator settle
+adb("shell", "settings", "put", "global", "hide_error_dialogs", "1")
+adb("shell", "settings", "put", "secure", "anr_show_background", "0")
 say(adb("install", "-r", APK, timeout=180).strip())
 adb("logcat", "-c")
 adb("shell", "settings", "put", "secure", "show_ime_with_hard_keyboard", "1")
