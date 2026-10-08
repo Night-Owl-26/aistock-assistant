@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -107,7 +108,7 @@ fun FormPage(
     title: String, onBack: () -> Unit, actions: @Composable RowScope.() -> Unit = {},
     bottom: @Composable () -> Unit = {}, content: @Composable ColumnScope.() -> Unit,
 ) {
-    Scaffold(topBar = { AppTopBar(title, onBack, actions) }, bottomBar = { Box(Modifier.imePadding()) { bottom() } }) { padding ->
+    Scaffold(topBar = { AppTopBar(title, onBack, actions) }, bottomBar = { Box(Modifier.imePadding().navigationBarsPadding()) { bottom() } }) { padding ->
         Column(
             Modifier.padding(padding).fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp), content = content,
