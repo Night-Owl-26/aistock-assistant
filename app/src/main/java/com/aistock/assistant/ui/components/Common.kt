@@ -57,6 +57,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.Painter
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.semantics.clearAndSetSemantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.role
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.input.KeyboardType
@@ -174,18 +179,25 @@ fun NumberInput(label: String, value: String, onChange: (String) -> Unit, modifi
     TextInput(label, value, { onChange(cleanDecimal(it, decimals)) }, modifier, KeyboardType.Decimal, suffix = suffix, error = error)
 }
 
+/** Makes the tap area of a chooser field readable by TalkBack: "Label: current value", announced as a drop-down. */
+fun Modifier.chooser(label: String, value: String): Modifier = this.semantics {
+    contentDescription = if (value.isBlank()) label else "$label: $value"
+    role = Role.DropdownList
+}
+
 /** A read-only field that opens a menu of choices. */
 @Composable
 fun DropdownField(label: String, options: List<Pair<String, String>>, selected: String?, onSelect: (String) -> Unit, modifier: Modifier = Modifier) {
     var open by remember { mutableStateOf(false) }
+    val shown = options.firstOrNull { it.first == selected }?.second ?: ""
     Box(modifier.fillMaxWidth()) {
         OutlinedTextField(
-            value = options.firstOrNull { it.first == selected }?.second ?: "", onValueChange = {}, readOnly = true,
+            value = shown, onValueChange = {}, readOnly = true,
             label = { Text(label) }, singleLine = true,
             trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().clearAndSetSemantics { },
         )
-        Box(Modifier.matchParentSize().clickable(onClickLabel = label) { open = true })
+        Box(Modifier.matchParentSize().chooser(label, shown).clickable(onClickLabel = label) { open = true })
         DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
             for ((key, text) in options) {
                 DropdownMenuItem(text = { Text(text) }, onClick = { open = false; onSelect(key) })
@@ -205,9 +217,9 @@ fun PickerField(
         OutlinedTextField(
             value = valueText, onValueChange = {}, readOnly = true, label = { Text(label) }, singleLine = true,
             trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().clearAndSetSemantics { },
         )
-        Box(Modifier.matchParentSize().clickable(onClickLabel = label) { open = true })
+        Box(Modifier.matchParentSize().chooser(label, valueText).clickable(onClickLabel = label) { open = true })
     }
     if (open) {
         var query by remember { mutableStateOf("") }

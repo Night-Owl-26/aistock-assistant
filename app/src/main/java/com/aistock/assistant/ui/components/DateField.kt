@@ -19,6 +19,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.semantics.clearAndSetSemantics
 import com.aistock.assistant.R
 import com.aistock.assistant.ui.fmtDate
 import com.aistock.assistant.ui.millisToPickerDate
@@ -31,9 +32,9 @@ fun DateField(label: String, millis: Long, onChange: (Long) -> Unit, modifier: M
     Box(modifier.fillMaxWidth()) {
         OutlinedTextField(
             value = fmtDate(millis), onValueChange = {}, readOnly = true, label = { Text(label) }, singleLine = true,
-            trailingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) }, modifier = Modifier.fillMaxWidth(),
+            trailingIcon = { Icon(Icons.Default.DateRange, contentDescription = null) }, modifier = Modifier.fillMaxWidth().clearAndSetSemantics { },
         )
-        Box(Modifier.matchParentSize().clickable(onClickLabel = label) { open = true })
+        Box(Modifier.matchParentSize().chooser(label, fmtDate(millis)).clickable(onClickLabel = label) { open = true })
     }
     if (open) {
         val state = rememberDatePickerState(initialSelectedDateMillis = millisToPickerDate(millis))

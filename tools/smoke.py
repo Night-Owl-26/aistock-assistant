@@ -213,7 +213,7 @@ back(); tap("Home", exact=True); expect("Today's Sales", "home dark"); shot("das
 tap("AI", exact=True); time.sleep(1); shot("assistant-dark")
 adb("shell", "cmd", "uimode", "night", "no"); time.sleep(6)
 tap("More", exact=True); tap("Settings"); expect("Language", "settings again")
-tap("Language", exact=True); tap("தமிழ்", exact=True); time.sleep(4); check("language switch")
+tap("Language: English", exact=True); tap("தமிழ்", exact=True); time.sleep(4); check("language switch")
 shot("settings-tamil"); back()
 tap("முகப்பு", exact=True); expect("இன்றைய விற்பனை", "tamil dashboard"); shot("dashboard-tamil")
 tap("ஸ்டாக்", exact=True); time.sleep(1); shot("inventory-tamil")
