@@ -35,7 +35,7 @@ private val Context.dataStore by preferencesDataStore(name = "settings")
 
 /** Google Gemini through its chat-completions compatible address. Both can be changed in Settings. */
 const val GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-const val GEMINI_MODEL = "gemini-2.5-flash"
+const val GEMINI_MODEL = "gemini-flash-latest"
 
 data class Prefs(
     val loaded: Boolean = false,

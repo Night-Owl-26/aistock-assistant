@@ -70,3 +70,23 @@ class WorkbookAnalyzerTest {
         assertEquals(0, map["name"]); assertEquals(3, map["openingStock"]); assertEquals(2, map["sellingPrice"])
     }
 }
+
+class SalesLogTest {
+    @org.junit.Test
+    fun a_dated_product_list_is_a_sales_sheet_and_gives_its_products() {
+        val sheet = RawSheet("Sheet1", false, listOf(
+            listOf("Date", "Region", "Product", "Quantity", "UnitPrice", "StoreLocation"),
+            listOf("2024-01-01", "North", "Laptop", "3", "50000", "Chennai"),
+            listOf("2024-01-02", "South", "Phone", "5", "20000", "Madurai"),
+            listOf("2024-01-03", "South", "Laptop", "1", "52000", "Madurai"),
+        ))
+        val p = WorkbookAnalyzer.analyze(listOf(sheet)).single()
+        org.junit.Assert.assertEquals(SheetPurpose.SALES, p.purpose)
+        val (derived, kind) = WorkbookAnalyzer.importOrder(listOf(p)).single()
+        org.junit.Assert.assertEquals(ImportKind.PRODUCTS, kind)
+        org.junit.Assert.assertEquals(listOf("Laptop", "52000", "", ""), derived.table[1])
+        org.junit.Assert.assertEquals(3, derived.table.size)
+        val map = ImportSpec.autoMap(derived.headers, ImportKind.PRODUCTS)
+        org.junit.Assert.assertEquals(0, map["name"]); org.junit.Assert.assertEquals(1, map["sellingPrice"])
+    }
+}

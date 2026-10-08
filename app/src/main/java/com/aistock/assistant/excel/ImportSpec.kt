@@ -43,7 +43,7 @@ object ImportSpec {
         )
     }
 
-    private fun norm(h: String) = h.lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
+    private fun norm(h: String) = h.replace(Regex("(?<=[a-z])(?=[A-Z])"), " ").replace('_', ' ').lowercase().replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
 
     /** Guesses which column holds which field. Returns field key -> column index. */
     fun autoMap(headers: List<String>, kind: ImportKind): Map<String, Int> {

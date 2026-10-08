@@ -1,6 +1,7 @@
 package com.aistock.assistant.ai.llm
 
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
@@ -18,20 +19,46 @@ class GeminiClient(private val model: String, private val apiKey: String) : LlmC
 
     override suspend fun chat(messages: List<LlmMessage>, tools: List<ToolSpec>): LlmReply = withContext(Dispatchers.IO) {
         val body = Gemini.request(messages, tools)
-        val order = (listOfNotNull(working, model) + FALLBACKS).distinct()
         var last: LlmException? = null
-        for (m in order) {
-            try {
-                val reply = call(m, body)
-                working = m
-                return@withContext reply
-            } catch (e: LlmException) {
-                last = e
-                // Unknown model, quota for this model, or overloaded: another model may still answer.
-                if (e.status != 404 && e.status != 429 && e.status != 503 && e.status != 500) throw e
+        var tried = HashSet<String>()
+        // First the model that worked last time, then the chosen one; only if those fail is Google asked which models exist today.
+        for (pass in 0..1) {
+            val order = if (pass == 0) listOfNotNull(working, model).distinct() else Gemini.rank(available()).filter { it !in tried }.take(5)
+            for (m in order) {
+                tried.add(m)
+                for (attempt in 0..1) {
+                    try {
+                        val reply = call(m, body)
+                        working = m
+                        return@withContext reply
+                    } catch (e: LlmException) {
+                        // A retired model name says nothing useful; keep the more telling error (busy, limit reached).
+                        if (last == null || e.status != 404) last = e
+                        if (e.status == 404) { if (working == m) working = null; break }
+                        if (e.status != 429 && e.status != 503 && e.status != 500) throw e
+                        if (attempt == 0) delay(1200)
+                    }
+                }
             }
         }
         throw last ?: LlmException(0, "no model answered")
+    }
+
+    /** The models this key can use right now, asked from Google once and remembered while the app runs. */
+    private fun available(): List<String> {
+        models?.let { return it }
+        val conn = URL("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200").openConnection() as HttpURLConnection
+        return try {
+            conn.connectTimeout = 12_000
+            conn.readTimeout = 20_000
+            conn.setRequestProperty("x-goog-api-key", apiKey)
+            if (conn.responseCode !in 200..299) emptyList()
+            else Gemini.modelNames(conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }).also { if (it.isNotEmpty()) models = it }
+        } catch (e: Exception) {
+            emptyList()
+        } finally {
+            conn.disconnect()
+        }
     }
 
     private fun call(m: String, body: String): LlmReply {
@@ -57,14 +84,36 @@ class GeminiClient(private val model: String, private val apiKey: String) : LlmC
     }
 
     companion object {
-        val FALLBACKS = listOf("gemini-2.5-flash", "gemini-flash-latest", "gemini-2.5-flash-lite", "gemini-2.0-flash")
         @Volatile private var working: String? = null
-        fun forget() { working = null }
+        @Volatile private var models: List<String>? = null
+        fun forget() { working = null; models = null }
     }
 }
 
 /** Building and reading Gemini JSON. Kept separate so it can be tested without a network. */
 object Gemini {
+    /** Names of the text models that support generateContent, from the "list models" answer. */
+    fun modelNames(body: String): List<String> {
+        val arr = JSONObject(body).optJSONArray("models") ?: return emptyList()
+        val out = ArrayList<String>()
+        for (i in 0 until arr.length()) {
+            val m = arr.optJSONObject(i) ?: continue
+            val methods = m.optJSONArray("supportedGenerationMethods")
+            val ok = methods != null && (0 until methods.length()).any { methods.optString(it) == "generateContent" }
+            if (ok) out.add(m.optString("name").removePrefix("models/"))
+        }
+        return out
+    }
+
+    /** Best first: the newest fast general model, then lighter ones, then the big ones. Special-purpose models are left out. */
+    fun rank(names: List<String>): List<String> {
+        val skip = Regex("image|tts|audio|live|embed|vision|learn|robot|computer|research|aqa|gemma|nano|banana|thinking|exp")
+        fun version(n: String) = Regex("gemini-(\\d+(?:\\.\\d+)?)").find(n)?.groupValues?.get(1)?.toDoubleOrNull() ?: 0.0
+        fun family(n: String) = when { n.contains("flash-lite") -> 1; n.contains("flash") -> 0; else -> 2 }
+        return names.filter { it.startsWith("gemini") && !skip.containsMatchIn(it) }
+            .sortedWith(compareBy<String> { family(it) }.thenBy { if (it.contains("preview")) 1 else 0 }.thenByDescending { version(it) }.thenBy { it.length })
+    }
+
     fun request(messages: List<LlmMessage>, tools: List<ToolSpec>): String {
         val root = JSONObject()
         val system = messages.filterIsInstance<LlmMessage.System>().joinToString("\n\n") { it.text }
