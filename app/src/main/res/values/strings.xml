@@ -464,6 +464,8 @@
     <string name="unlock">Unlock</string>
     <string name="version_n">Version %1$s</string>
     <string name="voice">Voice</string>
+    <string name="voice_lang_en">Mic: English</string>
+    <string name="voice_lang_ta">Mic: தமிழ்</string>
     <string name="voice_language_en">The microphone listens in English (India). Switch the app to Tamil to speak Tamil.</string>
     <string name="voice_language_ta">The microphone listens in Tamil. Mixed Tamil-English works too.</string>
     <string name="voice_network">Speech recognition needs internet on this phone. You can type instead.</string>

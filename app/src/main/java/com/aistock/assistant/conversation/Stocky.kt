@@ -184,6 +184,7 @@ class Stocky(
         sb.append("\n\nNOW: ").append(nowText).append(". Currency symbol: ").append(symbol()).append('.')
         val name = try { businessName() } catch (e: Exception) { "" }
         if (name.isNotBlank()) sb.append("\nBUSINESS: ").append(name)
+        if (tamil()) sb.append("\nThe owner uses the app in Tamil: when their message is not clearly English, reply in Tamil script.")
         val ctx = ArrayList<String>()
         engine.contextProduct?.let { ctx.add("product being discussed = $it") }
         currentParty?.let { ctx.add("customer/supplier being discussed = $it") }
@@ -376,6 +377,47 @@ class Stocky(
                 return rows.joinToString("\n") { it.joinToString(" | ") }
             }
 
+            "count_sheet" -> {
+                val sheet = a(call, "sheet") ?: return "Say which sheet."
+                val rows = backend.sheetRows(sheet, "", 200_000)
+                if (rows.isEmpty()) return "No sheet called \"$sheet\"."
+                val cols = rows[0]
+                fun col(n: String?): Int? = n?.let { w -> cols.indexOfFirst { it.equals(w, true) }.takeIf { it >= 0 } ?: cols.indexOfFirst { NameMatcher.key(it) == NameMatcher.key(w) }.takeIf { it >= 0 } ?: cols.indexOfFirst { it.contains(w, true) }.takeIf { it >= 0 } }
+                fun num(s: String) = s.replace(",", "").replace(Regex("[^0-9.\\-]"), "").toBigDecimalOrNull()
+                // "Column=value; Column2=value": every condition must hold; a value matches when the cell contains it.
+                val conds = a(call, "where").orEmpty().split(';').mapNotNull { c ->
+                    val k = c.substringBefore('=', "").trim(); val v = c.substringAfter('=', "").trim()
+                    if (k.isEmpty() || v.isEmpty()) null else (col(k) ?: return "No column \"$k\" in $sheet. Columns: ${cols.joinToString(", ")}") to v
+                }
+                val groupCol = a(call, "group_by")?.let { col(it) ?: return "No column \"$it\" in $sheet. Columns: ${cols.joinToString(", ")}" }
+                val sumCol = a(call, "sum")?.let { col(it) ?: return "No column \"$it\" in $sheet. Columns: ${cols.joinToString(", ")}" }
+                val timesCol = a(call, "times")?.let { col(it) }
+                var count = 0
+                var total = java.math.BigDecimal.ZERO
+                val groups = LinkedHashMap<String, Pair<Int, java.math.BigDecimal>>()
+                for (r in rows.drop(1)) {
+                    if (!conds.all { (c, v) -> r.getOrNull(c).orEmpty().contains(v, true) }) continue
+                    count++
+                    var x = sumCol?.let { num(r.getOrNull(it).orEmpty()) } ?: java.math.BigDecimal.ZERO
+                    if (sumCol != null && timesCol != null) x = x.multiply(num(r.getOrNull(timesCol).orEmpty()) ?: java.math.BigDecimal.ONE)
+                    total = total.add(x)
+                    if (groupCol != null) {
+                        val g = r.getOrNull(groupCol).orEmpty().trim().ifEmpty { "(blank)" }
+                        val old = groups[g] ?: (0 to java.math.BigDecimal.ZERO)
+                        groups[g] = (old.first + 1) to old.second.add(x)
+                    }
+                }
+                val sb = StringBuilder("EXACT: $count of ${rows.size - 1} rows match.")
+                if (sumCol != null) sb.append(" Sum of ${cols[sumCol]}${if (timesCol != null) " x ${cols[timesCol]}" else ""} = ${total.stripTrailingZeros().toPlainString()}.")
+                if (groupCol != null) {
+                    val sorted = groups.entries.sortedByDescending { if (sumCol != null) it.value.second else it.value.first.toBigDecimal() }
+                    sb.append("\nBy ${cols[groupCol]} (${groups.size} different):")
+                    for (g in sorted.take(40)) sb.append("\n- ${g.key}: ${g.value.first} rows").append(if (sumCol != null) ", sum ${g.value.second.stripTrailingZeros().toPlainString()}" else "")
+                    if (sorted.size > 40) sb.append("\n(only the top 40 are shown)")
+                }
+                return sb.toString()
+            }
+
             // ---------------------------------------------------------- proposing changes (never saved here)
             "propose_stock_in", "propose_stock_out", "propose_stock_set", "propose_sale" -> {
                 val (product, same) = productArg(call)
@@ -493,7 +535,11 @@ You are Stocky, an intelligent, friendly business assistant inside the AIStock a
 
 LANGUAGE: The owner speaks English, Tamil, Tanglish (Tamil in English letters) or a mix, often in incomplete sentences. Understand all of it. Reply in the same language and style they just used: if they write Tanglish, reply in natural Tanglish ("Blue Cotton currently 486 metres stock-la irukku."); if Tamil script, reply in Tamil; if English, English. Never sound machine-translated. Keep product, customer and unit words as the owner says them.
 
+TAMIL STYLE: When replying in Tamil, write the everyday spoken Tamil a shopkeeper in Tamil Nadu uses (பேச்சு வழக்கு), never formal, bookish or translated Tamil. Short sentences. Keep the English words people really say as they are: stock, bill, customer, order, payment, balance, total, product names and units. Example: "Blue Cotton இப்போ 486 metre stock இருக்கு. இன்னைக்கு 12 metre sale ஆயிருக்கு." not "நீல பருத்தியின் தற்போதைய இருப்பு 486 மீட்டர் ஆகும்." Say numbers and amounts as digits.
+
 DATA: You know nothing about this business except what the tools return. For any stock, sales, purchase, expense, balance, customer, supplier or workbook question, call a tool first and use only its numbers. Never invent a quantity, amount, name, product or transaction. If the tools do not have it, say you don't have that information. If several things match, say so and ask which one.
+
+WORKBOOK: For "how many", "total", "which is highest", "by region/product/month" questions about a workbook sheet, call count_sheet: it counts and adds up every row exactly. Use search_sheet only to show a few example rows. Never estimate a count from the rows search_sheet returned.
 
 CONTEXT: Remember the conversation. Resolve "it", "that", "same one", "that customer", "adhu", "idhu", "avanga", "அது", "இது", "அந்த customer" from what was just discussed. A short follow-up like "Kumar Traders?" or "yesterday?" continues the previous question with that change.
 
@@ -515,6 +561,12 @@ STYLE: Short, natural and warm, like a helpful person at the shop, not a program
             ToolSpec("recent_activity", "The latest sales, purchases, payments, expenses and stock movements, newest first, optionally for one customer or supplier. Use for 'last purchase', 'last 10 transactions', 'what did I add today'.", listOf(s("party", "Customer or supplier name, or 'same'."), n("limit", "How many, up to 30."))),
             ToolSpec("list_sheets", "List the sheets of the owner's Excel workbook with their columns."),
             ToolSpec("search_sheet", "Read rows from one workbook sheet that contain a word. Empty query returns the first rows.", listOf(s("sheet", "Sheet name.", true), s("query", "Word to look for."), n("limit", "How many rows, up to 40."))),
+            ToolSpec("count_sheet", "Count and add up ALL rows of a workbook sheet exactly. Use for how many / total / highest / lowest / by-group questions.", listOf(
+                s("sheet", "Sheet name.", true),
+                s("where", "Optional conditions as Column=value pairs separated by semicolons, using the sheet's column names, e.g. 'Promotion=FREESHIP; Region=North'."),
+                s("group_by", "Optional column to break the result down by, e.g. Region or Product."),
+                s("sum", "Optional numeric column to add up, e.g. Quantity."),
+                s("times", "Optional second numeric column to multiply by before adding, e.g. sum=Quantity, times=UnitPrice gives revenue."))),
             ToolSpec("propose_stock_in", "Propose adding stock that arrived. If the product does not exist the app offers to create it.", listOf(s("product", PRODUCT), n("quantity", "How many.", true), s("unit", "Unit if the owner said one (pieces, kg, meter, box ...)."), s("supplier", "Supplier, if said."), n("unit_price", "Price per unit in rupees, if said."), n("total", "Total amount in rupees, if said instead of a unit price."), ToolParam("paid", "boolean", "true if already paid, false if on credit, if said."))),
             ToolSpec("propose_stock_out", "Propose removing stock that was damaged, lost, used or returned to a supplier (not a sale).", listOf(s("product", PRODUCT), n("quantity", "How many.", true), s("unit", "Unit if said."), ToolParam("reason", "string", "Why.", options = listOf("DAMAGE", "RETURN_OUT", "OTHER")), s("note", "Short note in the owner's words."))),
             ToolSpec("propose_stock_set", "Propose setting the stock to a counted quantity (stock taking / correction).", listOf(s("product", PRODUCT), n("counted_quantity", "The actual quantity now.", true), s("unit", "Unit if said."))),

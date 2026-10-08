@@ -18,7 +18,6 @@ class GeminiClient(private val model: String, private val apiKey: String) : LlmC
     override val name: String get() = working ?: model
 
     override suspend fun chat(messages: List<LlmMessage>, tools: List<ToolSpec>): LlmReply = withContext(Dispatchers.IO) {
-        val body = Gemini.request(messages, tools)
         var last: LlmException? = null
         var tried = HashSet<String>()
         // First the model that worked last time, then the chosen one; only if those fail is Google asked which models exist today.
@@ -28,7 +27,7 @@ class GeminiClient(private val model: String, private val apiKey: String) : LlmC
                 tried.add(m)
                 for (attempt in 0..1) {
                     try {
-                        val reply = call(m, body)
+                        val reply = fast(m, messages, tools)
                         working = m
                         return@withContext reply
                     } catch (e: LlmException) {
@@ -42,6 +41,28 @@ class GeminiClient(private val model: String, private val apiKey: String) : LlmC
             }
         }
         throw last ?: LlmException(0, "no model answered")
+    }
+
+    /**
+     * Asks the model to answer without a long silent "thinking" phase, which is what makes replies take 10-30 seconds.
+     * Models differ in how that is switched off, so the setting that a model accepts is remembered.
+     */
+    private fun fast(m: String, messages: List<LlmMessage>, tools: List<ToolSpec>): LlmReply {
+        val known = thinking[m]
+        val options = if (known != null) listOf(known) else Gemini.thinkingOptions(m)
+        var last: LlmException? = null
+        for (o in options) {
+            try {
+                val r = call(m, Gemini.request(messages, tools, o))
+                thinking[m] = o
+                return r
+            } catch (e: LlmException) {
+                // 400 here means this model does not take that setting: try the next way.
+                if (e.status != 400 || o == "none" || e.detail.contains("key", true)) throw e
+                last = e
+            }
+        }
+        throw last ?: LlmException(0, "no answer")
     }
 
     /** The models this key can use right now, asked from Google once and remembered while the app runs. */
@@ -86,6 +107,7 @@ class GeminiClient(private val model: String, private val apiKey: String) : LlmC
     companion object {
         @Volatile private var working: String? = null
         @Volatile private var models: List<String>? = null
+        private val thinking = java.util.concurrent.ConcurrentHashMap<String, String>()
         fun forget() { working = null; models = null }
     }
 }
@@ -114,7 +136,17 @@ object Gemini {
             .sortedWith(compareBy<String> { family(it) }.thenBy { if (it.contains("preview")) 1 else 0 }.thenByDescending { version(it) }.thenBy { it.length })
     }
 
-    fun request(messages: List<LlmMessage>, tools: List<ToolSpec>): String {
+    /** Ways to keep a model from thinking at length, most likely first; "none" sends no setting at all. */
+    fun thinkingOptions(model: String): List<String> {
+        val v = Regex("gemini-(\\d+(?:\\.\\d+)?)").find(model)?.groupValues?.get(1)?.toDoubleOrNull()
+        return when {
+            v != null && v < 2.5 -> listOf("none")
+            v != null && v < 3.0 -> listOf("budget0", "none")
+            else -> listOf("minimal", "low", "budget0", "none")
+        }
+    }
+
+    fun request(messages: List<LlmMessage>, tools: List<ToolSpec>, thinking: String = "none"): String {
         val root = JSONObject()
         val system = messages.filterIsInstance<LlmMessage.System>().joinToString("\n\n") { it.text }
         if (system.isNotBlank()) root.put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
@@ -167,7 +199,12 @@ object Gemini {
             }
             root.put("tools", JSONArray().put(JSONObject().put("functionDeclarations", decls)))
         }
-        root.put("generationConfig", JSONObject().put("temperature", 0.4))
+        val config = JSONObject().put("temperature", 0.4)
+        when (thinking) {
+            "budget0" -> config.put("thinkingConfig", JSONObject().put("thinkingBudget", 0))
+            "minimal", "low" -> config.put("thinkingConfig", JSONObject().put("thinkingLevel", thinking))
+        }
+        root.put("generationConfig", config)
         return root.toString()
     }
 

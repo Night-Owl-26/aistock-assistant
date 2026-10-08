@@ -243,6 +243,7 @@ S = {
 }
 
 S.update({
+"voice_lang_en": ("Mic: English", "மைக்: English"), "voice_lang_ta": ("Mic: தமிழ்", "மைக்: தமிழ்"),
 "ai_test": ("Test the AI connection", "AI இணைப்பைச் சோதிக்கவும்"), "ai_testing": ("Testing…", "சோதிக்கிறது…"),
 "ai_test_ok": ("It works. Stocky can now talk naturally.", "வேலை செய்கிறது. Stocky இப்போது இயல்பாகப் பேசும்."),
 "import_offer_title": ("Already keep your stock in Excel?", "ஏற்கனவே Excel-ல் ஸ்டாக் வைத்திருக்கிறீர்களா?"),

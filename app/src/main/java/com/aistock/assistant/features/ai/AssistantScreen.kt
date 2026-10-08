@@ -108,7 +108,12 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
     val msgNoService = stringResource(R.string.voice_unavailable)
     val msgNoPermission = stringResource(R.string.voice_permission_needed)
     val msgNetwork = stringResource(R.string.voice_network)
-    val languageTag = if (prefs.tamil) "ta-IN" else "en-IN"
+    // Which language the microphone listens for. It follows the app language until the owner taps the chip.
+    var voiceTamilChoice by rememberSaveable { mutableStateOf<Boolean?>(null) }
+    val voiceTamil = voiceTamilChoice ?: prefs.tamil
+    val languageTag = if (voiceTamil) "ta-IN" else "en-IN"
+    // True when the owner pressed the microphone, false when it reopened by itself.
+    var manualMic by remember { mutableStateOf(false) }
 
     fun startVoice() {
         if (!recognizer.isAvailable()) { vm.onVoiceError(msgNoService); return }
@@ -127,10 +132,15 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
             override fun onError(code: Int) {
                 vm.onVoiceStopped()
                 // Silence after an automatic re-listen just ends the spoken conversation quietly.
-                if (autoListening) { autoListening = false; return }
-                // Hearing nothing is not worth a message in the chat: the microphone simply closes.
-                if (code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
-                    android.widget.Toast.makeText(ctx, msgNoSpeech, android.widget.Toast.LENGTH_SHORT).show()
+                val wasManual = manualMic && !autoListening
+                autoListening = false
+                manualMic = false
+                // The phone often reports an error twice, or after the microphone reopened by itself. None of that belongs in the chat.
+                if (!wasManual) return
+                val serious = code == SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS || code == SpeechRecognizer.ERROR_NETWORK ||
+                    code == SpeechRecognizer.ERROR_NETWORK_TIMEOUT || code == SpeechRecognizer.ERROR_SERVER
+                if (!serious) {
+                    if (code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) android.widget.Toast.makeText(ctx, msgNoSpeech, android.widget.Toast.LENGTH_SHORT).show()
                     return
                 }
                 vm.onVoiceError(
@@ -152,6 +162,7 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
 
     fun micPressed() {
         autoListening = false
+        manualMic = true
         if (voice == VoiceState.LISTENING) { recognizer.stop(); vm.onVoiceStopped(); return }
         if (busy) return
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startVoice()
@@ -189,6 +200,7 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
                 }
                 Spacer(Modifier.height(6.dp))
                 val online = remember(items.size) { vm.isOnline() }
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 Tag(
                     when {
                         prefs.aiMode == "cloud" && prefs.cloudReady && online -> stringResource(if (source == "cloud") R.string.ai_cloud_active else R.string.ai_cloud_ready)
@@ -197,6 +209,11 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
                         else -> stringResource(R.string.ai_local)
                     }
                 )
+                androidx.compose.material3.AssistChip(
+                    onClick = { voiceTamilChoice = !voiceTamil },
+                    label = { Text(stringResource(if (voiceTamil) R.string.voice_lang_ta else R.string.voice_lang_en)) },
+                )
+                }
             }
         },
         bottomBar = {

@@ -3,7 +3,7 @@ package com.aistock.assistant.ai
 import java.util.UUID
 
 /** In-memory stand-in for the database so the conversation logic can be tested on its own. */
-class FakeBackend : AssistantBackend {
+open class FakeBackend : AssistantBackend {
     val productList = ArrayList<ProductRef>()
     val customers = ArrayList<PartyRef>()
     val suppliers = ArrayList<PartyRef>()

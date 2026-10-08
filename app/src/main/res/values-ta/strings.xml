@@ -464,6 +464,8 @@
     <string name="unlock">திற</string>
     <string name="version_n">பதிப்பு %1$s</string>
     <string name="voice">குரல்</string>
+    <string name="voice_lang_en">மைக்: English</string>
+    <string name="voice_lang_ta">மைக்: தமிழ்</string>
     <string name="voice_language_en">மைக் ஆங்கிலத்தில் (இந்தியா) கேட்கும். தமிழில் பேச பயன்பாட்டை தமிழுக்கு மாற்றவும்.</string>
     <string name="voice_language_ta">மைக் தமிழில் கேட்கும். தமிழ்-ஆங்கிலம் கலந்தும் பேசலாம்.</string>
     <string name="voice_network">இந்த போனில் குரல் அறிதலுக்கு இணையம் தேவை. தட்டச்சு செய்யலாம்.</string>

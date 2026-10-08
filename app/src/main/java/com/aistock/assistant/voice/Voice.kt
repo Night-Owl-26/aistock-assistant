@@ -89,7 +89,9 @@ class Speaker(context: Context) {
         val engine = tts ?: return
         if (!ready || text.isBlank()) return
         try {
-            val wanted = if (tamil) Locale.forLanguageTag("ta-IN") else Locale.forLanguageTag("en-IN")
+            // The words decide the voice: a Tamil reply is read by the Tamil voice even when the app is in English.
+            val tamilText = text.any { it in '\u0B80'..'\u0BFF' }
+            val wanted = if (tamilText || (tamil && text.none { it in 'a'..'z' })) Locale.forLanguageTag("ta-IN") else Locale.forLanguageTag("en-IN")
             val result = engine.setLanguage(wanted)
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) engine.setLanguage(Locale.ENGLISH)
             engine.speak(text.take(400), TextToSpeech.QUEUE_FLUSH, null, "aistock-reply")

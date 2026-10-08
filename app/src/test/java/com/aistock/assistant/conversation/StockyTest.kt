@@ -222,3 +222,26 @@ class StockyFailureTest {
         org.junit.Assert.assertTrue(s.lastError != null)
     }
 }
+
+class StockyCountTest {
+    @org.junit.Test
+    fun counting_a_sheet_uses_every_row() = kotlinx.coroutines.runBlocking {
+        val b = object : FakeBackend() {
+            override suspend fun sheetRows(sheet: String, query: String, limit: Int): List<List<String>> =
+                listOf(listOf("Region", "Promotion", "Quantity", "UnitPrice")) + (1..300).map { listOf(if (it % 2 == 0) "North" else "South", if (it % 3 == 0) "FREESHIP" else "", "2", "10") }
+        }
+        var seen = ""
+        val llm = object : com.aistock.assistant.ai.llm.LlmClient {
+            var n = 0
+            override val name = "x"
+            override suspend fun chat(messages: List<com.aistock.assistant.ai.llm.LlmMessage>, tools: List<com.aistock.assistant.ai.llm.ToolSpec>): com.aistock.assistant.ai.llm.LlmReply {
+                if (n++ == 0) return com.aistock.assistant.ai.llm.LlmReply("", listOf(com.aistock.assistant.ai.llm.ToolCall("c", "count_sheet", mapOf("sheet" to "Sheet1", "where" to "promotion=freeship", "group_by" to "Region", "sum" to "Quantity", "times" to "UnitPrice"))))
+                seen = (messages.last() as com.aistock.assistant.ai.llm.LlmMessage.ToolResult).text
+                return com.aistock.assistant.ai.llm.LlmReply("100 orders")
+            }
+        }
+        Stocky(b, AssistantEngine(b, LocalFallbackAIProvider()), { llm }).handle("how many free ship orders")
+        org.junit.Assert.assertTrue(seen, seen.startsWith("EXACT: 100 of 300 rows match. Sum of Quantity x UnitPrice = 2000."))
+        org.junit.Assert.assertTrue(seen, seen.contains("- North: 50 rows, sum 1000"))
+    }
+}
