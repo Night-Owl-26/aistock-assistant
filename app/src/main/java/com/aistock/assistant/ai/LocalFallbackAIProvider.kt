@@ -81,11 +81,6 @@ object LocalParser {
         if (Regex("^(help|what can you do|how to use|how do i use|commands|examples)\\b").containsMatchIn(s)) {
             return cmd(Intent.HELP, 0.99)
         }
-        // "list my products", "show all items", "give me the list of tea products"
-        Regex("^(?:please )?(?:list|show|give|display|view|tell)(?: me)?(?: the| a)?(?: list of| names of)?(?: all| my| our| the)* ?(.*?) ?(?:products|items)(?: list)?$").find(s)?.let { m ->
-            val word = m.groupValues[1].trim()
-            return if (word.isEmpty()) cmd(Intent.REPORT_STOCK, 0.95) else cmd(Intent.STOCK_QUERY, 0.93, Entities(productName = restoreCase(raw, word)))
-        }
         if (Regex("^(delete|erase|cancel)\\b").containsMatchIn(s)) {
             return unknown(GUIDE_DELETE)
         }
@@ -94,6 +89,11 @@ object LocalParser {
         partyCreate(s, raw)?.let { return it }
         productExplicit(s, raw)?.let { return it }
         if (LOW_RE.containsMatchIn(s)) return cmd(Intent.LOW_STOCK_QUERY, 0.96)
+        // "list my products", "show all items", "give me the list of tea products"
+        Regex("^(?:please )?(?:list|show|give|display|view|tell)(?: me)?(?: the| a)?(?: list of| names of)?(?: all| my| our| the)* ?(.*?) ?(?:products|items)(?: list)?$").find(s)?.let { m ->
+            val word = m.groupValues[1].trim()
+            return if (word.isEmpty()) cmd(Intent.REPORT_STOCK, 0.95) else cmd(Intent.STOCK_QUERY, 0.93, Entities(productName = restoreCase(raw, word)))
+        }
 
         if (!startsQ && hasNum && ADJUST_RE.containsMatchIn(s)) return adjust(noDate, raw)
 
