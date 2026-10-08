@@ -87,8 +87,13 @@ def tap_field(label, index=0, secs=8):
     return False
 
 def type_text(text):
-    adb("shell", "input", "text", text.replace(" ", "%s").replace("'", "").replace("?", "\\?"))
-    time.sleep(0.6)
+    """Types word by word; one long burst of key events can be cut short on a slow emulator."""
+    words = text.replace("'", "").split(" ")
+    for i, w in enumerate(words):
+        if w: adb("shell", "input", "text", w.replace("?", "\\?"))
+        if i < len(words) - 1: adb("shell", "input", "keyevent", "62")
+        time.sleep(0.35)
+    time.sleep(0.8)
 
 def back():
     adb("shell", "input", "keyevent", "4"); time.sleep(0.8)
@@ -201,9 +206,9 @@ tap("Settings"); expect("AI Provider", "settings"); shot("settings")
 adb("shell", "cmd", "uimode", "night", "yes"); time.sleep(4); check("dark mode"); shot("settings-dark")
 back(); tap("Home", exact=True); expect("Today's Sales", "home dark"); shot("dashboard-dark")
 tap("AI", exact=True); time.sleep(1); shot("assistant-dark")
-adb("shell", "cmd", "uimode", "night", "no"); time.sleep(3)
+adb("shell", "cmd", "uimode", "night", "no"); time.sleep(6)
 tap("More", exact=True); tap("Settings"); expect("Language", "settings again")
-tap("English", exact=True); tap("தமிழ்", exact=True); time.sleep(4); check("language switch")
+tap_field("English", 0); tap("தமிழ்", exact=True); time.sleep(4); check("language switch")
 shot("settings-tamil"); back()
 tap("முகப்பு", exact=True); expect("இன்றைய விற்பனை", "tamil dashboard"); shot("dashboard-tamil")
 tap("ஸ்டாக்", exact=True); time.sleep(1); shot("inventory-tamil")

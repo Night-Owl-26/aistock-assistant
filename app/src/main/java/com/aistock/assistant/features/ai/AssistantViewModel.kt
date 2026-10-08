@@ -78,6 +78,8 @@ class AssistantViewModel @Inject constructor(
     private var conversationId: String? = null
     private var idleJob: Job? = null
     private var loadedConversation: String? = null
+    /** The current exchange was started by voice, so its replies are read aloud. */
+    private var voiceExchange = false
 
     fun isOnline(): Boolean = connectivity.isOnline()
 
@@ -134,13 +136,14 @@ class AssistantViewModel @Inject constructor(
     fun send(text: String, fromVoice: Boolean = false) {
         val t = text.trim()
         if (t.isEmpty() || _busy.value) return
+        voiceExchange = fromVoice
         run(fromVoice, userText = t) { engine.handle(t) }
     }
 
     fun confirm() {
         if (_busy.value) return
         _voice.value = VoiceState.EXECUTING
-        run(false, userText = null, state = VoiceState.EXECUTING) { engine.confirm() }
+        run(voiceExchange, userText = null, state = VoiceState.EXECUTING) { engine.confirm() }
     }
 
     fun cancel() {
@@ -181,7 +184,7 @@ class AssistantViewModel @Inject constructor(
                 ReplyKind.ERROR -> VoiceState.ERROR
                 else -> VoiceState.IDLE
             }
-            if (fromVoice || reply.kind == ReplyKind.DONE) _speak.tryEmit(reply.spoken)
+            if (fromVoice) _speak.tryEmit(reply.spoken)
             if (_voice.value == VoiceState.SUCCESS || _voice.value == VoiceState.ERROR) settle()
             persist(userText, reply)
         }
