@@ -206,7 +206,7 @@ tap("Purchases", exact=True); expect("No purchases yet", "purchases tab")
 check("transactions")
 
 step("home totals")
-tap("Home", exact=True); expect("Today's Sales", "home"); shot("dashboard-with-data")
+tap("Home", exact=True); expect("Today's Sales", "home"); expect("₹9,300", "today sales total on home"); expect("₹2,500", "today expenses on home"); shot("dashboard-with-data")
 
 step("more: parties, reports, export, backup")
 tap("More", exact=True); expect("Reports", "more"); shot("more")
