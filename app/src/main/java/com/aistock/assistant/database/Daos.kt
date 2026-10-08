@@ -166,6 +166,26 @@ interface TradeDao {
     )
     suspend fun salesByProduct(from: Long, to: Long): List<ProductTotal>
 
+    @Query("SELECT COUNT(*) AS count, COALESCE(SUM(total), 0) AS total, COALESCE(SUM(balanceAmount), 0) AS balance FROM sales WHERE status != 'CANCELLED' AND customerId = :customerId AND date >= :from AND date < :to")
+    suspend fun saleTotalsFor(customerId: String, from: Long, to: Long): MoneyTotals
+
+    @Query(
+        "SELECT p.name AS productName, i.unit AS unit, SUM(i.quantity) AS quantity, SUM(i.total) AS total FROM sale_items i " +
+            "JOIN sales s ON s.id = i.saleId JOIN products p ON p.id = i.productId " +
+            "WHERE s.status != 'CANCELLED' AND s.customerId = :customerId AND s.date >= :from AND s.date < :to GROUP BY i.productId, i.unit ORDER BY total DESC"
+    )
+    suspend fun salesByProductFor(customerId: String, from: Long, to: Long): List<ProductTotal>
+
+    @Query("SELECT COUNT(*) AS count, COALESCE(SUM(total), 0) AS total, COALESCE(SUM(balanceAmount), 0) AS balance FROM purchases WHERE status != 'CANCELLED' AND supplierId = :supplierId AND date >= :from AND date < :to")
+    suspend fun purchaseTotalsFor(supplierId: String, from: Long, to: Long): MoneyTotals
+
+    @Query(
+        "SELECT p.name AS productName, i.unit AS unit, SUM(i.quantity) AS quantity, SUM(i.total) AS total FROM purchase_items i " +
+            "JOIN purchases s ON s.id = i.purchaseId JOIN products p ON p.id = i.productId " +
+            "WHERE s.status != 'CANCELLED' AND s.supplierId = :supplierId AND s.date >= :from AND s.date < :to GROUP BY i.productId, i.unit ORDER BY total DESC"
+    )
+    suspend fun purchasesByProductFor(supplierId: String, from: Long, to: Long): List<ProductTotal>
+
     // ---- purchases
     @Insert suspend fun insertPurchase(s: PurchaseEntity)
     @Insert suspend fun insertPurchaseItems(items: List<PurchaseItemEntity>)
@@ -245,6 +265,9 @@ interface InventoryDao {
             "WHERE t.createdAt >= :from AND t.createdAt < :to ORDER BY t.createdAt DESC, t.rowid DESC"
     )
     suspend fun between(from: Long, to: Long): List<MovementWithProduct>
+
+    @Query("SELECT t.*, p.name AS productName FROM inventory_transactions t JOIN products p ON p.id = t.productId ORDER BY t.createdAt DESC, t.rowid DESC LIMIT :limit")
+    suspend fun recent(limit: Int): List<MovementWithProduct>
 }
 
 @Dao

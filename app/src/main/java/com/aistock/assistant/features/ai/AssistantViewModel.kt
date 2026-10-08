@@ -7,7 +7,9 @@ import com.aistock.assistant.ai.AssistantReply
 import com.aistock.assistant.ai.ChatTurn
 import com.aistock.assistant.ai.ConfirmLine
 import com.aistock.assistant.ai.ReplyKind
-import com.aistock.assistant.ai.RoutingAIProvider
+import com.aistock.assistant.ai.LocalFallbackAIProvider
+import com.aistock.assistant.conversation.Stocky
+import com.aistock.assistant.di.LlmSource
 import com.aistock.assistant.data.BusinessRepository
 import com.aistock.assistant.data.RoomAssistantBackend
 import com.aistock.assistant.data.SettingsStore
@@ -45,16 +47,24 @@ data class ChatItem(
 @HiltViewModel
 class AssistantViewModel @Inject constructor(
     private val backend: RoomAssistantBackend,
-    private val provider: RoutingAIProvider,
+    private val llmSource: LlmSource,
     private val settings: SettingsStore,
     private val business: BusinessRepository,
     private val connectivity: Connectivity,
 ) : ViewModel() {
     private val engine = AssistantEngine(
-        backend, provider,
+        backend, LocalFallbackAIProvider(),
         tamil = { settings.current.value.tamil },
         symbol = { settings.current.value.currencySymbol },
         allowNegativeStock = { settings.current.value.allowNegativeStock },
+    )
+
+    /** The conversation manager: a real language model with safe tools when configured, on-device rules otherwise. */
+    private val stocky = Stocky(
+        backend, engine,
+        llm = { llmSource.client() },
+        businessName = { business.business()?.let { it.name + " (owner " + it.ownerName + ")" }.orEmpty() },
+        symbol = { settings.current.value.currencySymbol },
     )
 
     private val _items = MutableStateFlow<List<ChatItem>>(emptyList())
@@ -87,7 +97,7 @@ class AssistantViewModel @Inject constructor(
     fun isOnline(): Boolean = connectivity.isOnline()
 
     fun newConversation() {
-        engine.reset()
+        stocky.reset()
         conversationId = null
         loadedConversation = null
         backend.conversationId = ""
@@ -101,8 +111,8 @@ class AssistantViewModel @Inject constructor(
         loadedConversation = id
         viewModelScope.launch {
             val messages = business.messages(id)
-            engine.reset()
-            engine.seed(messages.map { ChatTurn(it.role, it.text) })
+            stocky.reset()
+            stocky.seed(messages.map { ChatTurn(it.role, it.text) })
             conversationId = id
             backend.conversationId = id
             _items.value = messages.map { m ->
@@ -140,24 +150,24 @@ class AssistantViewModel @Inject constructor(
         val t = text.trim()
         if (t.isEmpty() || _busy.value) return
         voiceExchange = fromVoice
-        run(fromVoice, userText = t) { engine.handle(t) }
+        run(fromVoice, userText = t) { stocky.handle(t) }
     }
 
     fun confirm() {
         if (_busy.value) return
         _voice.value = VoiceState.EXECUTING
-        run(voiceExchange, userText = null, state = VoiceState.EXECUTING) { engine.confirm() }
+        run(voiceExchange, userText = null, state = VoiceState.EXECUTING) { stocky.confirm() }
     }
 
     fun cancel() {
         if (_busy.value) return
-        run(false, userText = null) { engine.cancel() }
+        run(false, userText = null) { stocky.cancel() }
     }
 
     fun undo(token: String) {
         if (_busy.value) return
         _items.value = _items.value.map { if (it.undoToken == token) it.copy(undoToken = null) else it }
-        run(false, userText = null) { engine.undo(token) }
+        run(false, userText = null) { stocky.undo(token) }
     }
 
     private fun run(fromVoice: Boolean, userText: String?, state: VoiceState = VoiceState.PROCESSING, block: suspend () -> AssistantReply) {
@@ -174,7 +184,7 @@ class AssistantViewModel @Inject constructor(
             } catch (e: Exception) {
                 AssistantReply("", ReplyKind.ERROR)
             }
-            _source.value = provider.lastSource
+            _source.value = stocky.lastSource
             val item = ChatItem(
                 newId(), false, reply.text, reply.kind, reply.lines, reply.choices, reply.undoToken, reply.dangerous,
                 live = reply.kind == ReplyKind.CONFIRM || reply.kind == ReplyKind.CLARIFY,

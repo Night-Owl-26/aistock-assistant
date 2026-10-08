@@ -1,7 +1,10 @@
 package com.aistock.assistant
 
-import com.aistock.assistant.ai.AICommandJson
-import com.aistock.assistant.ai.Intent
+import com.aistock.assistant.ai.llm.LlmMessage
+import com.aistock.assistant.ai.llm.OpenAiCompat
+import com.aistock.assistant.ai.llm.ToolCall
+import com.aistock.assistant.ai.llm.ToolParam
+import com.aistock.assistant.ai.llm.ToolSpec
 import com.aistock.assistant.backup.BackupException
 import com.aistock.assistant.backup.BackupManager
 import com.aistock.assistant.data.LineInput
@@ -98,7 +101,7 @@ class BackupAndImportTest {
         val tampered = rezip(good) { name, body -> if (name == "data.json") body.replace("Blue Shirt", "Hacked Item") else body }
         expect(BackupException.CORRUPT, tampered)
         // A backup from a newer app version is not applied.
-        val newer = rezip(good) { name, body -> if (name == "manifest.json") body.replace("\"dbVersion\":1", "\"dbVersion\":99") else body }
+        val newer = rezip(good) { name, body -> if (name == "manifest.json") body.replace(Regex("\"dbVersion\":\\d+"), "\"dbVersion\":99") else body }
         expect(BackupException.NEWER_VERSION, newer)
     }
 
@@ -189,31 +192,60 @@ class BackupAndImportTest {
     }
 
     @Test
-    fun cloudReplyIsParsedStrictly() {
-        val ok = AICommandJson.parse("""Sure! {"intent":"STOCK_IN","confidence":0.96,"requiresConfirmation":false,"entities":{"productName":"A4 Paper","quantity":50,"unit":"BOX","supplierName":"Kumar Traders","unitPrice":250},"missingFields":[],"response":"ok"}""")
-        assertEquals(Intent.STOCK_IN, ok.intent)
-        assertEquals(50_000L, ok.entities.quantityMilli)
-        assertEquals("BOX", ok.entities.unit)
-        assertEquals(25_000L, ok.entities.unitPricePaise)
-        assertTrue("writes always need confirmation, whatever the service says", ok.requiresConfirmation)
-        assertEquals("cloud", ok.source)
+    fun modelRequestsAndRepliesUseTheToolCallingFormat() {
+        val tools = listOf(ToolSpec("find_products", "Look up products", listOf(ToolParam("query", "string", "name", true))))
+        val req = org.json.JSONObject(OpenAiCompat.request("gemini-test", listOf(
+            LlmMessage.System("You are Stocky"), LlmMessage.User("blue cotton stock evlo?"),
+            LlmMessage.Assistant("", listOf(ToolCall("c1", "find_products", mapOf("query" to "blue cotton")))),
+            LlmMessage.ToolResult("c1", "find_products", "Blue Cotton: 486 meter"),
+        ), tools))
+        assertEquals("gemini-test", req.getString("model"))
+        assertEquals(4, req.getJSONArray("messages").length())
+        assertEquals("tool", req.getJSONArray("messages").getJSONObject(3).getString("role"))
+        assertEquals("find_products", req.getJSONArray("tools").getJSONObject(0).getJSONObject("function").getString("name"))
+        assertEquals("query", req.getJSONArray("tools").getJSONObject(0).getJSONObject("function").getJSONObject("parameters").getJSONArray("required").getString(0))
 
-        for (bad in listOf(
-            "no json here",
-            """{"intent":"DROP_TABLES","confidence":0.9}""",
-            """{"intent":"STOCK_IN","confidence":7}""",
-            """{"intent":"STOCK_IN","confidence":0.9,"entities":{"quantity":-5}}""",
-            """{"intent":"STOCK_IN","confidence":0.9,"entities":{"quantity":"lots"}}""",
-            """{"intent":"STOCK_IN","confidence":0.9,"entities":{"unit":"PARSECS"}}""",
-            """{"intent":"STOCK_IN","confidence":0.9,"entities":{"productName":{"sql":"DROP"}}}""",
-            """{"intent":"STOCK_IN","confidence":0.9,"entities":{"paid":"yes"}}""",
-            """{"intent":"STOCK_IN","confidence":0.9,"entities":"oops"}""".replace("\"oops\"", "{\"dateRange\":\"SOMEDAY\"}"),
-        )) {
-            try {
-                AICommandJson.parse(bad); fail("should reject: $bad")
-            } catch (e: Exception) {
-                // expected
-            }
+        val call = OpenAiCompat.parse("""{"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"","type":"function","function":{"name":"propose_stock_in","arguments":"{\"product\":\"Blue Cotton\",\"quantity\":50,\"unit\":\"METER\"}"}}]}}]}""")
+        assertEquals("", call.text)
+        assertEquals("propose_stock_in", call.toolCalls.single().name)
+        assertEquals("50", call.toolCalls.single().args["quantity"])
+        assertTrue(call.toolCalls.single().id.isNotBlank())
+        val text = OpenAiCompat.parse("""{"choices":[{"message":{"role":"assistant","content":"Blue Cotton 486 metres stock-la irukku."}}]}""")
+        assertEquals("Blue Cotton 486 metres stock-la irukku.", text.text)
+        assertTrue(text.toolCalls.isEmpty())
+        assertEquals("API key not valid", OpenAiCompat.errorMessage("""[{"error":{"code":400,"message":"API key not valid"}}]"""))
+    }
+
+    @Test
+    fun version1DatabaseUpgradesWithoutLosingData(): Unit = runBlocking {
+        // Build a real version-1 database from the saved schema, put data in it, then open it with the current app.
+        val schema = org.json.JSONObject(java.io.File("schemas/com.aistock.assistant.database.AppDatabase/1.json").readText()).getJSONObject("database")
+        val file = env.context.getDatabasePath("upgrade-test.db")
+        file.parentFile?.mkdirs(); file.delete()
+        val raw = android.database.sqlite.SQLiteDatabase.openOrCreateDatabase(file, null)
+        val entities = schema.getJSONArray("entities")
+        for (i in 0 until entities.length()) {
+            val e = entities.getJSONObject(i)
+            val table = e.getString("tableName")
+            raw.execSQL(e.getString("createSql").replace("\${TABLE_NAME}", table))
+            val idx = e.optJSONArray("indices") ?: org.json.JSONArray()
+            for (j in 0 until idx.length()) raw.execSQL(idx.getJSONObject(j).getString("createSql").replace("\${TABLE_NAME}", table))
+        }
+        val setup = schema.getJSONArray("setupQueries")
+        for (i in 0 until setup.length()) raw.execSQL(setup.getString(i))
+        raw.execSQL("INSERT INTO products (id, productCode, name, description, categoryId, unit, barcode, purchasePrice, sellingPrice, minimumStock, currentStock, active, createdAt, updatedAt) VALUES ('p1','P0001','Blue Cotton','',NULL,'METER','',10000,15000,0,486000,1,1,1)")
+        raw.version = 1
+        raw.close()
+
+        val db = androidx.room.Room.databaseBuilder(env.context, com.aistock.assistant.database.AppDatabase::class.java, "upgrade-test.db")
+            .addMigrations(*com.aistock.assistant.database.AppDatabase.MIGRATIONS).allowMainThreadQueries().build()
+        try {
+            assertEquals(486_000L, db.productDao().byId("p1")!!.currentStock)
+            db.stockyDao().saveAlias(com.aistock.assistant.database.BusinessAliasEntity("a1", "blue cotton", "blue cotton", "Blue Cotton", 1))
+            assertEquals(1, db.stockyDao().aliases().size)
+            assertEquals(0, db.stockyDao().sheets().size)
+        } finally {
+            db.close(); file.delete()
         }
     }
 }

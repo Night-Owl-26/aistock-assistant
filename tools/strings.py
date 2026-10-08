@@ -254,6 +254,7 @@ S.update({
 "ai_status_cloud": ("Gemini AI is on. The on-device assistant takes over when you are offline.", "Gemini AI இயக்கத்தில் உள்ளது. ஆஃப்லைனில் போனிலேயே இயங்கும் உதவியாளர் செயல்படும்."),
 "ai_status_cloud_missing": ("Paste a Gemini API key below to turn on real conversation. Until then the on-device assistant is active.", "இயல்பான உரையாடலுக்கு கீழே Gemini API key-ஐ ஒட்டவும். அதுவரை போனிலேயே இயங்கும் உதவியாளர் செயலில் இருக்கும்."),
 "shortcut_talk_short": ("Talk", "பேசு"), "shortcut_talk_long": ("Talk to AIStock", "AIStock-இடம் பேசு"),
+"assistant_title": ("Stocky", "Stocky"),
 "ai_cloud_ready": ("Gemini AI on", "Gemini AI இயக்கத்தில்"), "ai_cloud_active": ("Gemini AI", "Gemini AI"),
 })
 

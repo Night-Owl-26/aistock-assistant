@@ -43,7 +43,7 @@
     <string name="appearance">Appearance</string>
     <string name="ask_ai">ASK AI</string>
     <string name="ask_ai_hint">Tap the microphone and speak in English or Tamil.</string>
-    <string name="assistant_title">AIStock Assistant</string>
+    <string name="assistant_title">Stocky</string>
     <string name="back">Back</string>
     <string name="backup">Backup</string>
     <string name="backup_body">Saves all your business data into one file on this phone. Save a copy somewhere else too.</string>

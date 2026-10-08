@@ -43,7 +43,7 @@
     <string name="appearance">தோற்றம்</string>
     <string name="ask_ai">AI-யிடம் கேளுங்கள்</string>
     <string name="ask_ai_hint">மைக்கைத் தட்டி தமிழ் அல்லது ஆங்கிலத்தில் பேசுங்கள்.</string>
-    <string name="assistant_title">AIStock உதவியாளர்</string>
+    <string name="assistant_title">Stocky</string>
     <string name="back">பின்செல்</string>
     <string name="backup">காப்பு</string>
     <string name="backup_body">உங்கள் அனைத்து வணிகத் தரவையும் இந்த போனில் ஒரே கோப்பாக சேமிக்கும். வேறு இடத்திலும் ஒரு நகல் வைக்கவும்.</string>

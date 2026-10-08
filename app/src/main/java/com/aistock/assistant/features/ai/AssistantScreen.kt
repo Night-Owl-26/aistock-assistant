@@ -116,7 +116,14 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
         recognizer.start(languageTag, object : VoiceRecognizer.Callback {
             override fun onListening() = vm.onListening()
             override fun onPartial(text: String) = vm.onPartial(text)
-            override fun onResult(text: String) { autoListening = false; vm.onVoiceStopped(); vm.send(text, fromVoice = true) }
+            override fun onResult(text: String) {
+                autoListening = false
+                vm.onVoiceStopped()
+                // "Stop" or "Bye Stocky" ends the voice conversation instead of being sent as a command.
+                val said = text.trim().lowercase().trim('.', '!', ' ')
+                if (said in setOf("stop", "stop listening", "bye", "bye stocky", "goodbye", "thats all", "that's all", "podhum", "poi varen", "போதும்", "நிறுத்து")) { speaker.stop(); return }
+                vm.send(text, fromVoice = true)
+            }
             override fun onError(code: Int) {
                 vm.onVoiceStopped()
                 // Silence after an automatic re-listen just ends the spoken conversation quietly.

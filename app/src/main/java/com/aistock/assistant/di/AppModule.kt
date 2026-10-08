@@ -4,12 +4,9 @@ import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import androidx.room.Room
-import com.aistock.assistant.ai.AIProvider
 import com.aistock.assistant.ai.AssistantBackend
-import com.aistock.assistant.ai.CloudAIProvider
-import com.aistock.assistant.ai.CloudConfig
-import com.aistock.assistant.ai.LocalFallbackAIProvider
-import com.aistock.assistant.ai.RoutingAIProvider
+import com.aistock.assistant.ai.llm.LlmClient
+import com.aistock.assistant.ai.llm.OpenAiCompatClient
 import com.aistock.assistant.data.RoomAssistantBackend
 import com.aistock.assistant.data.SettingsStore
 import com.aistock.assistant.data.StockRules
@@ -53,28 +50,20 @@ object AppModule {
     fun connectivity(@ApplicationContext context: Context): Connectivity = Connectivity(context)
 
     /**
-     * The AI provider used by the assistant. To use a production cloud model, enter its endpoint, model and key in
-     * Settings > AI Provider. Credentials are stored encrypted on the device and are never part of the APK.
+     * The language model behind Stocky. Nothing is built in: the address, model and key are entered in
+     * Settings > AI Provider and the key is stored encrypted on the device.
      */
     @Provides
     @Singleton
-    fun routingProvider(settings: SettingsStore, connectivity: Connectivity, backend: RoomAssistantBackend): RoutingAIProvider {
-        val cloud = CloudAIProvider(
-            config = {
-                val p = settings.current.value
-                val key = settings.cloudKey()
-                if (p.cloudReady && key != null) CloudConfig(p.cloudEndpoint, p.cloudModel, key) else null
-            },
-            snapshot = { backend.snapshotText(settings.current.value.currencySymbol) },
-        )
-        return RoutingAIProvider(
-            useCloud = { settings.current.value.let { it.aiMode == "cloud" && it.cloudReady } },
-            online = { connectivity.isOnline() },
-            cloud = cloud,
-            local = LocalFallbackAIProvider(),
-        )
-    }
+    fun llmSource(settings: SettingsStore, connectivity: Connectivity): LlmSource = LlmSource(settings, connectivity)
+}
 
-    @Provides
-    fun aiProvider(routing: RoutingAIProvider): AIProvider = routing
+/** Gives the conversation a model client when one is configured and the phone is online; otherwise null. */
+class LlmSource(private val settings: SettingsStore, private val connectivity: Connectivity) {
+    suspend fun client(): LlmClient? {
+        val p = settings.current.value
+        if (p.aiMode != "cloud" || !p.cloudReady || !connectivity.isOnline()) return null
+        val key = settings.cloudKey() ?: return null
+        return OpenAiCompatClient(p.cloudEndpoint, p.cloudModel, key)
+    }
 }
