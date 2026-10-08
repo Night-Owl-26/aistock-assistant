@@ -10,7 +10,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -81,7 +80,7 @@ fun InventoryScreen(nav: AppNav, initialTab: Int, vm: InventoryViewModel = hiltV
             }
         },
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize().statusBarsPadding()) {
+        Column(Modifier.padding(padding).fillMaxSize()) {
             Text(stringResource(R.string.nav_inventory), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
             TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.background) {
                 titles.forEachIndexed { i, t ->

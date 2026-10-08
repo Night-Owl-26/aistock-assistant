@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -87,7 +86,7 @@ fun TransactionsScreen(nav: AppNav, initialTab: Int, vm: TradeViewModel = hiltVi
             ExtendedFloatingActionButton(onClick = { nav.go(route) }, icon = { Icon(Icons.Default.Add, null) }, text = { Text(stringResource(label)) })
         },
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize().statusBarsPadding()) {
+        Column(Modifier.padding(padding).fillMaxSize()) {
             Text(stringResource(R.string.nav_transactions), style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp))
             TabRow(selectedTabIndex = tab, containerColor = MaterialTheme.colorScheme.background) {
                 titles.forEachIndexed { i, t -> Tab(selected = tab == i, onClick = { tab = i }, text = { Text(stringResource(t), maxLines = 1, overflow = TextOverflow.Ellipsis) }) }
