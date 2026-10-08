@@ -13,6 +13,12 @@ class FakeBackend : AssistantBackend {
     val saleTotals = ArrayList<Long>()
     val purchaseTotals = ArrayList<Long>()
     var failNext = false
+    val aliasList = ArrayList<AliasRef>()
+    /** sheet name -> rows, the first row being the header */
+    val sheetData = LinkedHashMap<String, ArrayList<List<String>>>()
+    val sheetPurpose = HashMap<String, String>()
+    val actions = ArrayList<ActionRecord>()
+    val activity = ArrayList<String>()
     private val undo = HashMap<String, () -> Unit>()
 
     fun addProduct(name: String, unit: String = "PCS", stock: Long = 0, min: Long = 0, sell: Long = 0, buy: Long = 0): ProductRef {
@@ -112,6 +118,29 @@ class FakeBackend : AssistantBackend {
                 return ExecResult(true)
             }
             is Plan.Expense -> { expenseTotals.add(plan.amountPaise); return ExecResult(true) }
+            is Plan.Payment -> {
+                val list = if (plan.party.kind == PartyKind.CUSTOMER) customers else suppliers
+                bump(list, plan.party.id, -plan.amountPaise)
+                undo[token] = { bump(list, plan.party.id, plan.amountPaise) }
+                return ExecResult(true, undoToken = token)
+            }
+            is Plan.UndoLast -> return undo(plan.token)
+            is Plan.CreateSheet -> {
+                if (sheetData.keys.any { it.equals(plan.name, true) }) return ExecResult(false, "DUPLICATE")
+                sheetData[plan.name] = arrayListOf(plan.columns.toList())
+                return ExecResult(true)
+            }
+            is Plan.AddColumn -> {
+                val rows = sheetData[plan.sheet] ?: return ExecResult(false, "NOT_FOUND")
+                for (i in rows.indices) rows[i] = rows[i] + (if (i == 0) plan.column else "")
+                return ExecResult(true)
+            }
+            is Plan.AddRow -> {
+                val rows = sheetData[plan.sheet] ?: return ExecResult(false, "NOT_FOUND")
+                rows.add(rows[0].map { plan.values[it].orEmpty() })
+                return ExecResult(true)
+            }
+            is Plan.RememberAlias -> { aliasList.removeAll { it.phrase.equals(plan.phrase, true) }; aliasList.add(AliasRef(plan.phrase, plan.productName)); return ExecResult(true) }
         }
     }
 
@@ -128,4 +157,14 @@ class FakeBackend : AssistantBackend {
     override suspend fun audit(intent: String, command: String, result: String, status: String) {
         audits.add(listOf(intent, command, result, status))
     }
+
+    override suspend fun aliases(): List<AliasRef> = aliasList.toList()
+    override suspend fun sheets(): List<SheetRef> = sheetData.map { SheetRef(it.key, sheetPurpose[it.key] ?: "OTHER", it.value[0], it.value.size - 1) }
+    override suspend fun sheetRows(sheet: String, query: String, limit: Int): List<List<String>> {
+        val rows = sheetData.entries.firstOrNull { it.key.equals(sheet, true) }?.value ?: return emptyList()
+        return listOf(rows[0]) + rows.drop(1).filter { r -> query.isBlank() || r.any { it.contains(query, true) } }.take(limit)
+    }
+    override suspend fun recordAction(record: ActionRecord) { actions.add(record) }
+    override suspend fun recentActivity(limit: Int, partyId: String?): List<String> = activity.take(limit)
+    override suspend fun partySales(customerId: String, from: Long, to: Long) = TxnSummary(1, 420_000, 0, emptyList())
 }

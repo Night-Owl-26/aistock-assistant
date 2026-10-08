@@ -29,7 +29,7 @@ object TextNormalizer {
     // Romanised Tamil ("Tanglish") words commonly mixed into business talk.
     private val tanglish: List<Pair<Regex, String>> = listOf(
         "stock la|stockla|stock il|stockil|stock ku|stockku" to "to stock",
-        "pannunga|pannungal|panunga|pannidunga|pannirunga|pannidu|pannanum|pannu|podunga|podu|seiyunga" to "",
+        "pannunga|pannungal|panunga|pannidunga|pannirunga|pannidu|pannanum|panniten|pannitten|pannitom|pannalam|pannu|podunga|podu|seiyunga" to "",
         "irukkudhu|irukkuthu|irukudhu|irukku|iruku|irukka|iruka" to "have",
         "evvalavu|evalavu|evlavu|evlo|ethanai|ethana|yethana" to "how many",
         "vithaachu|vithachu|vittachu|vithen|vithom|vitten|vittom" to "sold",

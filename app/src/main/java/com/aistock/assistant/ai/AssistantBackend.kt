@@ -30,7 +30,28 @@ sealed class Plan {
     data class Sale(val product: ProductRef, val qtyMilli: Long, val unitPricePaise: Long, val customer: PartyRef?, val newCustomerName: String?, val paid: Boolean, val totalPaise: Long) : Plan()
     data class CreateParty(val kind: PartyKind, val name: String, val phone: String) : Plan()
     data class Expense(val category: String, val amountPaise: Long, val description: String) : Plan()
+    /** Money received from a customer (kind CUSTOMER) or paid to a supplier (kind SUPPLIER). */
+    data class Payment(val party: PartyRef, val amountPaise: Long, val method: String = "CASH") : Plan()
+    /** Reverses an earlier action through a reversing record; history is kept. */
+    data class UndoLast(val token: String, val description: String) : Plan()
+    data class CreateSheet(val name: String, val columns: List<String>) : Plan()
+    data class AddColumn(val sheet: String, val column: String) : Plan()
+    data class AddRow(val sheet: String, val values: Map<String, String>) : Plan()
+    /** Teaches Stocky that the owner's own word for something means a product. */
+    data class RememberAlias(val phrase: String, val productName: String) : Plan()
 }
+
+/** The owner's own name for a product, e.g. "blue cotton" -> "BC-40-COTTON-BLUE". */
+data class AliasRef(val phrase: String, val productName: String)
+
+/** One sheet of the owner's workbook as Stocky sees it. */
+data class SheetRef(val name: String, val purpose: String, val columns: List<String>, val rowCount: Int)
+
+/** One auditable AI action: what was said, what was done, and the value before and after. */
+data class ActionRecord(
+    val command: String, val intent: String, val action: String, val subject: String,
+    val before: String, val after: String, val confirmed: Boolean, val result: String,
+)
 
 data class ExecResult(
     val ok: Boolean,
@@ -56,6 +77,17 @@ interface AssistantBackend {
     suspend fun expenses(from: Long, to: Long): TxnSummary
     suspend fun stockSummary(): StockSummary
     suspend fun audit(intent: String, command: String, result: String, status: String)
+
+    // ---- V2: everything below has a safe default so simple backends keep working
+    suspend fun partySales(customerId: String, from: Long, to: Long): TxnSummary = TxnSummary(0, 0, 0, emptyList())
+    suspend fun partyPurchases(supplierId: String, from: Long, to: Long): TxnSummary = TxnSummary(0, 0, 0, emptyList())
+    /** Newest first, already formatted as short lines. */
+    suspend fun recentActivity(limit: Int, partyId: String? = null): List<String> = emptyList()
+    suspend fun aliases(): List<AliasRef> = emptyList()
+    suspend fun sheets(): List<SheetRef> = emptyList()
+    /** Rows of a workbook sheet containing [query] (all rows when blank). The first row returned is the header. */
+    suspend fun sheetRows(sheet: String, query: String, limit: Int): List<List<String>> = emptyList()
+    suspend fun recordAction(record: ActionRecord) {}
 }
 
 enum class ReplyKind { ANSWER, CLARIFY, CONFIRM, DONE, CANCELLED, ERROR }

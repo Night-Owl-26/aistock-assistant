@@ -5,7 +5,43 @@ class Phrases(private val ta: Boolean) {
     private fun t(en: String, tam: String) = if (ta) tam else en
 
     fun didntCatch() = t("I couldn't hear that. Please try again.", "சரியாகக் கேட்கவில்லை. மீண்டும் சொல்லுங்கள்.")
-    fun greeting() = t("Hello! Tell me what happened in your shop today, or ask me about your stock, sales or dues.", "வணக்கம்! இன்று கடையில் நடந்ததைச் சொல்லுங்கள், அல்லது ஸ்டாக், விற்பனை, நிலுவை பற்றி கேளுங்கள்.")
+    fun greeting(hour: Int, sales: String?, low: Int): String {
+        val hello = when (hour) {
+            in 5..11 -> t("Good morning!", "காலை வணக்கம்!")
+            in 12..16 -> t("Good afternoon!", "மதிய வணக்கம்!")
+            in 17..21 -> t("Good evening!", "மாலை வணக்கம்!")
+            else -> t("Hello!", "வணக்கம்!")
+        }
+        val s = if (sales != null) t(" Today's sales so far are $sales.", " இன்றைய விற்பனை இதுவரை $sales.") else t(" No sales recorded yet today.", " இன்று இன்னும் விற்பனை பதிவாகவில்லை.")
+        val l = when {
+            low == 1 -> t(" 1 product is low on stock.", " 1 பொருள் குறைவாக உள்ளது.")
+            low > 1 -> t(" $low products are low on stock.", " $low பொருட்கள் குறைவாக உள்ளன.")
+            else -> ""
+        }
+        return hello + s + l + t(" What would you like to do?", " என்ன செய்ய வேண்டும்?")
+    }
+    fun nothingToUndo() = t("There is nothing I can undo right now.", "இப்போது திரும்பப் பெற எதுவும் இல்லை.")
+    fun askUndo(what: String) = t("Reverse this? $what", "இதைத் திரும்பப் பெறவா? $what")
+    fun askPaymentIn(name: String, amount: String) = t("Record $amount received from $name?", "$name-இடமிருந்து $amount பெற்றதாக பதிவு செய்யவா?")
+    fun askPaymentOut(name: String, amount: String) = t("Record $amount paid to $name?", "$name-க்கு $amount கொடுத்ததாக பதிவு செய்யவா?")
+    fun donePaymentIn(name: String, amount: String) = t("$amount received from $name is recorded.", "$name-இடமிருந்து $amount பதிவு செய்யப்பட்டது.")
+    fun donePaymentOut(name: String, amount: String) = t("$amount paid to $name is recorded.", "$name-க்கு $amount பதிவு செய்யப்பட்டது.")
+    fun whoPaid() = t("Which customer or supplier is this payment for?", "இந்த பணம் எந்த வாடிக்கையாளர் அல்லது சப்ளையருக்கு?")
+    fun askCreateSheet(name: String, cols: String) = t("Create a new sheet \"$name\" with columns: $cols?", "\"$name\" என்ற புதிய ஷீட்டை இந்த நெடுவரிசைகளுடன் உருவாக்கவா: $cols?")
+    fun doneCreateSheet(name: String) = t("Done. I've created the $name sheet.", "முடிந்தது. $name ஷீட் உருவாக்கப்பட்டது.")
+    fun askAddColumn(sheet: String, col: String) = t("Add a \"$col\" column to the $sheet sheet?", "$sheet ஷீட்டில் \"$col\" நெடுவரிசையைச் சேர்க்கவா?")
+    fun doneAddColumn(sheet: String, col: String) = t("Added the $col column to $sheet.", "$sheet-ல் $col நெடுவரிசை சேர்க்கப்பட்டது.")
+    fun askAddRow(sheet: String) = t("Add this row to the $sheet sheet?", "$sheet ஷீட்டில் இந்த வரியைச் சேர்க்கவா?")
+    fun doneAddRow(sheet: String) = t("Added to the $sheet sheet.", "$sheet ஷீட்டில் சேர்க்கப்பட்டது.")
+    fun sheetNotFound(name: String) = t("I couldn't find a sheet called '$name'.", "'$name' என்ற ஷீட் கிடைக்கவில்லை.")
+    fun sheetExists(name: String) = t("A sheet called $name already exists.", "$name ஷீட் ஏற்கனவே உள்ளது.")
+    fun columnExists(col: String) = t("The $col column already exists.", "$col நெடுவரிசை ஏற்கனவே உள்ளது.")
+    fun askAlias(phrase: String, product: String) = t("Remember that \"$phrase\" means $product?", "\"$phrase\" என்றால் $product என்று நினைவில் வைக்கவா?")
+    fun doneAlias(phrase: String, product: String) = t("Got it. \"$phrase\" means $product.", "சரி. \"$phrase\" என்றால் $product.")
+    fun learned(phrase: String, product: String) = t(" I'll remember that \"$phrase\" means $product.", " \"$phrase\" என்றால் $product என்று நினைவில் வைக்கிறேன்.")
+    val lBalanceAfter get() = t("Balance after", "பின் நிலுவை")
+    val lSheet get() = t("Sheet", "ஷீட்")
+    val lColumns get() = t("Columns", "நெடுவரிசைகள்")
     fun welcome() = t("You're welcome. Anything else?", "நன்றி. வேறு ஏதாவது?")
     fun unknown() = t(
         "I didn't understand that. On this phone I only know stock and money commands, like \"Add 50 pieces of Blue Shirt\" or \"What were today's sales?\". For free-flowing conversation, add a Gemini key in More > Settings > AI Provider.",

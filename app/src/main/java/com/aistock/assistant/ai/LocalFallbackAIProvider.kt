@@ -110,7 +110,18 @@ object LocalParser {
                 Regex("\\b(received|got|collected)\\s+$CUR\\s*$NUM\\s+from\\b").containsMatchIn(s)
             val moneyOut = Regex("\\b(paid|pay|gave)\\b").containsMatchIn(s) && Regex("\\bto\\s+\\S+").containsMatchIn(noDate) &&
                 !Regex("\\bfor\\b").containsMatchIn(s) && !Regex("\\bexpenses?\\b").containsMatchIn(s)
-            if (moneyIn || moneyOut) return unknown(GUIDE_PAYMENT)
+            val either = Regex("\\bpayment\\b").containsMatchIn(s) && !moneyIn && !Regex("\\b(paid|pay|gave)\\b").containsMatchIn(s)
+            if (moneyIn || moneyOut || either) {
+                val amount = AMOUNT.find(noDate)?.let { Money.parse(it.groupValues[1]) }
+                val from = FROM.find(noDate)?.groupValues?.get(1)?.let { restoreCase(raw, cleanName(it.replace(Regex("\\b(payment|cash|money|amount|rupees)\\b"), " "))) }
+                val to = TO.find(noDate)?.groupValues?.get(1)?.let { restoreCase(raw, cleanName(it.replace(Regex("\\b(payment|cash|money|amount|rupees)\\b"), " "))) }
+                val e = when {
+                    moneyIn -> Entities(amountPaise = amount, customerName = from ?: to)
+                    either -> Entities(amountPaise = amount, customerName = to ?: from, note = "EITHER")
+                    else -> Entities(amountPaise = amount, supplierName = to, note = "EITHER")
+                }
+                return cmd(Intent.RECORD_PAYMENT, 0.95, e)
+            }
         }
         if (!startsQ && hasNum && Regex("\\b(paid|pay|spent|spend|expense|expenses)\\b").containsMatchIn(s)) {
             return expense(noDate, raw)

@@ -59,6 +59,21 @@ class AssistantEngine(
     private var lastProduct: String? = null
     private val history = ArrayList<ChatTurn>()
 
+    /** The last reversible action of this conversation (undo token and what it did), for "undo that". */
+    var lastUndo: Pair<String, String>? = null
+        private set
+    /** What the user actually said for the action being prepared; kept for the audit trail. */
+    var commandText: String = ""
+    /** The product the conversation is currently about ("it", "the same one", "adhu"). */
+    var contextProduct: String?
+        get() = lastProduct
+        set(value) { lastProduct = value }
+    /** The question waiting for a yes/no, if any. */
+    val pendingText: String? get() = (pending as? Pending.Confirm)?.question?.text
+    val pendingReply: AssistantReply? get() = (pending as? Pending.Confirm)?.question
+    fun isYesWord(text: String) = isYes(text)
+    fun isNoWord(text: String) = isNo(text)
+
     val awaitingConfirmation: Boolean get() = pending is Pending.Confirm
     val awaitingAnswer: Boolean get() = pending != null
 
@@ -78,6 +93,7 @@ class AssistantEngine(
         val text = input.trim()
         if (text.isEmpty()) return AssistantReply(p.didntCatch(), ReplyKind.ERROR)
         history.add(ChatTurn("user", text))
+        commandText = text
         val r = guard { route(text) }
         history.add(ChatTurn("assistant", r.text))
         while (history.size > 12) history.removeAt(0)
@@ -90,6 +106,136 @@ class AssistantEngine(
     }
 
     suspend fun cancel(): AssistantReply = guard { cancelPending() }
+
+    // ------------------------------------------------------------------ proposals from a conversational AI model
+    // A model never writes. It proposes; the same validation and confirmation as everywhere else then applies.
+
+    /** Validates a structured command and prepares its confirmation. Questions that need no change are answered directly. */
+    suspend fun propose(cmd: AICommand): AssistantReply = guard {
+        pending = null
+        val v = CommandValidator.validate(cmd)
+        if (!v.ok) {
+            AssistantReply(p.invalid(), ReplyKind.ERROR, cmd.intent)
+        } else {
+            val r = if (cmd.intent.isWrite) advance(Draft(cmd)) else answer(Draft(cmd))
+            // Only a ready confirmation is kept; follow-up questions are the model's job to ask.
+            if (pending !is Pending.Confirm) pending = null
+            r
+        }
+    }
+
+    /** Puts an already-resolved plan in front of the user for confirmation. */
+    fun proposePlan(intent: Intent, plan: Plan, text: String, lines: List<ConfirmLine>, dangerous: Boolean = false): AssistantReply =
+        confirm(Draft(AICommand(intent, 1.0, true, response = text)), plan, text, lines, dangerous)
+
+    suspend fun proposePayment(name: String?, amountPaise: Long?, hint: PartyKind?): AssistantReply = guard {
+        pending = null
+        if (amountPaise == null || amountPaise <= 0) return@guard AssistantReply(p.whatAmount(), ReplyKind.CLARIFY, Intent.RECORD_PAYMENT)
+        if (name.isNullOrBlank()) return@guard AssistantReply(p.whoPaid(), ReplyKind.CLARIFY, Intent.RECORD_PAYMENT)
+        val found = ArrayList<PartyRef>()
+        for (k in if (hint != null) listOf(hint) else listOf(PartyKind.CUSTOMER, PartyKind.SUPPLIER)) {
+            when (val m = NameMatcher.match(name, backend.parties(k)) { it.name }) {
+                is Match.Exact -> found.add(m.item)
+                is Match.Suggest -> found.add(m.item)
+                is Match.Multiple -> found.addAll(m.items)
+                Match.None -> {}
+            }
+        }
+        if (found.isEmpty()) return@guard AssistantReply(p.partyNotFound(name), ReplyKind.ERROR, Intent.RECORD_PAYMENT)
+        val exact = found.filter { NameMatcher.key(it.name) == NameMatcher.key(name) }
+        val pick = when {
+            exact.size == 1 -> exact[0]
+            found.size == 1 -> found[0]
+            else -> return@guard AssistantReply(
+                p.multipleParties(found.size, name), ReplyKind.CLARIFY, Intent.RECORD_PAYMENT,
+                choices = found.map { it.name + " (" + (if (it.kind == PartyKind.CUSTOMER) p.lCustomer else p.lSupplier) + ")" },
+            )
+        }
+        val customer = pick.kind == PartyKind.CUSTOMER
+        val lines = listOf(
+            ConfirmLine(if (customer) p.lCustomer else p.lSupplier, pick.name),
+            ConfirmLine(p.lAmount, money(amountPaise)),
+            ConfirmLine(p.lBalanceAfter, money(pick.balancePaise - amountPaise)),
+        )
+        proposePlan(Intent.RECORD_PAYMENT, Plan.Payment(pick, amountPaise), if (customer) p.askPaymentIn(pick.name, money(amountPaise)) else p.askPaymentOut(pick.name, money(amountPaise)), lines)
+    }
+
+    fun proposeUndo(): AssistantReply {
+        val u = lastUndo ?: return AssistantReply(p.nothingToUndo(), ReplyKind.ANSWER, Intent.UNDO)
+        return proposePlan(Intent.UNDO, Plan.UndoLast(u.first, u.second), p.askUndo(u.second), emptyList())
+    }
+
+    suspend fun proposeAlias(phrase: String, productName: String): AssistantReply = guard {
+        pending = null
+        val product = when (val m = NameMatcher.match(productName, backend.products()) { it.name }) {
+            is Match.Exact -> m.item
+            is Match.Suggest -> m.item
+            else -> return@guard AssistantReply(p.productNotFound(productName), ReplyKind.ERROR, Intent.LEARN_ALIAS)
+        }
+        val ph = phrase.trim()
+        if (ph.isEmpty() || ph.length > 60) return@guard AssistantReply(p.invalid(), ReplyKind.ERROR, Intent.LEARN_ALIAS)
+        proposePlan(Intent.LEARN_ALIAS, Plan.RememberAlias(ph, product.name), p.askAlias(ph, product.name), emptyList())
+    }
+
+    /** Workbook changes: a new sheet, a new column, or a new row. Existing data is never removed. */
+    suspend fun proposeSheet(plan: Plan): AssistantReply = guard {
+        pending = null
+        val sheets = backend.sheets()
+        fun find(name: String): SheetRef? {
+            val key = NameMatcher.key(name)
+            sheets.firstOrNull { NameMatcher.key(it.name) == key }?.let { return it }
+            val q = NameMatcher.tokens(name).filter { it != "sheet" }.toSet()
+            if (q.isEmpty()) return null
+            return sheets.filter { NameMatcher.tokens(it.name).toSet().containsAll(q) || q.containsAll(NameMatcher.tokens(it.name).toSet()) }.singleOrNull()
+                ?: sheets.filter { s -> q.any { it == s.purpose.lowercase().removeSuffix("s") || it + "s" == s.purpose.lowercase() } }.singleOrNull()
+        }
+        when (plan) {
+            is Plan.CreateSheet -> {
+                val name = plan.name.trim().take(31)
+                if (name.isEmpty()) return@guard AssistantReply(p.whatName(), ReplyKind.CLARIFY, Intent.WORKBOOK_EDIT)
+                if (sheets.any { NameMatcher.key(it.name) == NameMatcher.key(name) }) return@guard AssistantReply(p.sheetExists(name), ReplyKind.ERROR, Intent.WORKBOOK_EDIT)
+                val cols = plan.columns.map { it.trim() }.filter { it.isNotEmpty() }.distinctBy { it.lowercase() }.ifEmpty { listOf("Date", "Product", "Quantity", "Reason") }.take(30)
+                proposePlan(Intent.WORKBOOK_EDIT, Plan.CreateSheet(name, cols), p.askCreateSheet(name, cols.joinToString(", ")), listOf(ConfirmLine(p.lSheet, name), ConfirmLine(p.lColumns, cols.joinToString(", "))))
+            }
+            is Plan.AddColumn -> {
+                val sheet = find(plan.sheet) ?: return@guard AssistantReply(p.sheetNotFound(plan.sheet), ReplyKind.ERROR, Intent.WORKBOOK_EDIT)
+                val col = plan.column.trim().take(40)
+                if (col.isEmpty()) return@guard AssistantReply(p.whatName(), ReplyKind.CLARIFY, Intent.WORKBOOK_EDIT)
+                if (sheet.columns.any { it.equals(col, ignoreCase = true) }) return@guard AssistantReply(p.columnExists(col), ReplyKind.ERROR, Intent.WORKBOOK_EDIT)
+                proposePlan(Intent.WORKBOOK_EDIT, Plan.AddColumn(sheet.name, col), p.askAddColumn(sheet.name, col), listOf(ConfirmLine(p.lSheet, sheet.name), ConfirmLine(p.lColumns, col)))
+            }
+            is Plan.AddRow -> {
+                val sheet = find(plan.sheet) ?: return@guard AssistantReply(p.sheetNotFound(plan.sheet), ReplyKind.ERROR, Intent.WORKBOOK_EDIT)
+                val values = LinkedHashMap<String, String>()
+                for ((k, v) in plan.values) {
+                    val col = sheet.columns.firstOrNull { NameMatcher.key(it) == NameMatcher.key(k) }
+                        ?: return@guard AssistantReply(p.sheetNotFound(k) + " " + p.lColumns + ": " + sheet.columns.joinToString(", "), ReplyKind.ERROR, Intent.WORKBOOK_EDIT)
+                    if (v.isNotBlank()) values[col] = v.trim().take(200)
+                }
+                if (values.isEmpty()) return@guard AssistantReply(p.invalid(), ReplyKind.ERROR, Intent.WORKBOOK_EDIT)
+                proposePlan(Intent.WORKBOOK_EDIT, Plan.AddRow(sheet.name, values), p.askAddRow(sheet.name), listOf(ConfirmLine(p.lSheet, sheet.name)) + values.map { ConfirmLine(it.key, it.value) })
+            }
+            else -> AssistantReply(p.invalid(), ReplyKind.ERROR, Intent.WORKBOOK_EDIT)
+        }
+    }
+
+    private suspend fun matchProduct(name: String): Match<ProductRef> {
+        val products = backend.products()
+        val key = NameMatcher.key(name)
+        val alias = backend.aliases().firstOrNull { NameMatcher.key(it.phrase) == key }
+        if (alias != null) {
+            val target = NameMatcher.key(alias.productName)
+            products.firstOrNull { NameMatcher.key(it.name) == target }?.let { return Match.Exact(it) }
+        }
+        return NameMatcher.match(name, products) { it.name }
+    }
+
+    private suspend fun greetingText(): String {
+        val w = DateRanges.range(DateKey.TODAY, zone(), now())
+        val sales = backend.sales(w.start, w.end)
+        val low = backend.products().count { it.isLow }
+        return p.greeting(now().atZone(zone()).hour, if (sales.count > 0) money(sales.totalPaise) else null, low)
+    }
 
     suspend fun undo(token: String): AssistantReply = guard {
         val r = backend.undo(token)
@@ -123,7 +269,17 @@ class AssistantEngine(
                 if (no) return cancelPending()
             }
             is Pending.DidYouMeanProduct -> {
-                if (yes) { d.product = pend.candidate; d.productDone = true; pending = null; return advance(d) }
+                if (yes) {
+                    val phrase = d.e.productName
+                    d.product = pend.candidate; d.productDone = true; pending = null
+                    val r = advance(d)
+                    if (phrase != null && NameMatcher.key(phrase) != NameMatcher.key(pend.candidate.name)) {
+                        // The owner just confirmed what they call this product: remember it, and say so.
+                        val saved = try { backend.execute(Plan.RememberAlias(phrase, pend.candidate.name)).ok } catch (e: Exception) { false }
+                        if (saved) return r.copy(text = r.text + p.learned(phrase, pend.candidate.name))
+                    }
+                    return r
+                }
                 if (no) { pending = null; return productRejected(d) }
             }
             is Pending.DidYouMeanParty -> {
@@ -142,6 +298,19 @@ class AssistantEngine(
             }
             is Pending.Field -> {
                 if (no) return cancelPending()
+            }
+        }
+
+        if (pend is Pending.Confirm && d.e.quantityMilli != null) {
+            val norm = TextNormalizer.normalize(text)
+            if (Regex("^(actually|no|illa|illai|sorry|wait|correction|change|make it|not)\\b").containsMatchIn(norm)) {
+                val last = Regex("(?<![a-z0-9.])(\\d+(?:\\.\\d+)?)\\s*(\\S+)?").findAll(norm).lastOrNull()
+                val q = last?.let { Qty.parse(it.groupValues[1]) }
+                if (q != null && q > 0) {
+                    d.e = d.e.copy(quantityMilli = q, unit = Units.normalize(last.groupValues[2]) ?: d.e.unit, totalPaise = null)
+                    pending = null
+                    return advance(d)
+                }
             }
         }
 
@@ -173,6 +342,17 @@ class AssistantEngine(
 
     private suspend fun startNew(text: String): AssistantReply {
         pending = null
+        val norm = TextNormalizer.normalize(text)
+        if (Regex("^(please )?(undo|reverse|revert)( that| it| this| the last one| last| pannu| pannunga)*$").containsMatchIn(norm)) return proposeUndo()
+        Regex("^(?:please )?(?:create|make|add|new)(?: a| an| one)?(?: new| separate)? sheet(?: for| called| named| to track)? (.+)$").find(norm)?.let {
+            return proposeSheet(Plan.CreateSheet(NameMatcher.titleCase(it.groupValues[1].removeSuffix(" sheet")), emptyList()))
+        }
+        Regex("^(?:please )?(?:in|to)(?: the)? (.+?) sheet add (?:a |an )?(.+?) column$").find(norm)?.let {
+            return proposeSheet(Plan.AddColumn(it.groupValues[1], LocalParser.restoreCase(text, it.groupValues[2])))
+        }
+        Regex("^(?:please )?add (?:a |an )?(.+?) column (?:to|in)(?: the)? (.+?)(?: sheet)?$").find(norm)?.let {
+            return proposeSheet(Plan.AddColumn(it.groupValues[2], LocalParser.restoreCase(text, it.groupValues[1])))
+        }
         val cmd = try {
             provider.understand(history.toList(), text)
         } catch (e: CancellationException) {
@@ -192,12 +372,20 @@ class AssistantEngine(
                     cmd.entities.note == LocalParser.GUIDE_DELETE -> p.deleteGuide()
                     // A cloud model answered in its own words (chat, advice, questions about the data).
                     cmd.source == "cloud" && cmd.response.isNotBlank() -> cmd.response
-                    cmd.entities.note == LocalParser.GUIDE_GREETING -> p.greeting()
+                    cmd.entities.note == LocalParser.GUIDE_GREETING -> greetingText()
                     cmd.entities.note == LocalParser.GUIDE_THANKS -> p.welcome()
                     else -> p.unknown()
                 }, ReplyKind.ANSWER, Intent.UNKNOWN
             )
             cmd.intent == Intent.HELP -> AssistantReply(p.help(), ReplyKind.ANSWER, Intent.HELP)
+            cmd.intent == Intent.RECORD_PAYMENT -> proposePayment(
+                cmd.entities.customerName ?: cmd.entities.supplierName, cmd.entities.amountPaise,
+                when {
+                    cmd.entities.note == "EITHER" -> null
+                    cmd.entities.supplierName != null -> PartyKind.SUPPLIER
+                    else -> PartyKind.CUSTOMER
+                },
+            )
             cmd.confidence < 0.70 -> AssistantReply(if (cmd.intent.isWrite) p.notSure() else p.unknown(), ReplyKind.ANSWER, cmd.intent)
             !cmd.intent.isWrite -> answer(Draft(cmd))
             cmd.confidence < 0.90 -> {
@@ -397,7 +585,7 @@ class AssistantEngine(
     }
 
     private suspend fun resolveProduct(d: Draft, name: String, allowNew: Boolean): AssistantReply? {
-        when (val m = NameMatcher.match(name, backend.products()) { it.name }) {
+        when (val m = matchProduct(name)) {
             is Match.Exact -> { d.product = m.item; d.productDone = true }
             is Match.Suggest -> {
                 d.e = d.e.copy(productName = name)
@@ -512,6 +700,15 @@ class AssistantEngine(
 
     private fun confirm(d: Draft, plan: Plan, text: String, lines: List<ConfirmLine>, dangerous: Boolean = false): AssistantReply {
         val reply = AssistantReply(text, ReplyKind.CONFIRM, d.intent, lines = lines, dangerous = dangerous)
+        // The product being proposed becomes "it" for the next sentence ("actually 30", "same one").
+        when (plan) {
+            is Plan.StockIn -> lastProduct = plan.product?.name ?: plan.newProductName ?: lastProduct
+            is Plan.StockOut -> lastProduct = plan.product.name
+            is Plan.StockAdjust -> lastProduct = plan.product.name
+            is Plan.Sale -> lastProduct = plan.product.name
+            is Plan.UpdateProduct -> lastProduct = plan.product.name
+            else -> {}
+        }
         pending = Pending.Confirm(d, plan, reply)
         return reply
     }
@@ -557,8 +754,29 @@ class AssistantEngine(
             }
             is Plan.CreateParty -> p.doneParty(plan.kind, plan.name)
             is Plan.Expense -> p.doneExpense(plan.category, money(plan.amountPaise))
+            is Plan.Payment -> if (plan.party.kind == PartyKind.CUSTOMER) p.donePaymentIn(plan.party.name, money(plan.amountPaise)) else p.donePaymentOut(plan.party.name, money(plan.amountPaise))
+            is Plan.UndoLast -> p.undone()
+            is Plan.CreateSheet -> p.doneCreateSheet(plan.name)
+            is Plan.AddColumn -> p.doneAddColumn(plan.sheet, plan.column)
+            is Plan.AddRow -> p.doneAddRow(plan.sheet)
+            is Plan.RememberAlias -> p.doneAlias(plan.phrase, plan.productName)
         }
+        lastUndo = if (plan is Plan.UndoLast) null else r.undoToken?.let { it to text } ?: lastUndo
+        recordAction(plan, r, text)
         return AssistantReply(text, ReplyKind.DONE, d.intent, undoToken = r.undoToken)
+    }
+
+    private suspend fun recordAction(plan: Plan, r: ExecResult, result: String) {
+        fun q(milli: Long?, unit: String) = if (milli == null) "" else qty(milli, unit)
+        val rec = when (plan) {
+            is Plan.StockIn -> ActionRecord(commandText, "STOCK_IN", if (plan.asPurchase) "PURCHASE" else "STOCK_IN", plan.product?.name ?: plan.newProductName.orEmpty(), q(plan.product?.stockMilli ?: 0L, plan.unit), q(r.stockAfterMilli, plan.unit), true, result)
+            is Plan.StockOut -> ActionRecord(commandText, "STOCK_OUT", plan.reason.name, plan.product.name, q(plan.product.stockMilli, plan.product.unit), q(r.stockAfterMilli, plan.product.unit), true, result)
+            is Plan.StockAdjust -> ActionRecord(commandText, "STOCK_ADJUST", "ADJUST", plan.product.name, q(plan.product.stockMilli, plan.product.unit), q(plan.newQtyMilli, plan.product.unit), true, result)
+            is Plan.Sale -> ActionRecord(commandText, "CREATE_SALE", "SALE", plan.product.name, q(plan.product.stockMilli, plan.product.unit), q(r.stockAfterMilli, plan.product.unit), true, result)
+            is Plan.Payment -> ActionRecord(commandText, "RECORD_PAYMENT", "PAYMENT", plan.party.name, money(plan.party.balancePaise), money(plan.party.balancePaise - plan.amountPaise), true, result)
+            else -> ActionRecord(commandText, plan::class.simpleName.orEmpty(), plan::class.simpleName.orEmpty(), "", "", "", true, result)
+        }
+        try { backend.recordAction(rec) } catch (e: CancellationException) { throw e } catch (e: Exception) { /* the log must never break the action */ }
     }
 
     private fun errorText(plan: Plan, error: String?): String = when (error) {
@@ -614,7 +832,7 @@ class AssistantEngine(
                 val name = e.productName ?: (if (e.usesContext) lastProduct else null)
                     ?: return ask(d, "productName", p.whichProduct(null))
                 pending = null
-                return when (val m = NameMatcher.match(name, backend.products()) { it.name }) {
+                return when (val m = matchProduct(name)) {
                     is Match.Exact -> stockAnswer(m.item)
                     is Match.Suggest -> stockAnswer(m.item)
                     is Match.Multiple -> AssistantReply(

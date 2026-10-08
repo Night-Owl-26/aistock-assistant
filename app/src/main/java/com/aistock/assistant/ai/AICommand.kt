@@ -12,6 +12,7 @@ enum class Intent {
     CREATE_EXPENSE, EXPENSE_QUERY,
     CUSTOMER_BALANCE, SUPPLIER_BALANCE,
     REPORT_SALES, REPORT_PURCHASES, REPORT_STOCK, REPORT_EXPENSES,
+    RECORD_PAYMENT, UNDO, WORKBOOK_EDIT, LEARN_ALIAS,
     HELP, UNKNOWN;
 
     val isWrite: Boolean
@@ -20,7 +21,8 @@ enum class Intent {
     companion object {
         private val WRITES = setOf(
             ADD_PRODUCT, UPDATE_PRODUCT, STOCK_IN, STOCK_OUT, STOCK_ADJUST,
-            CREATE_SALE, CREATE_PURCHASE, CREATE_CUSTOMER, CREATE_SUPPLIER, CREATE_EXPENSE
+            CREATE_SALE, CREATE_PURCHASE, CREATE_CUSTOMER, CREATE_SUPPLIER, CREATE_EXPENSE,
+            RECORD_PAYMENT, UNDO, WORKBOOK_EDIT, LEARN_ALIAS
         )
 
         fun fromName(name: String?): Intent? = entries.firstOrNull { it.name == name?.trim()?.uppercase() }

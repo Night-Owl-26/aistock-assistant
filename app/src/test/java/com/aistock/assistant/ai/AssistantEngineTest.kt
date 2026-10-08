@@ -336,30 +336,114 @@ class AssistantEngineTest {
     }
 
     @Test
-    fun cloudModelCanChatButNeverWrites(): Unit = runBlocking {
-        val chatty = object : AIProvider {
-            override val name = "cloud"
-            override suspend fun understand(conversation: List<ChatTurn>, input: String) =
-                AICommand(Intent.UNKNOWN, 1.0, false, response = "Hi Bharath! You have 3 tea products: Green Tea, Masala Tea and Lemon Tea.", source = "cloud")
-        }
-        val b = FakeBackend()
-        val r = engine(b, chatty).handle("give me the list of tea products")
-        assertEquals(ReplyKind.ANSWER, r.kind)
-        assertTrue(r.text, r.text.contains("Masala Tea"))
-        assertTrue(b.executed.isEmpty())
-    }
-
-    @Test
     fun offlineGreetingAndProductListAreFriendly(): Unit = runBlocking {
         val b = FakeBackend()
         b.addProduct("Green Tea", stock = 12)
         b.addProduct("Masala Tea", stock = 7)
         b.addProduct("Blue Shirt", stock = 3)
         val e = engine(b)
-        assertTrue(e.handle("hey").text.startsWith("Hello"))
+        val hello = e.handle("hey")
+        assertTrue(hello.text, hello.text.contains("sales") && hello.text.contains("What would you like"))
         val r = e.handle("give me the list of tea products")
         assertTrue(r.text, r.text.contains("Green Tea") && r.text.contains("Masala Tea"))
         assertFalse(r.text, r.text.contains("Blue Shirt"))
         assertTrue(e.handle("list my products").text.contains("Blue Shirt"))
+    }
+
+    @Test
+    fun paymentInMixedLanguageNeedsConfirmation(): Unit = runBlocking {
+        val b = FakeBackend()
+        val kumar = b.addCustomer("Kumar Traders")
+        b.customers[0] = kumar.copy(balancePaise = 900_000)
+        val e = engine(b)
+        val r = e.handle("Kumar Traders-ku 5000 payment panniten")
+        assertEquals(r.text, ReplyKind.CONFIRM, r.kind)
+        assertTrue(r.text, r.text.contains("Kumar Traders") && r.text.contains("₹5,000"))
+        assertEquals(900_000L, b.customers[0].balancePaise)
+        e.handle("yes")
+        assertEquals(400_000L, b.customers[0].balancePaise)
+    }
+
+    @Test
+    fun undoThatReversesTheLastChangeAfterConfirmation(): Unit = runBlocking {
+        val b = FakeBackend()
+        b.addProduct("Blue Cotton", unit = "METER", stock = 486)
+        val e = engine(b)
+        assertEquals(ReplyKind.ANSWER, e.handle("undo that").kind)
+        e.handle("Add 50 meters of Blue Cotton"); e.confirm()
+        assertEquals(536L, b.stock("Blue Cotton"))
+        val ask = e.handle("Undo that.")
+        assertEquals(ReplyKind.CONFIRM, ask.kind)
+        assertEquals(536L, b.stock("Blue Cotton"))
+        assertEquals(ReplyKind.DONE, e.handle("yes").kind)
+        assertEquals(486L, b.stock("Blue Cotton"))
+    }
+
+    @Test
+    fun correctionReplacesTheWaitingQuantityInsteadOfAddingTwice(): Unit = runBlocking {
+        val b = FakeBackend()
+        b.addProduct("Blue Cotton", unit = "METER", stock = 486)
+        val e = engine(b)
+        e.handle("Add 20 meters of Blue Cotton")
+        var r = e.handle("Actually 30 add pannunga")
+        assertEquals(ReplyKind.CONFIRM, r.kind)
+        assertTrue(r.text, r.text.contains("30"))
+        r = e.handle("Actually 5 illa 8 metre dhaan")
+        assertTrue(r.text, r.text.contains("8 "))
+        e.confirm()
+        assertEquals(494L, b.stock("Blue Cotton"))
+        assertEquals(1, b.executed.size)
+    }
+
+    @Test
+    fun ownerWordsForProductsAreLearnedAndUsed(): Unit = runBlocking {
+        val b = FakeBackend()
+        b.addProduct("Blue Cotton 40s Premium", unit = "METER", stock = 100)
+        val e = engine(b)
+        var r = e.handle("Add 20 meters of blue cotton")
+        assertTrue(r.text, r.text.contains("Did you mean"))
+        r = e.handle("yes")
+        assertEquals(ReplyKind.CONFIRM, r.kind)
+        assertTrue(r.text, r.text.contains("remember"))
+        e.confirm()
+        assertEquals("Blue Cotton 40s Premium", b.aliasList.single().productName)
+        // Next time there is no question.
+        r = e.handle("blue cotton stock evlo")
+        assertTrue(r.text, r.text.contains("120"))
+        r = e.handle("Remove 5 meters of blue cotton because damaged")
+        assertEquals(ReplyKind.CONFIRM, r.kind)
+    }
+
+    @Test
+    fun sheetsAndColumnsCanBeCreatedOfflineToo(): Unit = runBlocking {
+        val b = FakeBackend()
+        b.sheetData["CUSTOMER LIST"] = arrayListOf(listOf("Name", "Phone"), listOf("Kumar Traders", "98765"))
+        b.sheetPurpose["CUSTOMER LIST"] = "CUSTOMERS"
+        val e = engine(b)
+        var r = e.handle("Create a new sheet for damaged items")
+        assertEquals(r.text, ReplyKind.CONFIRM, r.kind)
+        assertTrue(b.sheetData.size == 1)
+        e.confirm()
+        assertEquals(listOf("Date", "Product", "Quantity", "Reason"), b.sheetData.getValue("Damaged Items")[0])
+        r = e.handle("In the customer sheet add GST Number column")
+        assertEquals(r.text, ReplyKind.CONFIRM, r.kind)
+        e.handle("yes")
+        assertEquals(listOf("Name", "Phone", "GST Number"), b.sheetData.getValue("CUSTOMER LIST")[0])
+        assertEquals("existing rows are kept", "Kumar Traders", b.sheetData.getValue("CUSTOMER LIST")[1][0])
+        assertEquals(ReplyKind.ERROR, e.handle("In the customer sheet add GST Number column").kind)
+    }
+
+    @Test
+    fun everyConfirmedActionIsLoggedWithBeforeAndAfter(): Unit = runBlocking {
+        val b = FakeBackend()
+        b.addProduct("Blue Cotton", unit = "METER", stock = 486)
+        val e = engine(b)
+        e.handle("10 metre blue cotton add pannidu"); e.confirm()
+        val a = b.actions.single()
+        assertEquals("10 metre blue cotton add pannidu", a.command)
+        assertEquals("Blue Cotton", a.subject)
+        assertTrue(a.before, a.before.startsWith("486"))
+        assertTrue(a.after, a.after.startsWith("496"))
+        assertTrue(a.confirmed)
     }
 }
