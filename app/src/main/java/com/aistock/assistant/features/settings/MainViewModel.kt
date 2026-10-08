@@ -25,6 +25,7 @@ val CURRENCIES = listOf(
 class MainViewModel @Inject constructor(
     private val settings: SettingsStore,
     private val business: BusinessRepository,
+    private val llm: com.aistock.assistant.di.LlmSource,
 ) : ViewModel() {
     val prefs: StateFlow<Prefs> = settings.flow.stateIn(viewModelScope, SharingStarted.Eagerly, Prefs())
     val businessProfile: StateFlow<BusinessEntity?> = business.observeBusiness().stateIn(viewModelScope, SharingStarted.Eagerly, null)
@@ -72,6 +73,8 @@ class MainViewModel @Inject constructor(
     suspend fun setAiMode(mode: String) = settings.setAiMode(mode)
     suspend fun setImportOffered() = settings.setImportOffered()
     suspend fun saveCloud(endpoint: String, model: String, key: String): Boolean = settings.setCloud(endpoint, model, key)
+    /** null = the AI answered; otherwise the reason it did not. */
+    suspend fun testAi(): String? = llm.test()
     suspend fun clearCloudKey() = settings.clearCloudKey()
 
     /** @return false when the PIN is not valid */

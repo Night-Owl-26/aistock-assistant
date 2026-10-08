@@ -65,6 +65,8 @@ object ImportSpec {
                 if (i != null) { map[field.key] = i; used.add(i); break }
             }
         }
+        // Many price lists call the product column "Description" or "Particulars": with no name column, that is the name.
+        if ("name" !in map && "description" in map) map["name"] = map.remove("description")!!
         return map
     }
 

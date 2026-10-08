@@ -129,6 +129,9 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
     var model by remember(prefs.cloudModel) { mutableStateOf(prefs.cloudModel) }
     var apiKey by remember { mutableStateOf("") }
     var advanced by remember { mutableStateOf(false) }
+    var testing by remember { mutableStateOf(false) }
+    var testResult by remember { mutableStateOf("") }
+    var testOk by remember { mutableStateOf(false) }
 
     val notifyPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         scope.launch { vm.setLowStockAlerts(granted) }
@@ -207,6 +210,22 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
                         }
                     }) { Text(stringResource(R.string.save)) }
                     if (prefs.cloudKeySaved) OutlinedButton(onClick = { scope.launch { vm.clearCloudKey(); toast(ctx.getString(R.string.ai_key_removed)) } }) { Text(stringResource(R.string.remove_key)) }
+                }
+                if (prefs.cloudKeySaved) {
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(enabled = !testing, onClick = {
+                        testing = true; testResult = ""
+                        scope.launch {
+                            val problem = vm.testAi()
+                            testResult = problem ?: ctx.getString(R.string.ai_test_ok)
+                            testOk = problem == null
+                            testing = false
+                        }
+                    }) { Text(stringResource(if (testing) R.string.ai_testing else R.string.ai_test)) }
+                    if (testResult.isNotEmpty()) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(testResult, style = MaterialTheme.typography.bodyMedium, color = if (testOk) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
+                    }
                 }
             }
         }

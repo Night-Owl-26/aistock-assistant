@@ -204,3 +204,21 @@ class StockyTest {
         assertTrue(ctx.getValue("summary").contains("question number 0"))
     }
 }
+
+class StockyFailureTest {
+    private val failing = object : com.aistock.assistant.ai.llm.LlmClient {
+        override val name = "x"
+        override suspend fun chat(messages: List<com.aistock.assistant.ai.llm.LlmMessage>, tools: List<com.aistock.assistant.ai.llm.ToolSpec>): com.aistock.assistant.ai.llm.LlmReply =
+            throw com.aistock.assistant.ai.llm.LlmException(400, "API key not valid. Please pass a valid API key.")
+    }
+
+    @org.junit.Test
+    fun a_failed_model_call_is_explained_instead_of_hidden() = kotlinx.coroutines.runBlocking {
+        val b = FakeBackend()
+        val s = Stocky(b, AssistantEngine(b, LocalFallbackAIProvider()), { failing })
+        val r = s.handle("how is business going these days")
+        org.junit.Assert.assertEquals(com.aistock.assistant.ai.ReplyKind.ERROR, r.kind)
+        org.junit.Assert.assertTrue(r.text, r.text.contains("did not accept the AI key"))
+        org.junit.Assert.assertTrue(s.lastError != null)
+    }
+}

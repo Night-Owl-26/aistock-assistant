@@ -65,6 +65,8 @@ class AssistantViewModel @Inject constructor(
         llm = { llmSource.client() },
         businessName = { business.business()?.let { it.name + " (owner " + it.ownerName + ")" }.orEmpty() },
         symbol = { settings.current.value.currencySymbol },
+        online = { llmSource.online() },
+        tamil = { settings.current.value.tamil },
     )
 
     private val _items = MutableStateFlow<List<ChatItem>>(emptyList())

@@ -6,6 +6,7 @@ import android.net.NetworkCapabilities
 import androidx.room.Room
 import com.aistock.assistant.ai.AssistantBackend
 import com.aistock.assistant.ai.llm.LlmClient
+import com.aistock.assistant.ai.llm.GeminiClient
 import com.aistock.assistant.ai.llm.OpenAiCompatClient
 import com.aistock.assistant.data.RoomAssistantBackend
 import com.aistock.assistant.data.SettingsStore
@@ -62,8 +63,24 @@ object AppModule {
 class LlmSource(private val settings: SettingsStore, private val connectivity: Connectivity) {
     suspend fun client(): LlmClient? {
         val p = settings.current.value
-        if (p.aiMode != "cloud" || !p.cloudReady || !connectivity.isOnline()) return null
-        val key = settings.cloudKey() ?: return null
-        return OpenAiCompatClient(p.cloudEndpoint, p.cloudModel, key)
+        if (p.aiMode != "cloud" || !p.cloudReady) return null
+        val key = settings.cloudKey()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
+        // Google's own address gets Google's own API; anything else is treated as a chat-completions service.
+        return if (p.cloudEndpoint.contains("generativelanguage.googleapis.com")) GeminiClient(p.cloudModel.removePrefix("models/"), key)
+        else OpenAiCompatClient(p.cloudEndpoint, p.cloudModel, key)
     }
+
+    /** Sends one tiny message and reports what happened, in words the owner can act on. null = it works. */
+    suspend fun test(): String? {
+        val c = client() ?: return "No key is saved yet."
+        return try {
+            c.chat(listOf(com.aistock.assistant.ai.llm.LlmMessage.User("Say OK")), emptyList()); null
+        } catch (e: kotlinx.coroutines.CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            com.aistock.assistant.ai.llm.LlmProblem.explain(e, connectivity.isOnline())
+        }
+    }
+
+    fun online(): Boolean = connectivity.isOnline()
 }

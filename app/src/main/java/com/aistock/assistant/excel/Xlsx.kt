@@ -127,11 +127,57 @@ object XlsxWriter {
     }
 }
 
-/** Reads the first worksheet of an .xlsx file into rows of text. */
+/** One worksheet as plain rows of text. */
+data class RawSheet(val name: String, val hidden: Boolean, val rows: List<List<String>>)
+
+/** Reads .xlsx files into rows of text. */
 object XlsxReader {
     private const val MAX_ENTRY = 40L * 1024 * 1024
 
     fun read(input: InputStream): List<List<String>> {
+        val parts = unzip(input)
+        val sheetPath = firstSheetPath(parts) ?: throw IllegalArgumentException("This is not a valid Excel file")
+        val shared = parts["xl/sharedStrings.xml"]?.let { readSharedStrings(it) } ?: emptyList()
+        return readSheet(parts.getValue(sheetPath), shared)
+    }
+
+    /** Every sheet of the workbook, in workbook order, with its name and whether it is hidden. */
+    fun readAll(input: InputStream): List<RawSheet> {
+        val parts = unzip(input)
+        val shared = parts["xl/sharedStrings.xml"]?.let { readSharedStrings(it) } ?: emptyList()
+        val listed = ArrayList<Triple<String, String, Boolean>>() // name, relationship id, hidden
+        parts["xl/workbook.xml"]?.let { bytes ->
+            parser().parse(InputSource(ByteArrayInputStream(bytes)), object : DefaultHandler() {
+                override fun startElement(uri: String?, localName: String?, qName: String, a: Attributes) {
+                    if (local(qName) == "sheet") {
+                        listed.add(Triple(a.getValue("name").orEmpty(), (a.getValue("r:id") ?: a.getValue("id")).orEmpty(), (a.getValue("state") ?: "visible") != "visible"))
+                    }
+                }
+            })
+        }
+        val targets = HashMap<String, String>()
+        parts["xl/_rels/workbook.xml.rels"]?.let { bytes ->
+            parser().parse(InputSource(ByteArrayInputStream(bytes)), object : DefaultHandler() {
+                override fun startElement(uri: String?, localName: String?, qName: String, a: Attributes) {
+                    if (local(qName) == "Relationship") targets[a.getValue("Id").orEmpty()] = a.getValue("Target").orEmpty()
+                }
+            })
+        }
+        val out = ArrayList<RawSheet>()
+        for ((name, rid, hidden) in listed) {
+            val t = targets[rid] ?: continue
+            val path = if (t.startsWith("/")) t.removePrefix("/") else "xl/$t"
+            val bytes = parts[path] ?: continue
+            out.add(RawSheet(name.ifBlank { "Sheet${out.size + 1}" }, hidden, readSheet(bytes, shared)))
+        }
+        if (out.isEmpty()) {
+            val path = firstSheetPath(parts) ?: throw IllegalArgumentException("This is not a valid Excel file")
+            out.add(RawSheet("Sheet1", false, readSheet(parts.getValue(path), shared)))
+        }
+        return out
+    }
+
+    private fun unzip(input: InputStream): Map<String, ByteArray> {
         val parts = HashMap<String, ByteArray>()
         ZipInputStream(input).use { zip ->
             while (true) {
@@ -152,9 +198,7 @@ object XlsxReader {
                 }
             }
         }
-        val sheetPath = firstSheetPath(parts) ?: throw IllegalArgumentException("This is not a valid Excel file")
-        val shared = parts["xl/sharedStrings.xml"]?.let { readSharedStrings(it) } ?: emptyList()
-        return readSheet(parts.getValue(sheetPath), shared)
+        return parts
     }
 
     private fun parser() = SAXParserFactory.newInstance().apply {

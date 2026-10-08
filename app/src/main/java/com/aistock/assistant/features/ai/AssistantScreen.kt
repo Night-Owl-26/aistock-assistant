@@ -128,6 +128,11 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
                 vm.onVoiceStopped()
                 // Silence after an automatic re-listen just ends the spoken conversation quietly.
                 if (autoListening) { autoListening = false; return }
+                // Hearing nothing is not worth a message in the chat: the microphone simply closes.
+                if (code == SpeechRecognizer.ERROR_NO_MATCH || code == SpeechRecognizer.ERROR_SPEECH_TIMEOUT) {
+                    android.widget.Toast.makeText(ctx, msgNoSpeech, android.widget.Toast.LENGTH_SHORT).show()
+                    return
+                }
                 vm.onVoiceError(
                     when (code) {
                         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> msgNoPermission

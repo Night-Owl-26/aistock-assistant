@@ -98,6 +98,7 @@ private fun exportKindRes(kind: ExportKind): Int = when (kind) {
     ExportKind.EXPENSES -> R.string.expenses
     ExportKind.CUSTOMERS -> R.string.customers
     ExportKind.SUPPLIERS -> R.string.suppliers
+    ExportKind.WORKBOOK -> R.string.export_workbook
 }
 
 private fun importKindRes(kind: ImportKind): Int = when (kind) {
@@ -201,6 +202,12 @@ fun ImportExportScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
                     }
                 }) { Text(stringResource(R.string.share)) }
             }
+        }
+
+        SectionTitle(stringResource(R.string.workbook_title))
+        AppCard(Modifier.fillMaxWidth(), onClick = { nav.go("workbook") }) {
+            Text(stringResource(R.string.workbook_card_title), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.workbook_intro), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         SectionTitle(stringResource(R.string.import_from_excel))

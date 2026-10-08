@@ -14,6 +14,7 @@ import com.aistock.assistant.ai.ReplyKind
 import com.aistock.assistant.ai.TxnSummary
 import com.aistock.assistant.ai.llm.LlmClient
 import com.aistock.assistant.ai.llm.LlmMessage
+import com.aistock.assistant.ai.llm.LlmProblem
 import com.aistock.assistant.ai.llm.ToolCall
 import com.aistock.assistant.ai.llm.ToolParam
 import com.aistock.assistant.ai.llm.ToolSpec
@@ -46,6 +47,8 @@ class Stocky(
     private val symbol: () -> String = { "₹" },
     private val zone: () -> ZoneId = { ZoneId.systemDefault() },
     private val now: () -> Instant = { Instant.now() },
+    private val online: () -> Boolean = { true },
+    private val tamil: () -> Boolean = { false },
 ) {
     private val turns = ArrayList<ChatTurn>()
     private var summary = ""
@@ -54,6 +57,10 @@ class Stocky(
 
     /** "cloud" when the last reply came from the language model, "local" when the on-device rules answered. */
     var lastSource: String = "local"
+        private set
+
+    /** Why the language model could not answer last time, or null when it did. */
+    var lastError: String? = null
         private set
 
     val awaitingConfirmation: Boolean get() = engine.awaitingConfirmation
@@ -95,13 +102,18 @@ class Stocky(
                 engine.commandText = text
                 val r = converse(client, text)
                 lastSource = "cloud"
+                lastError = null
                 r
             } catch (e: CancellationException) {
                 throw e
             } catch (e: Exception) {
-                // The service failed: the on-device rules still work.
+                // The service failed: the on-device rules still work for real commands,
+                // but the owner is told why the conversation did not happen instead of getting a canned line.
                 lastSource = "local"
-                engine.handle(text)
+                lastError = LlmProblem.explain(e, online(), tamil())
+                val local = engine.handle(text)
+                if (local.intent != Intent.UNKNOWN || local.kind == ReplyKind.CONFIRM) local
+                else AssistantReply(lastError!!, ReplyKind.ERROR, Intent.UNKNOWN)
             }
         }
         remember(text, reply.text)

@@ -71,6 +71,8 @@ interface StockyDao {
     @Update suspend fun updateSheet(s: SheetEntity)
     @Query("SELECT * FROM workbook_sheets ORDER BY name COLLATE NOCASE") suspend fun sheets(): List<SheetEntity>
     @Insert suspend fun insertRow(r: SheetRowEntity)
+    @Insert suspend fun insertRows(r: List<SheetRowEntity>)
+    @Query("DELETE FROM workbook_rows WHERE sheetId = :sheetId") suspend fun deleteRows(sheetId: String)
     @Query("SELECT * FROM workbook_rows WHERE sheetId = :sheetId ORDER BY position, rowid") suspend fun rows(sheetId: String): List<SheetRowEntity>
     @Query("SELECT COUNT(*) FROM workbook_rows WHERE sheetId = :sheetId") suspend fun rowCount(sheetId: String): Int
 }

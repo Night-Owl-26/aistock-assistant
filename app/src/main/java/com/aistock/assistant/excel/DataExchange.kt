@@ -35,7 +35,12 @@ import javax.inject.Singleton
 data class ImportResult(val imported: Int, val skipped: List<ImportIssue>, val errors: List<ImportIssue>)
 
 enum class ReportType { SALES, PURCHASES, STOCK, STOCK_MOVEMENT, EXPENSES, CUSTOMER_OUTSTANDING, SUPPLIER_OUTSTANDING }
-enum class ExportKind { PRODUCTS, STOCK, STOCK_MOVEMENT, SALES, PURCHASES, EXPENSES, CUSTOMERS, SUPPLIERS, EVERYTHING }
+enum class ExportKind { PRODUCTS, STOCK, STOCK_MOVEMENT, SALES, PURCHASES, EXPENSES, CUSTOMERS, SUPPLIERS, WORKBOOK, EVERYTHING }
+
+/** What importing one sheet of a workbook would do. */
+data class WorkbookPlanItem(val sheet: String, val kind: ImportKind, val preview: ImportPreview)
+
+data class WorkbookResult(val imported: Map<ImportKind, Int>, val issues: List<String>, val sheetsRemembered: Int)
 
 /** A report or export: a header row, data rows (String, BigDecimal or null) and a few headline totals. */
 data class ReportData(val title: String, val headers: List<String>, val rows: List<List<Any?>>, val summary: List<Pair<String, String>>) {
@@ -81,8 +86,101 @@ class DataExchange @Inject constructor(
         }
     }
 
-    suspend fun preview(kind: ImportKind, table: List<List<String>>, mapping: Map<String, Int>): ImportPreview =
-        withContext(Dispatchers.Default) { ImportSpec.preview(kind, table, mapping, existingNames(kind)) }
+    suspend fun preview(kind: ImportKind, table: List<List<String>>, mapping: Map<String, Int>, alsoKnown: List<String> = emptyList()): ImportPreview =
+        withContext(Dispatchers.Default) { ImportSpec.preview(kind, table, mapping, existingNames(kind) + alsoKnown) }
+
+    // ------------------------------------------------------------ whole workbooks
+
+    /** Reads every sheet of a workbook (or a single CSV) and works out what each one holds. */
+    suspend fun analyzeWorkbook(name: String, input: InputStream): List<SheetProfile> = withContext(Dispatchers.IO) {
+        val bytes = input.readBytes()
+        val isZip = bytes.size > 2 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte()
+        val raw = if (isZip) XlsxReader.readAll(bytes.inputStream())
+        else listOf(RawSheet(name.substringBeforeLast('.').ifBlank { "Sheet1" }, false, Csv.read(bytes.inputStream())))
+        WorkbookAnalyzer.analyze(raw).filter { it.table.isNotEmpty() }
+    }
+
+    /** What an import of these sheets would do, without saving anything. */
+    suspend fun workbookPlan(profiles: List<SheetProfile>): List<WorkbookPlanItem> {
+        val out = ArrayList<WorkbookPlanItem>()
+        val comingProducts = ArrayList<String>()
+        for ((p, kind) in WorkbookAnalyzer.importOrder(profiles)) {
+            val pre = preview(kind, p.table, ImportSpec.autoMap(p.headers, kind), if (kind == ImportKind.OPENING_STOCK) comingProducts else emptyList())
+            if (kind == ImportKind.PRODUCTS) for (r in pre.ready) { r.values["name"]?.let { comingProducts.add(it) }; r.values["code"]?.let { comingProducts.add(it) } }
+            out.add(WorkbookPlanItem(p.name, kind, pre))
+        }
+        return out
+    }
+
+    /** Imports products, stock, customers and suppliers, then keeps every sheet inside the app so Stocky can read it. */
+    suspend fun importWorkbook(profiles: List<SheetProfile>): WorkbookResult {
+        val counts = LinkedHashMap<ImportKind, Int>()
+        val issues = ArrayList<String>()
+        for ((p, kind) in WorkbookAnalyzer.importOrder(profiles)) {
+            val pre = preview(kind, p.table, ImportSpec.autoMap(p.headers, kind))
+            val r = import(kind, pre)
+            counts[kind] = (counts[kind] ?: 0) + r.imported
+            for (i in (r.errors + r.skipped).take(40)) issues.add("${p.name}, row ${i.rowNumber}: ${i.message}")
+        }
+        return WorkbookResult(counts, issues, rememberSheets(profiles))
+    }
+
+    /** What changed compared with the workbook remembered from an earlier upload: sheet name -> short note. */
+    suspend fun workbookChanges(profiles: List<SheetProfile>): Map<String, String> = withContext(Dispatchers.IO) {
+        val stored = db.stockyDao().sheets().filter { it.purpose != "CUSTOM" }
+        if (stored.isEmpty()) return@withContext emptyMap()
+        val out = LinkedHashMap<String, String>()
+        for (p in profiles) {
+            val old = stored.firstOrNull { NameMatcher.key(it.name) == NameMatcher.key(p.name) }
+            if (old == null) { out[p.name] = "NEW_SHEET"; continue }
+            val oldCols = try { org.json.JSONArray(old.columns).let { a -> (0 until a.length()).map { a.optString(it).lowercase() } } } catch (e: Exception) { emptyList() }
+            val added = p.headers.filter { it.isNotBlank() && it.lowercase() !in oldCols }
+            if (added.isNotEmpty()) out[p.name] = added.take(4).joinToString(", ")
+        }
+        for (o in stored) if (profiles.none { NameMatcher.key(it.name) == NameMatcher.key(o.name) }) out[o.name] = "MISSING"
+        out
+    }
+
+    private suspend fun rememberSheets(profiles: List<SheetProfile>): Int = withContext(Dispatchers.IO) {
+        var n = 0
+        db.withTransaction {
+            val dao = db.stockyDao()
+            val existing = dao.sheets()
+            val now = System.currentTimeMillis()
+            for (p in profiles) {
+                val headers = p.headers.mapIndexed { i, h -> h.ifBlank { "Column ${i + 1}" } }
+                if (headers.isEmpty()) continue
+                val old = existing.firstOrNull { NameMatcher.key(it.name) == NameMatcher.key(p.name) }
+                // A sheet the owner created by talking to Stocky is never replaced by an upload.
+                if (old != null && old.purpose == "CUSTOM") continue
+                val id = old?.id ?: newId()
+                val cols = org.json.JSONArray(headers).toString()
+                if (old == null) dao.insertSheet(com.aistock.assistant.database.SheetEntity(id, p.name.take(60), p.purpose.name, cols, now, now))
+                else { dao.deleteRows(id); dao.updateSheet(old.copy(purpose = p.purpose.name, columns = cols, updatedAt = now)) }
+                val rows = p.table.drop(1).take(MAX_SHEET_ROWS).mapIndexed { i, row ->
+                    val o = org.json.JSONObject()
+                    for ((c, h) in headers.withIndex()) row.getOrNull(c)?.takeIf { it.isNotBlank() }?.let { o.put(h, it.take(300)) }
+                    com.aistock.assistant.database.SheetRowEntity(newId(), id, i.toLong(), o.toString(), now)
+                }
+                for (chunk in rows.chunked(500)) dao.insertRows(chunk)
+                n++
+            }
+        }
+        n
+    }
+
+    /** The sheets kept inside the app (uploaded ones and ones created through Stocky), ready to be written to Excel. */
+    suspend fun workbookSheets(): List<Sheet> = withContext(Dispatchers.IO) {
+        val dao = db.stockyDao()
+        dao.sheets().map { s ->
+            val cols = try { org.json.JSONArray(s.columns).let { a -> (0 until a.length()).map { a.optString(it) } } } catch (e: Exception) { emptyList() }
+            val rows = dao.rows(s.id).map { r ->
+                val o = try { org.json.JSONObject(r.cells) } catch (e: Exception) { org.json.JSONObject() }
+                cols.map { c -> o.optString(c).let { v -> v.replace(",", "").toBigDecimalOrNull()?.takeIf { v.length < 15 && !v.startsWith("0") || v == "0" } ?: v } as Any? }
+            }
+            Sheet(s.name, listOf(cols.map { it as Any? }) + rows)
+        }
+    }
 
     /** Saves the rows that passed the preview. Everything is written in one transaction. */
     suspend fun import(kind: ImportKind, preview: ImportPreview): ImportResult = withContext(Dispatchers.IO) {
@@ -265,6 +363,7 @@ class DataExchange @Inject constructor(
             ExportKind.EXPENSES -> listOf(report(ReportType.EXPENSES, all.start, all.end).sheet())
             ExportKind.CUSTOMERS -> listOf(partySheet(PartyKind.CUSTOMER, s(R.string.customers)))
             ExportKind.SUPPLIERS -> listOf(partySheet(PartyKind.SUPPLIER, s(R.string.suppliers)))
+            ExportKind.WORKBOOK -> workbookSheets().ifEmpty { listOf(Sheet("Sheet1", listOf(listOf<Any?>("")))) }
             ExportKind.EVERYTHING -> listOf(
                 products(), report(ReportType.STOCK, all.start, all.end).sheet(), report(ReportType.STOCK_MOVEMENT, all.start, all.end).sheet(),
                 report(ReportType.SALES, all.start, all.end).sheet(), report(ReportType.PURCHASES, all.start, all.end).sheet(),
@@ -274,6 +373,10 @@ class DataExchange @Inject constructor(
     }
 
     suspend fun writeXlsx(out: OutputStream, sheets: List<Sheet>) = withContext(Dispatchers.IO) { XlsxWriter.write(out, sheets) }
+
+    companion object {
+        const val MAX_SHEET_ROWS = 20_000
+    }
 
     fun fileName(base: String): String =
         base.lowercase().replace(Regex("[^a-z0-9]+"), "-").trim('-').ifEmpty { "export" } + "-" + SimpleDateFormat("yyyyMMdd-HHmm", Locale.US).format(Date()) + ".xlsx"

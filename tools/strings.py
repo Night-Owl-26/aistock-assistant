@@ -243,6 +243,8 @@ S = {
 }
 
 S.update({
+"ai_test": ("Test the AI connection", "AI இணைப்பைச் சோதிக்கவும்"), "ai_testing": ("Testing…", "சோதிக்கிறது…"),
+"ai_test_ok": ("It works. Stocky can now talk naturally.", "வேலை செய்கிறது. Stocky இப்போது இயல்பாகப் பேசும்."),
 "import_offer_title": ("Already keep your stock in Excel?", "ஏற்கனவே Excel-ல் ஸ்டாக் வைத்திருக்கிறீர்களா?"),
 "import_offer_body": ("You can bring in your products, customers, suppliers and opening stock from your .xlsx or .csv file now, so you do not have to type them again. You can also do it later from More > Import / Export.", "உங்கள் .xlsx அல்லது .csv கோப்பிலிருந்து பொருட்கள், வாடிக்கையாளர்கள், சப்ளையர்கள், தொடக்க ஸ்டாக்கை இப்போதே கொண்டுவரலாம்; மீண்டும் தட்டச்சு செய்ய வேண்டாம். பின்னர் மேலும் > இறக்குமதி / ஏற்றுமதி-யிலும் செய்யலாம்."),
 "import_offer_yes": ("Import my file", "என் கோப்பை இறக்குமதி செய்"), "import_offer_later": ("Later", "பின்னர்"),
@@ -255,6 +257,25 @@ S.update({
 "ai_status_cloud_missing": ("Paste a Gemini API key below to turn on real conversation. Until then the on-device assistant is active.", "இயல்பான உரையாடலுக்கு கீழே Gemini API key-ஐ ஒட்டவும். அதுவரை போனிலேயே இயங்கும் உதவியாளர் செயலில் இருக்கும்."),
 "shortcut_talk_short": ("Talk", "பேசு"), "shortcut_talk_long": ("Talk to AIStock", "AIStock-இடம் பேசு"),
 "assistant_title": ("Stocky", "Stocky"),
+"export_workbook": ("My workbook sheets (uploaded and created with Stocky)", "என் workbook ஷீட்கள் (பதிவேற்றியவை, Stocky உருவாக்கியவை)"),
+"workbook_title": ("Upload my Excel workbook", "என் Excel workbook-ஐ பதிவேற்று"),
+"workbook_card_title": ("Let Stocky read my whole workbook", "என் முழு workbook-ஐ Stocky படிக்கட்டும்"),
+"workbook_intro": ("Choose your business Excel file. Stocky reads every sheet, whatever it is called, tells you what it thinks each one is, and imports products, stock, customers and suppliers after you agree. The other sheets are kept so you can ask about them.", "உங்கள் வணிக Excel கோப்பைத் தேர்ந்தெடுக்கவும். ஷீட் பெயர் எதுவாக இருந்தாலும் Stocky ஒவ்வொன்றையும் படித்து, அது என்ன என்று சொல்லும்; நீங்கள் ஒப்புக்கொண்ட பின் பொருட்கள், ஸ்டாக், வாடிக்கையாளர்கள், சப்ளையர்களை இறக்குமதி செய்யும். மற்ற ஷீட்கள் பற்றி நீங்கள் கேட்க வசதியாக சேமிக்கப்படும்."),
+"workbook_found": ("I found %1$d sheets in %2$s", "%2$s-ல் %1$d ஷீட்கள் உள்ளன"),
+"workbook_rows_cols": ("%1$d rows · %2$s", "%1$d வரிகள் · %2$s"),
+"workbook_please_check": ("Please check my guess", "என் கணிப்பைச் சரிபார்க்கவும்"), "workbook_hidden": ("Hidden sheet", "மறைந்த ஷீட்"),
+"workbook_new_sheet": ("New sheet", "புதிய ஷீட்"), "workbook_new_columns": ("New columns: %1$s", "புதிய நெடுவரிசைகள்: %1$s"),
+"workbook_linked": ("Linked with %1$s", "%1$s உடன் இணைப்பு"), "workbook_this_is": ("This sheet is", "இந்த ஷீட்"),
+"workbook_nothing_to_import": ("I did not find a product, stock, customer or supplier sheet. Correct a sheet above if I guessed wrong.", "பொருள், ஸ்டாக், வாடிக்கையாளர், சப்ளையர் ஷீட் கிடைக்கவில்லை. என் கணிப்பு தவறாக இருந்தால் மேலே திருத்தவும்."),
+"workbook_found_n": ("%1$d found", "%1$d கிடைத்தது"), "workbook_skip_err": ("%1$d skipped, %2$d with errors", "%1$d தவிர்க்கப்பட்டது, %2$d பிழைகளுடன்"),
+"workbook_other_sheets": ("Sales, purchase, expense and other sheets are not turned into bills. They are kept as they are so Stocky can look things up in them.", "விற்பனை, கொள்முதல், செலவு போன்ற ஷீட்கள் பில்களாக மாற்றப்படாது. Stocky தேடிப் பார்க்க வசதியாக அப்படியே சேமிக்கப்படும்."),
+"workbook_import": ("Import and remember this workbook", "இறக்குமதி செய்து இந்த workbook-ஐ நினைவில் வை"),
+"workbook_sheets_remembered": ("Sheets Stocky can now read", "Stocky இப்போது படிக்கக்கூடிய ஷீட்கள்"),
+"workbook_done_body": ("Your original file was not changed. Sheets you add or change through Stocky can be exported from Import / Export.", "உங்கள் அசல் கோப்பு மாற்றப்படவில்லை. Stocky மூலம் சேர்த்த அல்லது மாற்றிய ஷீட்களை இறக்குமதி / ஏற்றுமதி-யிலிருந்து ஏற்றுமதி செய்யலாம்."),
+"workbook_ask_stocky": ("Ask Stocky", "Stocky-யிடம் கேள்"),
+"purpose_products": ("Product list", "பொருள் பட்டியல்"), "purpose_stock": ("Stock quantities", "ஸ்டாக் அளவுகள்"), "purpose_customers": ("Customers", "வாடிக்கையாளர்கள்"),
+"purpose_suppliers": ("Suppliers", "சப்ளையர்கள்"), "purpose_sales": ("Sales records", "விற்பனை பதிவுகள்"), "purpose_purchases": ("Purchase records", "கொள்முதல் பதிவுகள்"),
+"purpose_expenses": ("Expenses", "செலவுகள்"), "purpose_payments": ("Payments / cash book", "பணம் / கேஷ் புக்"), "purpose_other": ("Something else (just keep it)", "வேறு (அப்படியே வை)"),
 "ai_cloud_ready": ("Gemini AI on", "Gemini AI இயக்கத்தில்"), "ai_cloud_active": ("Gemini AI", "Gemini AI"),
 })
 

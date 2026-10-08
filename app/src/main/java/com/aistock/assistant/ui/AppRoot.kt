@@ -43,6 +43,7 @@ import com.aistock.assistant.features.ai.AssistantScreen
 import com.aistock.assistant.features.ai.ConversationsScreen
 import com.aistock.assistant.features.data.BackupScreen
 import com.aistock.assistant.features.data.ImportExportScreen
+import com.aistock.assistant.features.data.WorkbookScreen
 import com.aistock.assistant.features.home.DashboardScreen
 import com.aistock.assistant.features.inventory.InventoryScreen
 import com.aistock.assistant.features.inventory.ProductFormScreen
@@ -127,7 +128,7 @@ private fun MainScaffold(vm: MainViewModel, startTalking: Boolean) {
             title = { Text(stringResource(R.string.import_offer_title)) },
             text = { Text(stringResource(R.string.import_offer_body)) },
             confirmButton = {
-                Button(onClick = { scope.launch { vm.setImportOffered() }; nav.go("data") }) { Text(stringResource(R.string.import_offer_yes)) }
+                Button(onClick = { scope.launch { vm.setImportOffered() }; nav.go("workbook") }) { Text(stringResource(R.string.import_offer_yes)) }
             },
             dismissButton = { TextButton(onClick = { scope.launch { vm.setImportOffered() } }) { Text(stringResource(R.string.import_offer_later)) } },
         )
@@ -203,6 +204,7 @@ private fun MainScaffold(vm: MainViewModel, startTalking: Boolean) {
                 composable("reports") { ReportsScreen(nav) }
                 composable("data") { ImportExportScreen(nav) }
                 composable("backup") { BackupScreen(nav) }
+                composable("workbook") { WorkbookScreen(nav) }
                 composable("settings") { SettingsScreen(nav, vm) }
                 composable("conversations") { ConversationsScreen(nav) }
             }
