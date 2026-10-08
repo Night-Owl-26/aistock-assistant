@@ -25,7 +25,6 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -120,9 +119,15 @@ private fun MainScaffold(vm: MainViewModel) {
                         NavigationBarItem(
                             selected = currentRoute.substringBefore('?') == item.base,
                             onClick = {
-                                navController.navigate(item.route) {
-                                    popUpTo(navController.graph.findStartDestination().id) { saveState = false }
-                                    launchSingleTop = true
+                                val onThisTab = currentRoute.substringBefore('?') == item.base
+                                when {
+                                    onThisTab -> {}
+                                    // Home is always at the bottom of the stack: go back to it instead of opening a second copy.
+                                    item.base == "home" -> navController.popBackStack("home", inclusive = false)
+                                    else -> navController.navigate(item.route) {
+                                        popUpTo("home") { inclusive = false }
+                                        launchSingleTop = true
+                                    }
                                 }
                             },
                             icon = { Icon(painterResource(item.icon), contentDescription = null) },

@@ -24,6 +24,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -35,7 +36,6 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.ViewModel
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.aistock.assistant.R
 import com.aistock.assistant.data.BusinessRepository
@@ -92,7 +92,7 @@ class DashboardViewModel @Inject constructor(
 
 @Composable
 fun DashboardScreen(nav: AppNav, vm: DashboardViewModel = hiltViewModel()) {
-    val st by vm.state.collectAsStateWithLifecycle()
+    val st by vm.state.collectAsState()
     LaunchedEffect(Unit) { vm.refreshDay() }
     Column(
         Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
