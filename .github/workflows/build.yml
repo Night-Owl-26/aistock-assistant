@@ -54,6 +54,7 @@ jobs:
           cp assemble.log test.log out/ 2>/dev/null || true
           cp app/build/outputs/apk/debug/*.apk out/ 2>/dev/null || true
           cp app/build/test-results/testDebugUnitTest/*.xml out/tests/ 2>/dev/null || true
+          cp -r app/schemas out/schemas 2>/dev/null || true
           echo "$GITHUB_SHA" > out/sha.txt
           echo "assemble=${{ steps.assemble.outcome }} test=${{ steps.test.outcome }}" > out/status.txt
           ls -la out > out/files.txt
@@ -63,6 +64,59 @@ jobs:
           git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "results for $GITHUB_SHA"
           git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci-results
 
+      - name: Publish downloadable APK (release "latest")
+        if: steps.assemble.outcome == 'success' && steps.test.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp app/build/outputs/apk/debug/app-debug.apk AIStockAssistant.apk
+          gh release delete latest --yes --cleanup-tag || true
+          sleep 3
+          gh release create latest AIStockAssistant.apk --target "$GITHUB_SHA" \
+            --title "AIStock Assistant - latest build" \
+            --notes "Debug build of commit $GITHUB_SHA. All unit tests passed. Download AIStockAssistant.apk and open it on your Android phone to install."
+
       - name: Fail if build or tests failed
         if: steps.assemble.outcome != 'success' || steps.test.outcome != 'success'
         run: exit 1
+
+  device-test:
+    # Installs the APK on an emulator, drives the main flows and saves screenshots.
+    # Runs when the commit message contains [device] or when started by hand.
+    needs: build
+    if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[device]')
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: AIStockAssistant-debug-apk
+          path: apk
+      - name: Enable KVM
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: Run on emulator
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 34
+          arch: x86_64
+          target: google_apis
+          profile: pixel_6
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
+          script: python3 tools/smoke.py apk/app-debug.apk device-out
+      - name: Publish device results branch
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p device-out
+          echo "$GITHUB_SHA" > device-out/sha.txt
+          cd device-out
+          git init -q -b ci-device
+          git add -A
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "device results for $GITHUB_SHA"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci-device

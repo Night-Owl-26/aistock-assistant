@@ -154,7 +154,7 @@ class BackupAndImportTest {
         assertEquals("KG", yarn.unit); assertEquals(120_500L, yarn.currentStock); assertEquals(18_000L, yarn.purchasePrice); assertEquals(22_000L, yarn.sellingPrice)
         assertEquals("OPENING", env.inventory.movementsFor(yarn.id).single().type)
         assertEquals("BOX", all.getValue("A4 Paper").unit)
-        assertEquals(3, env.inventory.activeCategories().size)
+        assertEquals("categories of imported rows are created", 2, env.inventory.activeCategories().size)
 
         // CSV customers
         val csv = "Name,Phone,Opening Balance\nKumar Traders,9876543210,1500\nRavi,,\n"

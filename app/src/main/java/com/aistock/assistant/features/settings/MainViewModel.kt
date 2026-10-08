@@ -30,7 +30,7 @@ class MainViewModel @Inject constructor(
     val businessProfile: StateFlow<BusinessEntity?> = business.observeBusiness().stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     /** null = still loading, true = a PIN is set */
-    val hasPin: StateFlow<Boolean?> = business.observeUser().map<_, Boolean?> { it != null && it.pinHash.isNotEmpty() }
+    val hasPin: StateFlow<Boolean?> = business.observeUser().map { u -> val set: Boolean? = u != null && u.pinHash.isNotEmpty(); set }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val ownerName: StateFlow<String> = business.observeUser().map { it?.name.orEmpty() }.stateIn(viewModelScope, SharingStarted.Eagerly, "")
 
