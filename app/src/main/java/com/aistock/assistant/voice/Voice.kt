@@ -29,18 +29,21 @@ class VoiceRecognizer(private val context: Context) {
         false
     }
 
-    fun start(languageTag: String, callback: Callback) {
+    private val beep = BeepMuter(context)
+
+    /** @param quiet true when the microphone reopens by itself: its start tone is silenced */
+    fun start(languageTag: String, callback: Callback, quiet: Boolean = false) {
         stop()
         val r = SpeechRecognizer.createSpeechRecognizer(context)
         recognizer = r
         r.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) = callback.onListening()
+            override fun onReadyForSpeech(params: Bundle?) { beep.unmuteSoon(700); callback.onListening() }
             override fun onBeginningOfSpeech() {}
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
             override fun onEndOfSpeech() {}
             override fun onEvent(eventType: Int, params: Bundle?) {}
-            override fun onError(error: Int) = callback.onError(error)
+            override fun onError(error: Int) { beep.unmuteSoon(); callback.onError(error) }
             override fun onPartialResults(partialResults: Bundle?) {
                 partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull()?.let { if (it.isNotBlank()) callback.onPartial(it) }
             }
@@ -58,8 +61,10 @@ class VoiceRecognizer(private val context: Context) {
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
         }
         try {
+            if (quiet) beep.mute(2_500)
             r.startListening(intent)
         } catch (e: Exception) {
+            beep.unmuteNow()
             callback.onError(SpeechRecognizer.ERROR_CLIENT)
         }
     }

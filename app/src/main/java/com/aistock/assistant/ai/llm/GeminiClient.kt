@@ -82,7 +82,15 @@ class GeminiClient(private val model: String, private val apiKey: String) : LlmC
         }
     }
 
-    private fun call(m: String, body: String): LlmReply {
+    /** A network hiccup (Wi-Fi waking up, a slow name lookup) gets one more try before giving up. */
+    private fun call(m: String, body: String): LlmReply = try {
+        callOnce(m, body)
+    } catch (e: java.io.IOException) {
+        Thread.sleep(1_500)
+        callOnce(m, body)
+    }
+
+    private fun callOnce(m: String, body: String): LlmReply {
         val url = "https://generativelanguage.googleapis.com/v1beta/models/" + URLEncoder.encode(m, "UTF-8") + ":generateContent"
         val conn = URL(url).openConnection() as HttpURLConnection
         try {

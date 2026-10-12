@@ -43,7 +43,11 @@ object LlmProblem {
                 else -> t("The AI service had a problem (code ${e.status}).", "AI சேவையில் சிக்கல் (code ${e.status}).") + tail
             }
         }
-        if (!online || e is java.net.UnknownHostException) return t("There is no internet connection, so the AI could not be reached.", "இணைய இணைப்பு இல்லை; AI-ஐ அணுக முடியவில்லை.")
+        if (!online) return t("There is no internet connection, so the AI could not be reached.", "இணைய இணைப்பு இல்லை; AI-ஐ அணுக முடியவில்லை.")
+        if (e is java.net.UnknownHostException) return t(
+            "The phone is online but could not find Google's AI server (generativelanguage.googleapis.com). This is usually Private DNS, an ad-blocker or a VPN blocking Google. Set Settings > Network > Private DNS to Automatic or Off, turn off ad-blocker/VPN apps, or switch between Wi-Fi and mobile data, then try again.",
+            "போன் இணையத்தில் உள்ளது, ஆனால் Google AI சர்வரை (generativelanguage.googleapis.com) கண்டுபிடிக்க முடியவில்லை. பொதுவாக Private DNS, ad-blocker அல்லது VPN Google-ஐ தடுக்கிறது. Settings > Network > Private DNS-ஐ Automatic அல்லது Off ஆக்குங்கள், ad-blocker/VPN-ஐ நிறுத்துங்கள், அல்லது Wi-Fi/மொபைல் டேட்டா மாற்றி மீண்டும் முயற்சிக்கவும்.")
+        if (e is java.net.ConnectException || e is javax.net.ssl.SSLException) return t("Google's AI server could not be connected", "Google AI சர்வருடன் இணைக்க முடியவில்லை") + " (" + (e.message ?: e.javaClass.simpleName).take(120) + "). " + t("A Wi-Fi login page, firewall or VPN may be blocking it.", "Wi-Fi login பக்கம், firewall அல்லது VPN தடுக்கலாம்.")
         if (e is java.net.SocketTimeoutException) return t("The AI took too long to answer. Please try again.", "AI பதில் தர தாமதமானது. மீண்டும் முயற்சிக்கவும்.")
         return t("The AI could not be reached", "AI-ஐ அணுக முடியவில்லை") + " (" + (e.message ?: e.javaClass.simpleName).take(120) + ")."
     }

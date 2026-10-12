@@ -118,6 +118,7 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
     var manualMic by remember { mutableStateOf(false) }
 
     fun startVoice() {
+        val quiet = autoListening
         if (!recognizer.isAvailable()) { vm.onVoiceError(msgNoService); return }
         speaker.stop()
         recognizer.start(languageTag, object : VoiceRecognizer.Callback {
@@ -154,7 +155,7 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
                     }
                 )
             }
-        })
+        }, quiet)
         vm.onListening()
     }
 

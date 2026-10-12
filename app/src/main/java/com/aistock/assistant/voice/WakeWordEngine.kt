@@ -2,7 +2,6 @@ package com.aistock.assistant.voice
 
 import android.content.Context
 import android.content.Intent
-import android.media.AudioManager
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
@@ -39,8 +38,7 @@ class SpeechWakeWordEngine(private val context: Context) : WakeWordEngine {
     private var recognizer: SpeechRecognizer? = null
     private var active = false
     private var errors = 0
-    private val audio = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
-    private var muted = false
+    private val beep = BeepMuter(context)
 
     override fun listen(languageTag: String, needWake: Boolean, listener: WakeWordEngine.Listener) {
         main.post { start(languageTag, needWake, listener) }
@@ -52,15 +50,23 @@ class SpeechWakeWordEngine(private val context: Context) : WakeWordEngine {
         if (r == null) { listener.onFatal(SpeechRecognizer.ERROR_CLIENT); return }
         recognizer = r
         r.setRecognitionListener(object : RecognitionListener {
-            override fun onReadyForSpeech(params: Bundle?) { main.postDelayed({ unmuteBeep() }, 350) }
+            override fun onReadyForSpeech(params: Bundle?) { beep.unmuteSoon(700) }
             override fun onBeginningOfSpeech() {}
             override fun onRmsChanged(rmsdB: Float) {}
             override fun onBufferReceived(buffer: ByteArray?) {}
-            override fun onEndOfSpeech() {}
-            override fun onPartialResults(partialResults: Bundle?) {}
+            override fun onEndOfSpeech() { beep.mute(1_500) }
+            override fun onPartialResults(partialResults: Bundle?) {
+                // The name was heard: finish this session as soon as the owner pauses, instead of waiting out the long session.
+                if (!needWake) return
+                val heard = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)?.firstOrNull().orEmpty()
+                if (WakePhrase.find(heard) == null) return
+                main.removeCallbacks(finish)
+                main.postDelayed(finish, 1_300)
+            }
             override fun onEvent(eventType: Int, params: Bundle?) {}
             override fun onResults(results: Bundle?) {
-                unmuteBeep()
+                main.removeCallbacks(finish)
+                beep.unmuteSoon()
                 errors = 0
                 if (!active) return
                 val all = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION).orEmpty()
@@ -74,7 +80,7 @@ class SpeechWakeWordEngine(private val context: Context) : WakeWordEngine {
                 if (cmd != null) listener.onHeard(true, cmd) else again(languageTag, needWake, listener, 150)
             }
             override fun onError(error: Int) {
-                unmuteBeep()
+                beep.unmuteSoon()
                 if (!active) return
                 when (error) {
                     SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> listener.onFatal(error)
@@ -97,19 +103,27 @@ class SpeechWakeWordEngine(private val context: Context) : WakeWordEngine {
             putExtra(RecognizerIntent.EXTRA_LANGUAGE, languageTag)
             putExtra(RecognizerIntent.EXTRA_LANGUAGE_PREFERENCE, languageTag)
             putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 3)
+            putExtra(RecognizerIntent.EXTRA_PARTIAL_RESULTS, true)
             putExtra(RecognizerIntent.EXTRA_CALLING_PACKAGE, context.packageName)
             putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_COMPLETE_SILENCE_LENGTH_MILLIS, 1500L)
+            // Waiting for the name: keep each listening session long, so the recogniser restarts (and beeps) less often.
+            if (needWake) {
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_MINIMUM_LENGTH_MILLIS, 15_000L)
+                putExtra(RecognizerIntent.EXTRA_SPEECH_INPUT_POSSIBLY_COMPLETE_SILENCE_LENGTH_MILLIS, 15_000L)
+            }
         }
         try {
-            if (needWake) muteBeep()
+            beep.mute(2_500)
             r.startListening(intent)
         } catch (e: Exception) {
-            unmuteBeep()
+            beep.unmuteSoon()
             errors++
             recreate()
             again(languageTag, needWake, listener, 1_000)
         }
     }
+
+    private val finish = Runnable { try { recognizer?.stopListening() } catch (e: Exception) { } }
 
     private fun again(languageTag: String, needWake: Boolean, listener: WakeWordEngine.Listener, delayMs: Long) {
         main.postDelayed({ if (active) start(languageTag, needWake, listener) }, delayMs)
@@ -120,37 +134,12 @@ class SpeechWakeWordEngine(private val context: Context) : WakeWordEngine {
         recognizer = null
     }
 
-    /**
-     * The recogniser plays a short tone every time it starts. While waiting for the wake phrase it restarts often,
-     * so the system and notification sounds are silenced for that moment only. Media that is playing is never touched.
-     */
-    private fun muteBeep() {
-        val a = audio ?: return
-        try {
-            a.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_MUTE, 0)
-            a.adjustStreamVolume(AudioManager.STREAM_NOTIFICATION, AudioManager.ADJUST_MUTE, 0)
-            if (!a.isMusicActive) a.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_MUTE, 0)
-            muted = true
-        } catch (e: Exception) { /* Do Not Disturb can forbid this; then the tone is simply heard */ }
-    }
-
-    private fun unmuteBeep() {
-        if (!muted) return
-        val a = audio ?: return
-        muted = false
-        try {
-            a.adjustStreamVolume(AudioManager.STREAM_SYSTEM, AudioManager.ADJUST_UNMUTE, 0)
-            a.adjustStreamVolume(AudioManager.STREAM_NOTIFICATION, AudioManager.ADJUST_UNMUTE, 0)
-            a.adjustStreamVolume(AudioManager.STREAM_MUSIC, AudioManager.ADJUST_UNMUTE, 0)
-        } catch (e: Exception) { }
-    }
-
     override fun stop() {
         main.post {
             active = false
             main.removeCallbacksAndMessages(null)
-            unmuteBeep()
             try { recognizer?.cancel() } catch (e: Exception) { }
+            beep.unmuteSoon()
         }
     }
 
@@ -158,8 +147,8 @@ class SpeechWakeWordEngine(private val context: Context) : WakeWordEngine {
         main.post {
             active = false
             main.removeCallbacksAndMessages(null)
-            unmuteBeep()
             recreate()
+            beep.unmuteNow()
         }
     }
 }
