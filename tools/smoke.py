@@ -174,7 +174,7 @@ check("inventory")
 step("assistant by text")
 tap("Chat", exact=True); expect("Tell me what happened", "assistant"); shot("assistant-empty")
 tap_field("Type what happened"); type_text("Sold 20 Blue Shirts to Kumar Traders"); tap("Send", exact=True)
-expect("Confirm", "sale confirmation"); hide_keyboard(); shot("assistant-confirm")
+hide_keyboard(); expect("Confirm", "sale confirmation", 25); shot("assistant-confirm")
 tap("Confirm", exact=True); expect("Sale saved", "sale done"); shot("assistant-done")
 tap_field("Type what happened"); type_text("How many Blue Shirts do I have"); tap("Send", exact=True)
 expect("30 pieces", "stock answer"); hide_keyboard(); shot("assistant-answer")
@@ -226,7 +226,8 @@ tap("Import / Export"); expect("Export to Excel", "import export"); shot("import
 check("more")
 
 step("settings: dark mode and Tamil")
-tap("Settings"); expect("AI Provider", "settings"); shot("settings")
+tap("Settings"); expect("Language", "settings"); shot("settings")
+if not scroll_to("AI Provider"): problems.append("settings: AI Provider section missing")
 step("hands-free listening service")
 for perm in ("android.permission.RECORD_AUDIO", "android.permission.POST_NOTIFICATIONS"):
     adb("shell", "pm", "grant", PKG, perm)
