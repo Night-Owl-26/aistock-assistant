@@ -8,7 +8,7 @@ import com.aistock.assistant.ai.ChatTurn
 import com.aistock.assistant.ai.ConfirmLine
 import com.aistock.assistant.ai.ReplyKind
 import com.aistock.assistant.ai.LocalFallbackAIProvider
-import com.aistock.assistant.conversation.Stocky
+import com.aistock.assistant.conversation.StockyFactory
 import com.aistock.assistant.di.LlmSource
 import com.aistock.assistant.data.BusinessRepository
 import com.aistock.assistant.data.RoomAssistantBackend
@@ -42,32 +42,20 @@ data class ChatItem(
     val dangerous: Boolean = false,
     /** Buttons on this message can still be used (it is the latest question). */
     val live: Boolean = false,
+    /** Confirming needs the owner's fingerprint / phone lock / PIN. */
+    val sensitive: Boolean = false,
+    val time: Long = System.currentTimeMillis(),
 )
 
 @HiltViewModel
 class AssistantViewModel @Inject constructor(
     private val backend: RoomAssistantBackend,
-    private val llmSource: LlmSource,
-    private val settings: SettingsStore,
+    factory: StockyFactory,
     private val business: BusinessRepository,
     private val connectivity: Connectivity,
 ) : ViewModel() {
-    private val engine = AssistantEngine(
-        backend, LocalFallbackAIProvider(),
-        tamil = { settings.current.value.tamil },
-        symbol = { settings.current.value.currencySymbol },
-        allowNegativeStock = { settings.current.value.allowNegativeStock },
-    )
-
     /** The conversation manager: a real language model with safe tools when configured, on-device rules otherwise. */
-    private val stocky = Stocky(
-        backend, engine,
-        llm = { llmSource.client() },
-        businessName = { business.business()?.let { it.name + " (owner " + it.ownerName + ")" }.orEmpty() },
-        symbol = { settings.current.value.currencySymbol },
-        online = { llmSource.online() },
-        tamil = { settings.current.value.tamil },
-    )
+    private val stocky = factory.create()
 
     private val _items = MutableStateFlow<List<ChatItem>>(emptyList())
     val items: StateFlow<List<ChatItem>> = _items
@@ -121,9 +109,18 @@ class AssistantViewModel @Inject constructor(
                 val meta = try { JSONObject(m.metadata.ifBlank { "{}" }) } catch (e: Exception) { JSONObject() }
                 val lines = ArrayList<ConfirmLine>()
                 meta.optJSONArray("lines")?.let { arr -> for (i in 0 until arr.length()) arr.optJSONObject(i)?.let { o -> lines.add(ConfirmLine(o.optString("l"), o.optString("v"))) } }
-                ChatItem(m.id, m.role == "user", m.text, meta.optString("kind").takeIf { it.isNotEmpty() }?.let { k -> ReplyKind.entries.firstOrNull { it.name == k } }, lines)
+                ChatItem(m.id, m.role == "user", m.text, meta.optString("kind").takeIf { it.isNotEmpty() }?.let { k -> ReplyKind.entries.firstOrNull { it.name == k } }, lines, time = m.createdAt)
             }
         }
+    }
+
+    fun renameConversation(id: String, title: String) {
+        val t = title.trim()
+        if (t.isNotEmpty()) viewModelScope.launch { business.renameConversation(id, t) }
+    }
+
+    fun onSpeaking(on: Boolean) {
+        if (on) _voice.value = VoiceState.SPEAKING else if (_voice.value == VoiceState.SPEAKING) _voice.value = VoiceState.IDLE
     }
 
     fun deleteConversation(id: String) {
@@ -190,6 +187,7 @@ class AssistantViewModel @Inject constructor(
             val item = ChatItem(
                 newId(), false, reply.text, reply.kind, reply.lines, reply.choices, reply.undoToken, reply.dangerous,
                 live = reply.kind == ReplyKind.CONFIRM || reply.kind == ReplyKind.CLARIFY,
+                sensitive = reply.kind == ReplyKind.CONFIRM && stocky.pendingSensitive,
             )
             append(item)
             _busy.value = false

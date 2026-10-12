@@ -245,3 +245,30 @@ class StockyCountTest {
         org.junit.Assert.assertTrue(seen, seen.contains("- North: 50 rows, sum 1000"))
     }
 }
+
+class StockyOwnerCheckTest {
+    @org.junit.Test
+    fun the_model_cannot_confirm_a_payment_by_itself() = kotlinx.coroutines.runBlocking {
+        val b = FakeBackend()
+        val kumar = b.addCustomer("Kumar Traders")
+        b.customers[0] = kumar.copy(balancePaise = 900_000)
+        var step = 0
+        var toolText = ""
+        val llm = object : com.aistock.assistant.ai.llm.LlmClient {
+            override val name = "x"
+            override suspend fun chat(messages: List<com.aistock.assistant.ai.llm.LlmMessage>, tools: List<com.aistock.assistant.ai.llm.ToolSpec>): com.aistock.assistant.ai.llm.LlmReply {
+                val last = messages.last()
+                if (last is com.aistock.assistant.ai.llm.LlmMessage.ToolResult) { toolText = last.text; return com.aistock.assistant.ai.llm.LlmReply("ok") }
+                step++
+                return if (step == 1) com.aistock.assistant.ai.llm.LlmReply("", listOf(com.aistock.assistant.ai.llm.ToolCall("p", "propose_payment", mapOf("party" to "Kumar Traders", "amount" to "5000", "direction" to "received"))))
+                else com.aistock.assistant.ai.llm.LlmReply("", listOf(com.aistock.assistant.ai.llm.ToolCall("c", "confirm_pending", emptyMap())))
+            }
+        }
+        val s = Stocky(b, AssistantEngine(b, LocalFallbackAIProvider(), ownerCheck = { true }), { llm })
+        s.handle("Kumar paid 5000")
+        val r = s.handle("go ahead and record it please")
+        org.junit.Assert.assertTrue(toolText, toolText.startsWith("NOT DONE YET"))
+        org.junit.Assert.assertEquals(com.aistock.assistant.ai.ReplyKind.CONFIRM, r.kind)
+        org.junit.Assert.assertEquals(900_000L, b.customers[0].balancePaise)
+    }
+}

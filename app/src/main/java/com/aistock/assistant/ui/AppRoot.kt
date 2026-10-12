@@ -69,14 +69,14 @@ private data class TopLevel(val route: String, val base: String, val label: Int,
 
 private val TOP_LEVEL = listOf(
     TopLevel("home", "home", R.string.nav_home, R.drawable.ic_home),
+    TopLevel("ai", "ai", R.string.nav_ai, R.drawable.ic_ai),
     TopLevel("inventory", "inventory", R.string.nav_inventory, R.drawable.ic_inventory),
     TopLevel("transactions", "transactions", R.string.nav_transactions, R.drawable.ic_receipt),
-    TopLevel("ai", "ai", R.string.nav_ai, R.drawable.ic_ai),
     TopLevel("more", "more", R.string.nav_more, R.drawable.ic_more),
 )
 
 @Composable
-fun AppRoot(startTalking: Boolean = false, vm: MainViewModel = hiltViewModel()) {
+fun AppRoot(startTalking: Boolean = false, openChat: Boolean = false, vm: MainViewModel = hiltViewModel()) {
     val prefs by vm.prefs.collectAsStateWithLifecycle()
     val hasPin by vm.hasPin.collectAsStateWithLifecycle()
     val unlocked by vm.unlocked.collectAsStateWithLifecycle()
@@ -86,14 +86,14 @@ fun AppRoot(startTalking: Boolean = false, vm: MainViewModel = hiltViewModel()) 
                 !prefs.loaded || (prefs.onboardingDone && hasPin == null) -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
                 !prefs.onboardingDone -> OnboardingScreen(vm)
                 hasPin == true && !unlocked -> LockScreen(vm)
-                else -> MainScaffold(vm, startTalking)
+                else -> OwnerCheckHost(prefs.ownerCheck, hasPin == true, { vm.unlock(it) }) { MainScaffold(vm, startTalking, openChat) }
             }
         }
     }
 }
 
 @Composable
-private fun MainScaffold(vm: MainViewModel, startTalking: Boolean) {
+private fun MainScaffold(vm: MainViewModel, startTalking: Boolean, openChat: Boolean = false) {
     val prefs by vm.prefs.collectAsStateWithLifecycle()
     val navController = rememberNavController()
     val snackbar = remember { SnackbarHostState() }
@@ -120,6 +120,7 @@ private fun MainScaffold(vm: MainViewModel, startTalking: Boolean) {
     var talked by rememberSaveable { mutableStateOf(false) }
     LaunchedEffect(startTalking) {
         if (startTalking && !talked) { talked = true; navController.navigate("ai?listen=true") { launchSingleTop = true } }
+        else if (openChat && !talked) { talked = true; navController.navigate("ai") { launchSingleTop = true } }
     }
 
     if (prefs.loaded && !prefs.importOffered && !startTalking) {

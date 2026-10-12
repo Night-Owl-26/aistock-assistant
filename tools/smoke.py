@@ -80,6 +80,12 @@ def tap(label, secs=20, exact=False, last=False, required=True):
     time.sleep(1.0)
     return True
 
+def scroll_to(label, tries=8):
+    for _ in range(tries):
+        if find(label): return True
+        adb("shell", "input", "swipe", "540", "1700", "540", "700", "400"); time.sleep(1.2)
+    return False
+
 def tap_field(label, index=0, secs=8):
     """Taps a text field by its label or placeholder; falls back to the n-th edit box on screen."""
     end = time.time() + secs
@@ -166,7 +172,7 @@ tap("Products", exact=True); tap("Blue Shirt"); expect("Edit product", "product 
 check("inventory")
 
 step("assistant by text")
-tap("AI", exact=True); expect("Tell me what happened", "assistant"); shot("assistant-empty")
+tap("Chat", exact=True); expect("Tell me what happened", "assistant"); shot("assistant-empty")
 tap_field("Type what happened"); type_text("Sold 20 Blue Shirts to Kumar Traders"); tap("Send", exact=True)
 expect("Confirm", "sale confirmation"); hide_keyboard(); shot("assistant-confirm")
 tap("Confirm", exact=True); expect("Sale saved", "sale done"); shot("assistant-done")
@@ -221,16 +227,36 @@ check("more")
 
 step("settings: dark mode and Tamil")
 tap("Settings"); expect("AI Provider", "settings"); shot("settings")
+step("hands-free listening service")
+for perm in ("android.permission.RECORD_AUDIO", "android.permission.POST_NOTIFICATIONS"):
+    adb("shell", "pm", "grant", PKG, perm)
+scroll_to("hands-free"); shot("settings-handsfree")
+tap("hands-free"); time.sleep(6)
+svc = adb("shell", "dumpsys", "activity", "services", PKG)
+if "HandsFreeService" not in svc:
+    problems.append("hands-free service did not start"); say("  !! hands-free service not running")
+else:
+    say("  hands-free service running")
+adb("shell", "cmd", "statusbar", "expand-notifications"); time.sleep(2); shot("handsfree-notification")
+adb("shell", "cmd", "statusbar", "collapse"); time.sleep(1)
+scroll_to("hands-free"); tap("hands-free"); time.sleep(3)
+svc = adb("shell", "dumpsys", "activity", "services", PKG)
+if "HandsFreeService" in svc and "isForeground=true" in svc:
+    problems.append("hands-free service did not stop"); say("  !! hands-free still running")
+check("hands-free")
+scroll_to("Security"); shot("settings-security")
+for _ in range(10): adb("shell", "input", "swipe", "540", "700", "540", "1700", "200")
+time.sleep(1)
 adb("shell", "cmd", "uimode", "night", "yes"); time.sleep(4); check("dark mode"); shot("settings-dark")
 back(); tap("Home", exact=True); expect("Today's Sales", "home dark"); shot("dashboard-dark")
-tap("AI", exact=True); time.sleep(1); shot("assistant-dark")
+tap("Chat", exact=True); time.sleep(1); shot("assistant-dark")
 adb("shell", "cmd", "uimode", "night", "no"); time.sleep(6)
 tap("More", exact=True); tap("Settings"); expect("Language", "settings again")
 tap("Language: English", exact=True); tap("தமிழ்", exact=True); time.sleep(4); check("language switch")
 shot("settings-tamil"); back()
 tap("முகப்பு", exact=True); expect("இன்றைய விற்பனை", "tamil dashboard"); shot("dashboard-tamil")
 tap("ஸ்டாக்", exact=True); time.sleep(1); shot("inventory-tamil")
-tap("AI", exact=True); time.sleep(1); shot("assistant-tamil")
+tap("பேசு", exact=True); time.sleep(1); shot("assistant-tamil")
 tap_field("நடந்ததை எழுதுங்கள்")
 type_text("blue shirt evlo irukku"); tap("அனுப்பு", exact=True); expect("பீஸ்", "tamil answer"); hide_keyboard(); shot("assistant-tamil-answer")
 check("tamil")

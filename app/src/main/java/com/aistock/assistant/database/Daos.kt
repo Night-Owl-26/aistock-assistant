@@ -278,6 +278,7 @@ interface ConversationDao {
     @Query("SELECT * FROM conversations WHERE id = :id") suspend fun byId(id: String): ConversationEntity?
     @Query("SELECT * FROM conversation_messages WHERE conversationId = :id ORDER BY createdAt, rowid") suspend fun messages(id: String): List<ConversationMessageEntity>
     @Query("DELETE FROM conversations WHERE id = :id") suspend fun delete(id: String)
+    @Query("UPDATE conversations SET title = :title WHERE id = :id") suspend fun rename(id: String, title: String)
     @Query(
         "SELECT c.*, (SELECT COUNT(*) FROM conversation_messages m WHERE m.conversationId = c.id) AS messageCount, " +
             "(SELECT m.text FROM conversation_messages m WHERE m.conversationId = c.id ORDER BY m.createdAt DESC, m.rowid DESC LIMIT 1) AS lastText " +

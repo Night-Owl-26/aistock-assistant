@@ -446,4 +446,32 @@ class AssistantEngineTest {
         assertTrue(a.after, a.after.startsWith("496"))
         assertTrue(a.confirmed)
     }
+
+    @Test
+    fun aSpokenYesIsNotEnoughForAPaymentWhenOwnerCheckIsOn(): Unit = runBlocking {
+        val b = FakeBackend()
+        val kumar = b.addCustomer("Kumar Traders")
+        b.customers[0] = kumar.copy(balancePaise = 900_000)
+        val e = AssistantEngine(b, LocalFallbackAIProvider(), ownerCheck = { true })
+        e.handle("Kumar Traders-ku 5000 payment panniten")
+        assertTrue(e.needsOwnerCheck)
+        val r = e.handle("yes")
+        assertEquals(ReplyKind.CONFIRM, r.kind)
+        assertTrue(r.text, r.text.contains("fingerprint"))
+        assertEquals(900_000L, b.customers[0].balancePaise)
+        // The Confirm button (after the phone lock) still works.
+        assertEquals(ReplyKind.DONE, e.confirm().kind)
+        assertEquals(400_000L, b.customers[0].balancePaise)
+    }
+
+    @Test
+    fun ordinaryStockInStillConfirmsByVoiceWithOwnerCheckOn(): Unit = runBlocking {
+        val b = FakeBackend()
+        b.addProduct("Blue Cotton", unit = "METER", stock = 486)
+        val e = AssistantEngine(b, LocalFallbackAIProvider(), ownerCheck = { true })
+        e.handle("Add 50 meters of Blue Cotton")
+        assertEquals(false, e.needsOwnerCheck)
+        assertEquals(ReplyKind.DONE, e.handle("yes").kind)
+        assertEquals(536L, b.stock("Blue Cotton"))
+    }
 }

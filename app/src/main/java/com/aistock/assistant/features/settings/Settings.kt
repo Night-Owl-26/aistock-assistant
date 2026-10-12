@@ -122,6 +122,13 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
     val toast = LocalToast.current
 
     var editBusiness by remember { mutableStateOf(false) }
+    val ownerCheck = com.aistock.assistant.ui.LocalOwnerCheck.current
+    val handsFreePerms = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()) { result ->
+        if (result[android.Manifest.permission.RECORD_AUDIO] == true) {
+            scope.launch { vm.setHandsFree(true) }
+            com.aistock.assistant.voice.HandsFree.start(ctx)
+        } else toast(ctx.getString(R.string.handsfree_needs_mic))
+    }
     var pinDialog by remember { mutableStateOf(false) }
     var confirmSample by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
@@ -164,6 +171,26 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
         AppCard(Modifier.fillMaxWidth()) {
             Text(stringResource(if (prefs.tamil) R.string.voice_language_ta else R.string.voice_language_en), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             SwitchRow(stringResource(R.string.spoken_replies), stringResource(R.string.spoken_replies_sub), prefs.ttsEnabled) { scope.launch { vm.setTts(it) } }
+            SwitchRow(stringResource(R.string.handsfree_setting), stringResource(R.string.handsfree_setting_sub), prefs.handsFree) { on ->
+                if (!on) { scope.launch { vm.setHandsFree(false) }; com.aistock.assistant.voice.HandsFree.stop(ctx) }
+                else {
+                    val perms = buildList {
+                        add(android.Manifest.permission.RECORD_AUDIO)
+                        if (android.os.Build.VERSION.SDK_INT >= 33) add(android.Manifest.permission.POST_NOTIFICATIONS)
+                    }
+                    handsFreePerms.launch(perms.toTypedArray())
+                }
+            }
+            Text(stringResource(R.string.handsfree_privacy), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        SectionTitle(stringResource(R.string.security))
+        AppCard(Modifier.fillMaxWidth()) {
+            SwitchRow(stringResource(R.string.owner_check_setting), stringResource(R.string.owner_check_setting_sub), prefs.ownerCheck) { on ->
+                if (on) scope.launch { vm.setOwnerCheck(true) }
+                // Turning the protection off is itself protected.
+                else ownerCheck(ctx.getString(R.string.owner_check_setting)) { scope.launch { vm.setOwnerCheck(false) } }
+            }
         }
 
         SectionTitle(stringResource(R.string.ai_provider))
@@ -209,7 +236,7 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
                             toast(ctx.getString(if (ok) R.string.saved else R.string.ai_key_not_saved))
                         }
                     }) { Text(stringResource(R.string.save)) }
-                    if (prefs.cloudKeySaved) OutlinedButton(onClick = { scope.launch { vm.clearCloudKey(); toast(ctx.getString(R.string.ai_key_removed)) } }) { Text(stringResource(R.string.remove_key)) }
+                    if (prefs.cloudKeySaved) OutlinedButton(onClick = { ownerCheck(ctx.getString(R.string.owner_check_key)) { scope.launch { vm.clearCloudKey(); toast(ctx.getString(R.string.ai_key_removed)) } } }) { Text(stringResource(R.string.remove_key)) }
                 }
                 if (prefs.cloudKeySaved) {
                     Spacer(Modifier.height(8.dp))
@@ -254,7 +281,7 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
             SettingsLink(stringResource(R.string.import_export)) { nav.go("data") }
             SettingsLink(stringResource(R.string.backup_restore)) { nav.go("backup") }
             SettingsLink(stringResource(R.string.load_sample_data)) { confirmSample = true }
-            SettingsLink(stringResource(R.string.reset_all_data), danger = true) { confirmReset = true }
+            SettingsLink(stringResource(R.string.reset_all_data), danger = true) { ownerCheck(ctx.getString(R.string.owner_check_reset)) { confirmReset = true } }
         }
 
         SectionTitle(stringResource(R.string.about))

@@ -83,6 +83,7 @@ class BusinessRepository @Inject constructor(
 
     suspend fun messages(conversationId: String) = conversations.messages(conversationId)
     fun observeConversations() = conversations.observe()
+    suspend fun renameConversation(id: String, title: String) = conversations.rename(id, title.take(60))
     suspend fun deleteConversation(id: String) = conversations.delete(id)
 
     // ------------------------------------------------------------ sample data

@@ -99,6 +99,11 @@ fun DashboardScreen(nav: AppNav, vm: DashboardViewModel = hiltViewModel()) {
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Column {
+            val hour = java.time.LocalTime.now().hour
+            Text(
+                stringResource(when (hour) { in 5..11 -> R.string.greet_morning; in 12..16 -> R.string.greet_afternoon; else -> R.string.greet_evening }),
+                style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary,
+            )
             Text(st.businessName.ifBlank { stringResource(R.string.app_name) }, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(fmtDate(System.currentTimeMillis()), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
@@ -114,7 +119,8 @@ fun DashboardScreen(nav: AppNav, vm: DashboardViewModel = hiltViewModel()) {
                     Spacer(Modifier.height(4.dp))
                     Text(stringResource(R.string.tell_me_what_happened), style = MaterialTheme.typography.headlineSmall)
                     Spacer(Modifier.height(4.dp))
-                    Text(stringResource(R.string.ask_ai_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f))
+                    val handsFree by com.aistock.assistant.voice.HandsFree.running.collectAsState()
+                    Text(stringResource(if (handsFree) R.string.ask_ai_hint_handsfree else R.string.ask_ai_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.85f))
                 }
                 Spacer(Modifier.width(12.dp))
                 Surface(color = Color(0xFFFFC857), contentColor = Color(0xFF2C1A00), shape = CircleShape, shadowElevation = 6.dp, modifier = Modifier.size(76.dp)) {

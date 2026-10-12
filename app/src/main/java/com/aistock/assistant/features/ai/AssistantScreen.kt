@@ -34,6 +34,8 @@ import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material3.Button
+import androidx.compose.material3.LocalContentColor
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
@@ -159,6 +161,11 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) startVoice() else vm.onVoiceError(msgNoPermission)
     }
+    // While the chat has the microphone, background "Hey Stocky" listening steps aside.
+    DisposableEffect(Unit) {
+        com.aistock.assistant.voice.HandsFree.pause(true)
+        onDispose { com.aistock.assistant.voice.HandsFree.pause(false) }
+    }
 
     fun micPressed() {
         autoListening = false
@@ -173,11 +180,12 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
     LaunchedEffect(startListening) {
         if (startListening && !autoStarted) { autoStarted = true; micPressed() }
     }
-    LaunchedEffect(Unit) { vm.speak.collect { text -> if (prefs.ttsEnabled) speaker.speak(text, prefs.tamil) } }
+    LaunchedEffect(Unit) { vm.speak.collect { text -> if (prefs.ttsEnabled && text.isNotBlank()) { vm.onSpeaking(true); speaker.speak(text, prefs.tamil) } } }
     LaunchedEffect(Unit) {
-        vm.relisten.collect { length ->
-            // Wait for the reply to be read out, then listen again so the user does not have to press the button each time.
-            delay(if (prefs.ttsEnabled) minOf(9_000L, 1_200L + length * 75L) else 600L)
+        vm.relisten.collect { _ ->
+            // Wait until the reply has really been read out, then listen again so the user does not have to press the button each time.
+            if (prefs.ttsEnabled) speaker.awaitDone() else delay(600L)
+            vm.onSpeaking(false)
             val granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
             if (granted && !vm.busy.value && vm.voice.value != VoiceState.LISTENING && recognizer.isAvailable()) {
                 autoListening = true
@@ -222,6 +230,7 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
                     val status = when (voice) {
                         VoiceState.LISTENING -> partial.ifBlank { stringResource(R.string.listening) }
                         VoiceState.PROCESSING -> stringResource(R.string.understanding)
+                        VoiceState.SPEAKING -> stringResource(R.string.speaking)
                         VoiceState.EXECUTING -> stringResource(R.string.saving)
                         VoiceState.CONFIRMATION -> stringResource(R.string.waiting_for_answer)
                         VoiceState.SUCCESS -> stringResource(R.string.done)
@@ -297,6 +306,8 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
 
 @Composable
 private fun Bubble(item: ChatItem, busy: Boolean, vm: AssistantViewModel) {
+    val ownerCheck = com.aistock.assistant.ui.LocalOwnerCheck.current
+    val reason = stringResource(R.string.owner_check_confirm_change)
     Row(Modifier.fillMaxWidth(), horizontalArrangement = if (item.fromUser) Arrangement.End else Arrangement.Start) {
         val shape = if (item.fromUser) RoundedCornerShape(20.dp, 20.dp, 6.dp, 20.dp) else RoundedCornerShape(20.dp, 20.dp, 20.dp, 6.dp)
         val error = item.kind == ReplyKind.ERROR
@@ -316,6 +327,11 @@ private fun Bubble(item: ChatItem, busy: Boolean, vm: AssistantViewModel) {
             Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
                 if (item.kind == ReplyKind.DONE) { Tag(stringResource(R.string.done)); Spacer(Modifier.height(6.dp)) }
                 Text(item.text, style = MaterialTheme.typography.bodyLarge)
+                Text(
+                    java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(item.time)),
+                    style = MaterialTheme.typography.labelSmall, color = LocalContentColor.current.copy(alpha = 0.6f),
+                    modifier = Modifier.align(if (item.fromUser) Alignment.End else Alignment.Start).padding(top = 4.dp),
+                )
                 if (item.lines.isNotEmpty()) {
                     HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
                     for (l in item.lines) LabelValue(l.label, l.value)
@@ -324,7 +340,7 @@ private fun Bubble(item: ChatItem, busy: Boolean, vm: AssistantViewModel) {
                     Spacer(Modifier.height(10.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         Button(
-                            enabled = !busy, onClick = { vm.confirm() }, modifier = Modifier.weight(1f).height(48.dp),
+                            enabled = !busy, onClick = { if (item.sensitive || item.dangerous) ownerCheck(reason) { vm.confirm() } else vm.confirm() }, modifier = Modifier.weight(1f).height(48.dp),
                             colors = if (item.dangerous) ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error) else ButtonDefaults.buttonColors(),
                         ) { Text(stringResource(R.string.confirm)) }
                         OutlinedButton(enabled = !busy, onClick = { vm.cancel() }, modifier = Modifier.weight(1f).height(48.dp)) { Text(stringResource(R.string.cancel)) }
@@ -337,7 +353,7 @@ private fun Bubble(item: ChatItem, busy: Boolean, vm: AssistantViewModel) {
                     }
                 }
                 if (item.undoToken != null) {
-                    TextButton(enabled = !busy, onClick = { vm.undo(item.undoToken) }) { Text(stringResource(R.string.undo)) }
+                    TextButton(enabled = !busy, onClick = { ownerCheck(reason) { vm.undo(item.undoToken) } }) { Text(stringResource(R.string.undo)) }
                 }
             }
         }
@@ -346,13 +362,19 @@ private fun Bubble(item: ChatItem, busy: Boolean, vm: AssistantViewModel) {
 
 @Composable
 fun ConversationsScreen(nav: AppNav, vm: AssistantViewModel = hiltViewModel()) {
-    val list by vm.conversations.collectAsStateWithLifecycle()
+    val all by vm.conversations.collectAsStateWithLifecycle()
     var delete by remember { mutableStateOf<String?>(null) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var rename by remember { mutableStateOf<Pair<String, String>?>(null) }
+    val list = if (query.isBlank()) all else all.filter { c -> c.conversation.title.contains(query.trim(), true) || c.lastText.orEmpty().contains(query.trim(), true) }
     Scaffold(topBar = { AppTopBar(stringResource(R.string.conversation_history), nav.back) }) { padding ->
-        if (list.isEmpty()) {
+        if (all.isEmpty()) {
             EmptyState(stringResource(R.string.no_conversations), stringResource(R.string.no_conversations_body), painterResource(R.drawable.ic_ai), modifier = Modifier.padding(padding))
         } else {
             LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                item(key = "search") {
+                    OutlinedTextField(query, { query = it }, singleLine = true, modifier = Modifier.fillMaxWidth(), label = { Text(stringResource(R.string.search_conversations)) })
+                }
                 items(list, key = { it.conversation.id }) { c ->
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Box(Modifier.weight(1f)) {
@@ -362,11 +384,22 @@ fun ConversationsScreen(nav: AppNav, vm: AssistantViewModel = hiltViewModel()) {
                                 onClick = { nav.go("ai?conv=${c.conversation.id}") },
                             )
                         }
+                        IconButton(onClick = { rename = c.conversation.id to c.conversation.title }) { Icon(Icons.Default.Edit, contentDescription = stringResource(R.string.rename)) }
                         IconButton(onClick = { delete = c.conversation.id }) { Icon(Icons.Default.Delete, contentDescription = stringResource(R.string.delete)) }
                     }
                 }
             }
         }
+    }
+    rename?.let { (id, old) ->
+        var title by remember(id) { mutableStateOf(old) }
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { rename = null },
+            title = { Text(stringResource(R.string.rename)) },
+            text = { OutlinedTextField(title, { title = it.take(60) }, singleLine = true) },
+            confirmButton = { Button(onClick = { vm.renameConversation(id, title); rename = null }) { Text(stringResource(R.string.save)) } },
+            dismissButton = { TextButton(onClick = { rename = null }) { Text(stringResource(R.string.cancel)) } },
+        )
     }
     delete?.let { id ->
         ConfirmDialog(

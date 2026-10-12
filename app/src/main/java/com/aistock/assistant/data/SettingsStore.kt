@@ -54,6 +54,10 @@ data class Prefs(
     val currencySymbol: String = "₹",
     /** The "import your Excel file" offer has been shown after setup. */
     val importOffered: Boolean = false,
+    /** Ask for the phone lock (fingerprint / PIN) or the app PIN before payments, big corrections, restore, reset and export. */
+    val ownerCheck: Boolean = true,
+    /** "Hey Stocky" listening in the background is switched on. */
+    val handsFree: Boolean = false,
 ) {
     val tamil: Boolean get() = language == "ta"
     val cloudReady: Boolean get() = cloudEndpoint.startsWith("https://") && cloudModel.isNotBlank() && cloudKeySaved
@@ -76,6 +80,8 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
         val currencyCode = stringPreferencesKey("currency_code")
         val currencySymbol = stringPreferencesKey("currency_symbol")
         val importOffered = booleanPreferencesKey("import_offered")
+        val ownerCheck = booleanPreferencesKey("owner_check")
+        val handsFree = booleanPreferencesKey("hands_free")
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -96,6 +102,8 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
             currencyCode = p[K.currencyCode] ?: "INR",
             currencySymbol = p[K.currencySymbol] ?: "₹",
             importOffered = p[K.importOffered] ?: false,
+            ownerCheck = p[K.ownerCheck] ?: true,
+            handsFree = p[K.handsFree] ?: false,
         )
     }
 
@@ -121,6 +129,9 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
     }.let { }
 
     suspend fun setImportOffered() = context.dataStore.edit { it[K.importOffered] = true }.let { }
+
+    suspend fun setOwnerCheck(on: Boolean) = context.dataStore.edit { it[K.ownerCheck] = on }.let { }
+    suspend fun setHandsFree(on: Boolean) = context.dataStore.edit { it[K.handsFree] = on }.let { }
 
     suspend fun setAiMode(mode: String) = context.dataStore.edit { it[K.aiMode] = mode }.let { }
 

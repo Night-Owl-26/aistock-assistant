@@ -28,6 +28,8 @@ class AssistantEngine(
     private val allowNegativeStock: suspend () -> Boolean = { false },
     private val zone: () -> ZoneId = { ZoneId.systemDefault() },
     private val now: () -> Instant = { Instant.now() },
+    /** True when sensitive changes must be approved with the phone lock or app PIN, not just a spoken or typed "yes". */
+    private val ownerCheck: () -> Boolean = { false },
 ) {
     private val p: Phrases get() = Phrases(tamil())
 
@@ -75,6 +77,14 @@ class AssistantEngine(
     fun isNoWord(text: String) = isNo(text)
 
     val awaitingConfirmation: Boolean get() = pending is Pending.Confirm
+
+    /** The waiting change moves money or makes a big correction. */
+    val pendingSensitive: Boolean get() = (pending as? Pending.Confirm)?.let { it.question.dangerous || it.plan is Plan.Payment || it.plan is Plan.UndoLast } ?: false
+
+    /** A "yes" in words is not enough for the waiting change: the owner must press Confirm and prove it is them. */
+    val needsOwnerCheck: Boolean get() = pendingSensitive && ownerCheck()
+
+    private fun verifyFirst(pend: Pending.Confirm) = pend.question.copy(text = p.verifyFirst(), spoken = p.verifyFirst())
     val awaitingAnswer: Boolean get() = pending != null
 
     fun reset() {
@@ -261,7 +271,7 @@ class AssistantEngine(
         val d = pend.draft
         when (pend) {
             is Pending.Confirm -> {
-                if (yes) return execute(pend)
+                if (yes) return if (needsOwnerCheck) verifyFirst(pend) else execute(pend)
                 if (no) return cancelPending()
             }
             is Pending.LowConfidence -> {

@@ -64,6 +64,8 @@ class Stocky(
         private set
 
     val awaitingConfirmation: Boolean get() = engine.awaitingConfirmation
+    val needsOwnerCheck: Boolean get() = engine.needsOwnerCheck
+    val pendingSensitive: Boolean get() = engine.pendingSensitive
 
     fun reset() {
         engine.reset(); turns.clear(); summary = ""; currentParty = null; currentPeriod = null
@@ -507,6 +509,11 @@ class Stocky(
             }
             "confirm_pending" -> {
                 if (!engine.awaitingConfirmation) return "Nothing is waiting for confirmation."
+                if (engine.needsOwnerCheck) {
+                    // Money and big corrections are approved on the card with the phone lock or PIN, never by the model.
+                    turn.proposed = true
+                    return "NOT DONE YET: this change must be approved by the owner tapping Confirm on the card and verifying with fingerprint or PIN. Tell them that in one short sentence."
+                }
                 val r = engine.confirm()
                 turn.executed = r
                 return if (r.kind == ReplyKind.DONE) "DONE (verified by the app): ${r.text}" else "FAILED, nothing was changed: ${r.text}"

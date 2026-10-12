@@ -193,13 +193,15 @@ fun ImportExportScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
             DropdownField(stringResource(R.string.what_to_export), ExportKind.entries.sortedBy { if (it == ExportKind.EVERYTHING) 0 else 1 }.map { it.name to stringResource(exportKindRes(it)) }, exportKind.name, { exportKind = ExportKind.valueOf(it) })
             Spacer(Modifier.height(10.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(enabled = !busy, onClick = { exportSaver.launch(vm.exchange.fileName("aistock-" + exportKind.name)) }) { Text(stringResource(R.string.save_excel)) }
+                val ownerCheck = com.aistock.assistant.ui.LocalOwnerCheck.current
+                val exportReason = stringResource(R.string.owner_check_export)
+                Button(enabled = !busy, onClick = { ownerCheck(exportReason) { exportSaver.launch(vm.exchange.fileName("aistock-" + exportKind.name)) } }) { Text(stringResource(R.string.save_excel)) }
                 OutlinedButton(enabled = !busy, onClick = {
-                    scope.launch {
+                    ownerCheck(exportReason) { scope.launch {
                         busy = true
                         try { shareFile(ctx, vm.exportFile(ctx, exportKind, vm.exchange.fileName("aistock-" + exportKind.name)), XLSX_MIME) } catch (e: Exception) { toast(ctx.getString(R.string.export_failed)) }
                         busy = false
-                    }
+                    } }
                 }) { Text(stringResource(R.string.share)) }
             }
         }
@@ -341,6 +343,9 @@ fun BackupScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
         }
     }
 
+    val ownerCheck = com.aistock.assistant.ui.LocalOwnerCheck.current
+    val restoreReason = stringResource(R.string.owner_check_restore)
+    val exportReason = stringResource(R.string.owner_check_export)
     FormPage(title = stringResource(R.string.backup_restore), onBack = nav.back) {
         SectionTitle(stringResource(R.string.backup))
         AppCard(Modifier.fillMaxWidth()) {
@@ -375,8 +380,8 @@ fun BackupScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
                             try { pendingInfo = f.inputStream().use { vm.backups.inspect(it) }; pendingFile = f; pendingUri = null } catch (e: Exception) { toast(ctx.getString(backupErrorRes(e))) }
                         }
                     }) { Text(stringResource(R.string.restore)) }
-                    TextButton(onClick = { saveFile = f; saver.launch(f.name) }) { Text(stringResource(R.string.save_copy)) }
-                    TextButton(onClick = { try { shareFile(ctx, f, BackupManager.MIME) } catch (e: Exception) { toast(ctx.getString(R.string.export_failed)) } }) { Text(stringResource(R.string.share)) }
+                    TextButton(onClick = { ownerCheck(exportReason) { saveFile = f; saver.launch(f.name) } }) { Text(stringResource(R.string.save_copy)) }
+                    TextButton(onClick = { ownerCheck(exportReason) { try { shareFile(ctx, f, BackupManager.MIME) } catch (e: Exception) { toast(ctx.getString(R.string.export_failed)) } } }) { Text(stringResource(R.string.share)) }
                     TextButton(onClick = { deleteFile = f }) { Text(stringResource(R.string.delete), color = MaterialTheme.colorScheme.error) }
                 }
             }
@@ -394,7 +399,7 @@ fun BackupScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
                 val file = pendingFile
                 val uri = pendingUri
                 pendingInfo = null
-                scope.launch {
+                ownerCheck(restoreReason) { scope.launch {
                     busy = true
                     try {
                         withContext(Dispatchers.IO) {
@@ -409,7 +414,7 @@ fun BackupScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
                         toast(ctx.getString(backupErrorRes(e)))
                     }
                     busy = false
-                }
+                } }
             },
         )
     }

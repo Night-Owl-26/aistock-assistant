@@ -42,6 +42,7 @@ class Phrases(private val ta: Boolean) {
     val lBalanceAfter get() = t("Balance after", "பின் நிலுவை")
     val lSheet get() = t("Sheet", "ஷீட்")
     val lColumns get() = t("Columns", "நெடுவரிசைகள்")
+    fun verifyFirst() = t("For safety, please tap Confirm and verify it's you with your fingerprint, phone lock or PIN.", "பாதுகாப்புக்காக, Confirm-ஐ தட்டி உங்கள் கைரேகை, போன் லாக் அல்லது PIN மூலம் உறுதிசெய்யுங்கள்.")
     fun welcome() = t("You're welcome. Anything else?", "நன்றி. வேறு ஏதாவது?")
     fun unknown() = t(
         "I didn't understand that. On this phone I only know stock and money commands, like \"Add 50 pieces of Blue Shirt\" or \"What were today's sales?\". For free-flowing conversation, add a Gemini key in More > Settings > AI Provider.",

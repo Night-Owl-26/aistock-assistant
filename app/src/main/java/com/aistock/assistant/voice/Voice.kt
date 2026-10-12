@@ -9,7 +9,7 @@ import android.speech.SpeechRecognizer
 import android.speech.tts.TextToSpeech
 import java.util.Locale
 
-enum class VoiceState { IDLE, LISTENING, PROCESSING, CONFIRMATION, EXECUTING, SUCCESS, ERROR }
+enum class VoiceState { IDLE, LISTENING, PROCESSING, SPEAKING, CONFIRMATION, EXECUTING, SUCCESS, ERROR }
 
 /** Thin wrapper over Android's SpeechRecognizer. Must be created and used on the main thread. */
 class VoiceRecognizer(private val context: Context) {
@@ -98,6 +98,15 @@ class Speaker(context: Context) {
         } catch (e: Exception) {
             // Speaking is optional; never interrupt the user's work because of it.
         }
+    }
+
+    fun isSpeaking(): Boolean = try { ready && tts?.isSpeaking == true } catch (e: Exception) { false }
+
+    /** Waits until the reply has been read out (or a safety limit passes). */
+    suspend fun awaitDone(limitMs: Long = 30_000) {
+        kotlinx.coroutines.delay(400)
+        var waited = 400L
+        while (isSpeaking() && waited < limitMs) { kotlinx.coroutines.delay(150); waited += 150 }
     }
 
     fun stop() {
