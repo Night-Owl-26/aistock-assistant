@@ -228,6 +228,8 @@ check("more")
 step("settings: dark mode and Tamil")
 tap("Settings"); expect("Language", "settings"); shot("settings")
 if not scroll_to("AI Provider"): problems.append("settings: AI Provider section missing")
+for _ in range(10): adb("shell", "input", "swipe", "540", "700", "540", "1700", "200")
+time.sleep(1)
 step("hands-free listening service")
 for perm in ("android.permission.RECORD_AUDIO", "android.permission.POST_NOTIFICATIONS"):
     adb("shell", "pm", "grant", PKG, perm)
