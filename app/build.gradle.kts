@@ -11,6 +11,8 @@ android {
     compileSdk = 36
 
     defaultConfig {
+        // Phones are ARM; x86_64 stays for the emulator test. Leaving out 32-bit x86 keeps the APK smaller.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
         applicationId = "com.aistock.assistant"
         minSdk = 26
         targetSdk = 36

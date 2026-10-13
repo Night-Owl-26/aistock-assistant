@@ -232,9 +232,9 @@ step("AI connection check (network path to Google, no key)")
 if scroll_to("On this phone (works offline)"):
     tap("On this phone (works offline)"); time.sleep(1); tap("Gemini AI when online"); time.sleep(2)
 scroll_to("Check the AI connection"); tap("Check the AI connection")
-if not wait_for("AI key", 60):
+time.sleep(25); scroll_to("AI key", 4); shot("ai-connection-check")
+if not find("AI key"):
     problems.append("AI connection check did not finish")
-time.sleep(1); scroll_to("AI key", 3); shot("ai-connection-check")
 if not find("✓ Secure connection to Google"):
     problems.append("AI connection check: could not reach Google from the emulator"); say("  !! no secure connection to Google")
 else:
