@@ -52,3 +52,6 @@ object LlmProblem {
         return t("The AI could not be reached", "AI-ஐ அணுக முடியவில்லை") + " (" + (e.message ?: e.javaClass.simpleName).take(120) + ")."
     }
 }
+
+/** The service answered with an error (wrong key, quota used up, unknown model ...). */
+class LlmException(val status: Int, val detail: String) : Exception("AI service answered $status: $detail")

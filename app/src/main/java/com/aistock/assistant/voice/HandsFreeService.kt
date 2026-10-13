@@ -81,7 +81,10 @@ class HandsFreeService : Service() {
 
     override fun onCreate() {
         super.onCreate()
-        engine = SpeechWakeWordEngine(this)
+        // The offline keyword spotter listens without the phone's start tone; the phone's recogniser only takes the request.
+        val speech = SpeechWakeWordEngine(this)
+        engine = if (KeywordWakeEngine.available(this)) KeywordWakeEngine(this, speech) else speech
+        BeepMuter.restoreLeftovers(this)
         speaker = Speaker(this)
         stocky = factory.create()
         channel()
@@ -167,6 +170,9 @@ class HandsFreeService : Service() {
     }
 
     private fun say(text: String, then: () -> Unit) {
+        engine.stop()
+        // The reply is read out on the media channel, which may still be silenced for the recogniser's tone.
+        BeepMuter.unmuteNow(this)
         if (!settings.current.value.ttsEnabled || text.isBlank()) { then(); return }
         update(text.take(80))
         speaker.speak(text, settings.current.value.tamil)
@@ -225,6 +231,7 @@ class HandsFreeService : Service() {
 
     override fun onDestroy() {
         HandsFree.setRunning(false)
+        BeepMuter.unmuteNow(this)
         if (::engine.isInitialized) engine.release()
         if (::speaker.isInitialized) speaker.shutdown()
         scope.cancel()

@@ -73,6 +73,7 @@ import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import com.aistock.assistant.R
 import com.aistock.assistant.ai.ReplyKind
 import com.aistock.assistant.data.Prefs
@@ -163,9 +164,20 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
         if (granted) startVoice() else vm.onVoiceError(msgNoPermission)
     }
     // While the chat has the microphone, background "Hey Stocky" listening steps aside.
-    DisposableEffect(Unit) {
-        com.aistock.assistant.voice.HandsFree.pause(true)
-        onDispose { com.aistock.assistant.voice.HandsFree.pause(false) }
+    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
+    DisposableEffect(lifecycle) {
+        var paused = false
+        fun set(on: Boolean) { if (on != paused) { paused = on; com.aistock.assistant.voice.HandsFree.pause(on) } }
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            when (e) {
+                androidx.lifecycle.Lifecycle.Event.ON_RESUME -> set(true)
+                androidx.lifecycle.Lifecycle.Event.ON_PAUSE -> { set(false); recognizer.stop(); speaker.stop() }
+                else -> {}
+            }
+        }
+        lifecycle.addObserver(obs)
+        if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.RESUMED)) set(true)
+        onDispose { lifecycle.removeObserver(obs); set(false) }
     }
 
     fun micPressed() {
@@ -181,12 +193,19 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
     LaunchedEffect(startListening) {
         if (startListening && !autoStarted) { autoStarted = true; micPressed() }
     }
-    LaunchedEffect(Unit) { vm.speak.collect { text -> if (prefs.ttsEnabled && text.isNotBlank()) { vm.onSpeaking(true); speaker.speak(text, prefs.tamil) } } }
+    LaunchedEffect(Unit) {
+        vm.speak.collect { text ->
+            if (prefs.ttsEnabled && text.isNotBlank()) {
+                vm.onSpeaking(true)
+                speaker.speak(text, prefs.tamil)
+                launch { speaker.awaitDone(); vm.onSpeaking(false) }
+            }
+        }
+    }
     LaunchedEffect(Unit) {
         vm.relisten.collect { _ ->
             // Wait until the reply has really been read out, then listen again so the user does not have to press the button each time.
             if (prefs.ttsEnabled) speaker.awaitDone() else delay(600L)
-            vm.onSpeaking(false)
             val granted = ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
             if (granted && !vm.busy.value && vm.voice.value != VoiceState.LISTENING && recognizer.isAvailable()) {
                 autoListening = true

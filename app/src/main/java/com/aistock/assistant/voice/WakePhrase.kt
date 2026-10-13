@@ -5,7 +5,7 @@ package com.aistock.assistant.voice
  * ("hey stocky", "hey stockie", "a stocky", "ஹே ஸ்டாக்கி"), so all the common spellings count.
  */
 object WakePhrase {
-    private val names = listOf("stocky", "stockie", "stocki", "stockey", "stokey", "stoky", "stalky", "stocks", "stock e", "ஸ்டாக்கி", "ஸ்டாக்கீ", "ஸ்டோக்கி", "ஸ்டாகி")
+    private val names = listOf("stocky", "stockie", "stocki", "stockey", "stokey", "stoky", "stalky", "stocks", "stock e", "stock key", "ஸ்டாக்கி", "ஸ்டாக்கீ", "ஸ்டோக்கி", "ஸ்டாகி")
     private val greetings = listOf("hey", "hi", "hai", "ok", "okay", "a", "he", "hay", "ஹே", "ஏய்", "ஹாய்", "ஓகே")
 
     /**

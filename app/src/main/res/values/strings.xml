@@ -32,9 +32,9 @@
     <string name="ai_status_cloud">Gemini AI is on. The on-device assistant takes over when you are offline.</string>
     <string name="ai_status_cloud_missing">Paste a Gemini API key below to turn on real conversation. Until then the on-device assistant is active.</string>
     <string name="ai_status_local">The on-device assistant is active. It works without internet.</string>
-    <string name="ai_test">Test the AI connection</string>
+    <string name="ai_test">Check the AI connection</string>
     <string name="ai_test_ok">It works. Stocky can now talk naturally.</string>
-    <string name="ai_testing">Testing…</string>
+    <string name="ai_testing">Checking step by step…</string>
     <string name="all">All</string>
     <string name="all_time">All time</string>
     <string name="allow_negative_stock">Allow negative stock</string>
@@ -207,10 +207,10 @@
     <string name="handsfree_do_in_app">For safety, please do this one in the app, where you can confirm it with your fingerprint or PIN. Nothing was changed.</string>
     <string name="handsfree_listening">Listening for \"Hey Stocky\"</string>
     <string name="handsfree_needs_mic">Allow the microphone to use hands-free.</string>
-    <string name="handsfree_privacy">While this is on, the microphone stays on and a notification shows it. What you say is checked on the phone for \"Hey Stocky\" by the phone\'s speech service; only what you say after it is sent to Stocky and, if you use Gemini, to Google. Nothing is recorded or kept. It uses more battery. Stop it any time from the notification.</string>
+    <string name="handsfree_privacy">While this is on, the microphone stays on and a notification shows it. Listening for \"Hey Stocky\" happens offline on this phone; nothing is recorded, kept or sent. Only what you say after Stocky answers \"Yes?\" goes to the phone\'s speech service and, if you use Gemini, to Google. It uses some battery. Stop it any time from the notification.</string>
     <string name="handsfree_problem">Voice listening is not available right now. Trying again soon.</string>
     <string name="handsfree_setting">\"Hey Stocky\" hands-free</string>
-    <string name="handsfree_setting_sub">Say \"Hey Stocky, add 10 metres fabric\" without opening the app.</string>
+    <string name="handsfree_setting_sub">Say \"Hey Stocky\", wait for \"Yes?\", then say what happened, e.g. \"add 10 metres fabric\". The app does not need to be open.</string>
     <string name="handsfree_stop">Stop listening</string>
     <string name="handsfree_title">Hey Stocky</string>
     <string name="handsfree_yes">Yes?</string>

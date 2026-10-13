@@ -8,3 +8,6 @@ build/
 .externalNativeBuild
 .cxx
 .kotlin/
+
+# offline wake-word model (downloaded by tools/fetch_wake_model.sh)
+app/src/main/assets/model-wake/

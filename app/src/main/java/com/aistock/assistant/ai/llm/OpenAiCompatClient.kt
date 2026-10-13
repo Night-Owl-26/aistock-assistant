@@ -39,8 +39,6 @@ class OpenAiCompatClient(private val endpoint: String, private val model: String
     }
 }
 
-/** The service answered with an error (wrong key, quota used up, unknown model ...). */
-class LlmException(val status: Int, val detail: String) : Exception("AI service answered $status: $detail")
 
 /** Building and reading the chat-completions JSON. Kept separate so it can be tested without a network. */
 object OpenAiCompat {

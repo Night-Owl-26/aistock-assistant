@@ -32,9 +32,9 @@
     <string name="ai_status_cloud">Gemini AI இயக்கத்தில் உள்ளது. ஆஃப்லைனில் போனிலேயே இயங்கும் உதவியாளர் செயல்படும்.</string>
     <string name="ai_status_cloud_missing">இயல்பான உரையாடலுக்கு கீழே Gemini API key-ஐ ஒட்டவும். அதுவரை போனிலேயே இயங்கும் உதவியாளர் செயலில் இருக்கும்.</string>
     <string name="ai_status_local">போனிலேயே இயங்கும் உதவியாளர் செயலில் உள்ளது. இணையம் தேவையில்லை.</string>
-    <string name="ai_test">AI இணைப்பைச் சோதிக்கவும்</string>
+    <string name="ai_test">AI இணைப்பைச் சரிபார்</string>
     <string name="ai_test_ok">வேலை செய்கிறது. Stocky இப்போது இயல்பாகப் பேசும்.</string>
-    <string name="ai_testing">சோதிக்கிறது…</string>
+    <string name="ai_testing">படிப்படியாகச் சரிபார்க்கிறது…</string>
     <string name="all">அனைத்தும்</string>
     <string name="all_time">மொத்தம்</string>
     <string name="allow_negative_stock">எதிர்மறை ஸ்டாக்கை அனுமதி</string>
@@ -207,10 +207,10 @@
     <string name="handsfree_do_in_app">பாதுகாப்புக்காக இதை ஆப்பில் செய்யுங்கள்; அங்கே கைரேகை அல்லது PIN மூலம் உறுதிசெய்யலாம். எதுவும் மாற்றப்படவில்லை.</string>
     <string name="handsfree_listening">\"ஹே ஸ்டாக்கி\" என்று சொல்லுங்கள்</string>
     <string name="handsfree_needs_mic">கை இல்லாமல் பயன்படுத்த மைக் அனுமதி தேவை.</string>
-    <string name="handsfree_privacy">இது இயக்கத்தில் இருக்கும்போது மைக் இயங்கும், அதை ஒரு அறிவிப்பு காட்டும். நீங்கள் பேசுவது \"ஹே ஸ்டாக்கி\" உள்ளதா என போனின் பேச்சு சேவை சரிபார்க்கும்; அதன் பின் சொல்வது மட்டும் Stocky-க்கும், Gemini பயன்படுத்தினால் Google-க்கும் அனுப்பப்படும். எதுவும் பதிவு செய்யப்படாது. பேட்டரி அதிகம் செலவாகும். அறிவிப்பிலிருந்து எப்போது வேண்டுமானாலும் நிறுத்தலாம்.</string>
+    <string name="handsfree_privacy">இது இயக்கத்தில் இருக்கும்போது மைக் இயங்கும், அதை ஒரு அறிவிப்பு காட்டும். \"ஹே ஸ்டாக்கி\"-ஐக் கேட்பது இந்த போனிலேயே offline-ல் நடக்கும்; எதுவும் பதிவாகாது, அனுப்பப்படாது. Stocky \"சொல்லுங்க?\" என்ற பின் நீங்கள் சொல்வது மட்டும் போனின் பேச்சு சேவைக்கும், Gemini பயன்படுத்தினால் Google-க்கும் செல்லும். சிறிது பேட்டரி செலவாகும். அறிவிப்பிலிருந்து எப்போது வேண்டுமானாலும் நிறுத்தலாம்.</string>
     <string name="handsfree_problem">குரல் கேட்பது இப்போது இயலவில்லை. சிறிது நேரத்தில் மீண்டும் முயலும்.</string>
     <string name="handsfree_setting">\"ஹே ஸ்டாக்கி\" கை இல்லாமல்</string>
-    <string name="handsfree_setting_sub">ஆப்பைத் திறக்காமல் \"ஹே ஸ்டாக்கி, fabric 10 metre add பண்ணு\" என்று சொல்லுங்கள்.</string>
+    <string name="handsfree_setting_sub">\"ஹே ஸ்டாக்கி\" என்று சொல்லி, \"சொல்லுங்க?\" என்று கேட்டதும் சொல்லுங்கள், எ.கா. \"fabric 10 metre add பண்ணு\". ஆப் திறந்திருக்க வேண்டாம்.</string>
     <string name="handsfree_stop">கேட்பதை நிறுத்து</string>
     <string name="handsfree_title">ஹே ஸ்டாக்கி</string>
     <string name="handsfree_yes">சொல்லுங்க?</string>

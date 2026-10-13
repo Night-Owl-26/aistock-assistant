@@ -103,6 +103,10 @@ dependencies {
     ksp(libs.room.compiler)
 
     implementation(libs.coroutines.android)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    // Offline "Hey Stocky" keyword spotting (the model is fetched by tools/fetch_wake_model.sh)
+    implementation("com.alphacephei:vosk-android:0.3.47") { exclude(group = "net.java.dev.jna") }
+    implementation("net.java.dev.jna:jna:5.13.0@aar")
 
     testImplementation(libs.junit)
     testImplementation(libs.robolectric)

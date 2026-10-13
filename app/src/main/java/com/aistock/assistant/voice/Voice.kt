@@ -79,12 +79,23 @@ class VoiceRecognizer(private val context: Context) {
 
 /** Reads replies aloud with Android Text-to-Speech. Silently does nothing when no speech engine is installed. */
 class Speaker(context: Context) {
-    private var ready = false
+    @Volatile private var ready = false
     private var tts: TextToSpeech? = null
+    /** True from the moment a reply is handed over until the speech engine says it finished. */
+    @Volatile private var talking = false
 
     init {
         tts = try {
-            TextToSpeech(context.applicationContext) { status -> ready = status == TextToSpeech.SUCCESS }
+            TextToSpeech(context.applicationContext) { status ->
+                ready = status == TextToSpeech.SUCCESS
+                if (ready) tts?.setOnUtteranceProgressListener(object : android.speech.tts.UtteranceProgressListener() {
+                    override fun onStart(utteranceId: String?) { talking = true }
+                    override fun onDone(utteranceId: String?) { talking = false }
+                    @Deprecated("old signature") override fun onError(utteranceId: String?) { talking = false }
+                    override fun onError(utteranceId: String?, errorCode: Int) { talking = false }
+                    override fun onStop(utteranceId: String?, interrupted: Boolean) { talking = false }
+                })
+            }
         } catch (e: Exception) {
             null
         }
@@ -99,26 +110,29 @@ class Speaker(context: Context) {
             val wanted = if (tamilText || (tamil && text.none { it in 'a'..'z' })) Locale.forLanguageTag("ta-IN") else Locale.forLanguageTag("en-IN")
             val result = engine.setLanguage(wanted)
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) engine.setLanguage(Locale.ENGLISH)
-            engine.speak(text.take(400), TextToSpeech.QUEUE_FLUSH, null, "aistock-reply")
+            val limit = try { TextToSpeech.getMaxSpeechInputLength() - 100 } catch (e: Exception) { 3_900 }
+            talking = engine.speak(text.take(limit), TextToSpeech.QUEUE_FLUSH, null, "aistock-reply") == TextToSpeech.SUCCESS
         } catch (e: Exception) {
             // Speaking is optional; never interrupt the user's work because of it.
         }
     }
 
-    fun isSpeaking(): Boolean = try { ready && tts?.isSpeaking == true } catch (e: Exception) { false }
+    fun isSpeaking(): Boolean = talking || try { ready && tts?.isSpeaking == true } catch (e: Exception) { false }
 
-    /** Waits until the reply has been read out (or a safety limit passes). */
-    suspend fun awaitDone(limitMs: Long = 30_000) {
-        kotlinx.coroutines.delay(400)
-        var waited = 400L
-        while (isSpeaking() && waited < limitMs) { kotlinx.coroutines.delay(150); waited += 150 }
+    /** Waits until the speech engine reports that the reply has been read out (or a safety limit passes). */
+    suspend fun awaitDone(limitMs: Long = 60_000) {
+        kotlinx.coroutines.delay(250)
+        var waited = 250L
+        while (isSpeaking() && waited < limitMs) { kotlinx.coroutines.delay(120); waited += 120 }
     }
 
     fun stop() {
+        talking = false
         try { tts?.stop() } catch (e: Exception) { /* ignore */ }
     }
 
     fun shutdown() {
+        talking = false
         try { tts?.stop(); tts?.shutdown() } catch (e: Exception) { /* ignore */ }
         tts = null
         ready = false

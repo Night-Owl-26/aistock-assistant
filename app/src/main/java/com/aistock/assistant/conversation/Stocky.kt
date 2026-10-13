@@ -100,9 +100,10 @@ class Stocky(
             lastSource = if (client == null) "local" else lastSource
             engine.handle(text)
         } else {
+            val turn = TurnState(cardWasShown = engine.awaitingConfirmation)
             try {
                 engine.commandText = text
-                val r = converse(client, text)
+                val r = converse(client, text, turn)
                 lastSource = "cloud"
                 lastError = null
                 r
@@ -113,11 +114,15 @@ class Stocky(
                 // but the owner is told why the conversation did not happen instead of getting a canned line.
                 lastSource = "local"
                 lastError = LlmProblem.explain(e, online(), tamil())
+                // Something may already have been saved in this turn: report that, never redo it.
+                turn.executed?.let { done -> remember(text, done.text); return done }
                 val local = engine.handle(text)
                 if (local.intent != Intent.UNKNOWN || local.kind == ReplyKind.CONFIRM) local
                 else AssistantReply(lastError!!, ReplyKind.ERROR, Intent.UNKNOWN)
             }
         }
+        // A proposal whose card is no longer on screen must not be saved later by an unrelated "yes".
+        if (reply.kind != ReplyKind.CONFIRM && engine.awaitingConfirmation) try { engine.cancel() } catch (e: Exception) { }
         remember(text, reply.text)
         return reply
     }
@@ -138,19 +143,20 @@ class Stocky(
 
     // ------------------------------------------------------------------ the model loop
 
-    private suspend fun converse(client: LlmClient, text: String): AssistantReply {
+    private suspend fun converse(client: LlmClient, text: String, turn: TurnState): AssistantReply {
         val messages = ArrayList<LlmMessage>()
         messages.add(LlmMessage.System(systemPrompt()))
         for (t in turns) messages.add(if (t.role == "user") LlmMessage.User(t.text) else LlmMessage.Assistant(t.text))
         messages.add(LlmMessage.User(text))
 
-        val turn = TurnState()
         var finalText = ""
         for (round in 0 until MAX_ROUNDS) {
             val reply = client.chat(messages, TOOLS)
             if (reply.toolCalls.isEmpty()) { finalText = reply.text.trim(); break }
-            messages.add(LlmMessage.Assistant(reply.text, reply.toolCalls))
-            for (call in reply.toolCalls.take(6)) {
+            // Every call the model made must get an answer, so only the ones that will be run are kept.
+            val calls = reply.toolCalls.take(6)
+            messages.add(LlmMessage.Assistant(reply.text, calls))
+            for (call in calls) {
                 val result = try {
                     runTool(call, turn)
                 } catch (e: CancellationException) {
@@ -173,7 +179,8 @@ class Stocky(
         return AssistantReply(finalText, if (turn.choices.isNotEmpty()) ReplyKind.CLARIFY else ReplyKind.ANSWER, Intent.UNKNOWN, choices = turn.choices)
     }
 
-    private class TurnState {
+    /** @param cardWasShown a confirmation card was already on screen when the owner sent this message */
+    private class TurnState(val cardWasShown: Boolean = false) {
         var proposed = false
         var executed: AssistantReply? = null
         var choices: List<String> = emptyList()
@@ -509,6 +516,11 @@ class Stocky(
             }
             "confirm_pending" -> {
                 if (!engine.awaitingConfirmation) return "Nothing is waiting for confirmation."
+                if (turn.proposed || !turn.cardWasShown) {
+                    // The owner has not seen this proposal yet: it must be shown and agreed to first.
+                    turn.proposed = true
+                    return "NOT DONE: the owner has not seen this proposal yet. Do not confirm it now; the app is showing it. Ask them to check it and say yes."
+                }
                 if (engine.needsOwnerCheck) {
                     // Money and big corrections are approved on the card with the phone lock or PIN, never by the model.
                     turn.proposed = true

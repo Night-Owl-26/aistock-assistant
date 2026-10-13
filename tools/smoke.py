@@ -228,6 +228,17 @@ check("more")
 step("settings: dark mode and Tamil")
 tap("Settings"); expect("Language", "settings"); shot("settings")
 if not scroll_to("AI Provider"): problems.append("settings: AI Provider section missing")
+step("AI connection check (network path to Google, no key)")
+if scroll_to("On this phone (works offline)"):
+    tap("On this phone (works offline)"); time.sleep(1); tap("Gemini AI when online"); time.sleep(2)
+scroll_to("Check the AI connection"); tap("Check the AI connection")
+if not wait_for("AI key", 60):
+    problems.append("AI connection check did not finish")
+time.sleep(1); scroll_to("AI key", 3); shot("ai-connection-check")
+if not find("✓ Secure connection to Google"):
+    problems.append("AI connection check: could not reach Google from the emulator"); say("  !! no secure connection to Google")
+else:
+    say("  reached Google AI server")
 for _ in range(10): adb("shell", "input", "swipe", "540", "700", "540", "1700", "200")
 time.sleep(1)
 step("hands-free listening service")

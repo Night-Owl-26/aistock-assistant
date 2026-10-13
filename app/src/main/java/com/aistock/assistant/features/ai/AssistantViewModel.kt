@@ -219,6 +219,8 @@ class AssistantViewModel @Inject constructor(
     private suspend fun persist(userText: String?, reply: AssistantReply) {
         try {
             var id = conversationId
+            // The chat may have been deleted from the history list meanwhile: then start a new one.
+            if (id != null && !business.conversationExists(id)) id = null
             if (id == null) {
                 id = business.newConversation(userText ?: reply.text)
                 conversationId = id

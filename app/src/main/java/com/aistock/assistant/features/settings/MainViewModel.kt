@@ -80,6 +80,7 @@ class MainViewModel @Inject constructor(
     }
     /** null = the AI answered; otherwise the reason it did not. */
     suspend fun testAi(): String? = llm.test()
+    suspend fun diagnoseAi(): List<com.aistock.assistant.di.Check> = llm.diagnose()
     suspend fun clearCloudKey() = settings.clearCloudKey()
 
     /** @return false when the PIN is not valid */

@@ -272,3 +272,38 @@ class StockyOwnerCheckTest {
         org.junit.Assert.assertEquals(900_000L, b.customers[0].balancePaise)
     }
 }
+
+class StockySafetyTest {
+    private fun script(vararg replies: com.aistock.assistant.ai.llm.LlmReply) = object : com.aistock.assistant.ai.llm.LlmClient {
+        var i = 0
+        override val name = "x"
+        override suspend fun chat(messages: List<com.aistock.assistant.ai.llm.LlmMessage>, tools: List<com.aistock.assistant.ai.llm.ToolSpec>) = replies[minOf(i++, replies.size - 1)]
+    }
+    private fun call(name: String, vararg a: Pair<String, String>) = com.aistock.assistant.ai.llm.LlmReply("", listOf(com.aistock.assistant.ai.llm.ToolCall("c$name", name, mapOf(*a))))
+
+    @org.junit.Test
+    fun the_model_cannot_propose_and_confirm_in_one_go() = kotlinx.coroutines.runBlocking {
+        val b = FakeBackend()
+        b.addProduct("Blue Cotton", unit = "METER", stock = 100)
+        val llm = script(call("propose_stock_in", "product" to "Blue Cotton", "quantity" to "10"), call("confirm_pending"), com.aistock.assistant.ai.llm.LlmReply("Please check and say yes."))
+        val r = Stocky(b, AssistantEngine(b, LocalFallbackAIProvider()), { llm }).handle("blue cotton 10 metre vandhuchu, save it")
+        org.junit.Assert.assertEquals(com.aistock.assistant.ai.ReplyKind.CONFIRM, r.kind)
+        org.junit.Assert.assertEquals(100L, b.stock("Blue Cotton"))
+    }
+
+    @org.junit.Test
+    fun an_old_proposal_is_not_saved_by_a_later_unrelated_yes() = kotlinx.coroutines.runBlocking {
+        val b = FakeBackend()
+        b.addProduct("Blue Cotton", unit = "METER", stock = 100)
+        val llm = script(
+            call("propose_stock_in", "product" to "Blue Cotton", "quantity" to "10"), com.aistock.assistant.ai.llm.LlmReply("Add 10 metres?"),
+            com.aistock.assistant.ai.llm.LlmReply("You have 100 metres. Shall I show last week too?"),
+            com.aistock.assistant.ai.llm.LlmReply("Here is last week."),
+        )
+        val s = Stocky(b, AssistantEngine(b, LocalFallbackAIProvider()), { llm })
+        org.junit.Assert.assertEquals(com.aistock.assistant.ai.ReplyKind.CONFIRM, s.handle("10 metre blue cotton add").kind)
+        s.handle("wait, how much do I have now?")
+        s.handle("yes")
+        org.junit.Assert.assertEquals(100L, b.stock("Blue Cotton"))
+    }
+}

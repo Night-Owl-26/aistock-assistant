@@ -90,6 +90,7 @@ class AssistantEngine(
     fun reset() {
         pending = null
         lastProduct = null
+        lastUndo = null
         history.clear()
     }
 
@@ -249,6 +250,7 @@ class AssistantEngine(
 
     suspend fun undo(token: String): AssistantReply = guard {
         val r = backend.undo(token)
+        if (r.ok && lastUndo?.first == token) lastUndo = null
         backend.audit("UNDO", "{\"token\":\"$token\"}", r.error ?: "OK", if (r.ok) "SUCCESS" else "FAILED")
         if (r.ok) AssistantReply(p.undone(), ReplyKind.DONE) else AssistantReply(p.undoFailed(), ReplyKind.ERROR)
     }
@@ -771,7 +773,8 @@ class AssistantEngine(
             is Plan.AddRow -> p.doneAddRow(plan.sheet)
             is Plan.RememberAlias -> p.doneAlias(plan.phrase, plan.productName)
         }
-        lastUndo = if (plan is Plan.UndoLast) null else r.undoToken?.let { it to text } ?: lastUndo
+        // "Undo that" always means the latest change; one that cannot be undone ends the chain.
+        lastUndo = if (plan is Plan.UndoLast) null else r.undoToken?.let { it to text }
         recordAction(plan, r, text)
         return AssistantReply(text, ReplyKind.DONE, d.intent, undoToken = r.undoToken)
     }

@@ -56,11 +56,17 @@ object AppModule {
      */
     @Provides
     @Singleton
-    fun llmSource(settings: SettingsStore, connectivity: Connectivity): LlmSource = LlmSource(settings, connectivity)
+    fun llmSource(settings: SettingsStore, connectivity: Connectivity, @ApplicationContext context: Context): LlmSource = LlmSource(settings, connectivity, AiDiagnostics(context))
 }
 
 /** Gives the conversation a model client when one is configured and the phone is online; otherwise null. */
-class LlmSource(private val settings: SettingsStore, private val connectivity: Connectivity) {
+class LlmSource(private val settings: SettingsStore, private val connectivity: Connectivity, private val diagnostics: AiDiagnostics) {
+    /** The step-by-step connection check shown in Settings. */
+    suspend fun diagnose(): List<Check> {
+        val p = settings.current.value
+        return diagnostics.run(settings.cloudKey(), p.cloudModel, p.tamil)
+    }
+
     suspend fun client(): LlmClient? {
         val p = settings.current.value
         if (p.aiMode != "cloud" || !p.cloudReady) return null

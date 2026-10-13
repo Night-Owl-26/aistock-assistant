@@ -148,7 +148,14 @@ class DataExchange @Inject constructor(
             val existing = dao.sheets()
             val now = System.currentTimeMillis()
             for (p in profiles) {
-                val headers = p.headers.mapIndexed { i, h -> h.ifBlank { "Column ${i + 1}" } }
+                // Two columns with the same title would overwrite each other: the second becomes "Amount (2)".
+                val seenTitles = HashMap<String, Int>()
+                val headers = p.headers.mapIndexed { i, h ->
+                    val base = h.trim().ifBlank { "Column ${i + 1}" }
+                    val n = (seenTitles[base.lowercase()] ?: 0) + 1
+                    seenTitles[base.lowercase()] = n
+                    if (n == 1) base else "$base ($n)"
+                }
                 if (headers.isEmpty()) continue
                 val old = existing.firstOrNull { NameMatcher.key(it.name) == NameMatcher.key(p.name) }
                 // A sheet the owner created by talking to Stocky is never replaced by an upload.

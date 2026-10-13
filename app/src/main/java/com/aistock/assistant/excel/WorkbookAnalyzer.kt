@@ -84,7 +84,8 @@ object WorkbookAnalyzer {
             val hasDate = headerText.any { has(it, "date") || has(it, "தேதி") }
             val hasItem = headerText.any { h -> listOf("product", "item", "description", "particulars", "goods").any { has(h, it) } }
             val hasQty = headerText.any { h -> listOf("qty", "quantity", "units", "nos", "pcs").any { has(h, it) } }
-            if (hasDate && hasItem && hasQty && bestPurpose !in setOf(SheetPurpose.SALES, SheetPurpose.PURCHASES)) {
+            val namedAsList = listOf(SheetPurpose.PRODUCTS, SheetPurpose.STOCK, SheetPurpose.CUSTOMERS, SheetPurpose.SUPPLIERS).any { pp -> nameWords.getValue(pp).any { has(name, it) } }
+            if (hasDate && hasItem && hasQty && !namedAsList && bestPurpose !in setOf(SheetPurpose.SALES, SheetPurpose.PURCHASES)) {
                 val buying = nameWords.getValue(SheetPurpose.PURCHASES).any { has(name, it) } || headerText.any { has(it, "supplier") || has(it, "vendor") }
                 bestPurpose = if (buying) SheetPurpose.PURCHASES else SheetPurpose.SALES
                 bestScore = maxOf(bestScore, 65)

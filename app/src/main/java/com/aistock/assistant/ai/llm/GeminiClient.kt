@@ -5,8 +5,6 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
-import java.net.HttpURLConnection
-import java.net.URL
 import java.net.URLEncoder
 
 /**
@@ -53,7 +51,7 @@ class GeminiClient(private val model: String, private val apiKey: String) : LlmC
         var last: LlmException? = null
         for (o in options) {
             try {
-                val r = call(m, Gemini.request(messages, tools, o))
+                val r = call(m, Gemini.request(messages, tools, o, Gemini.temperatureFor(m)))
                 thinking[m] = o
                 return r
             } catch (e: LlmException) {
@@ -68,17 +66,11 @@ class GeminiClient(private val model: String, private val apiKey: String) : LlmC
     /** The models this key can use right now, asked from Google once and remembered while the app runs. */
     private fun available(): List<String> {
         models?.let { return it }
-        val conn = URL("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200").openConnection() as HttpURLConnection
         return try {
-            conn.connectTimeout = 12_000
-            conn.readTimeout = 20_000
-            conn.setRequestProperty("x-goog-api-key", apiKey)
-            if (conn.responseCode !in 200..299) emptyList()
-            else Gemini.modelNames(conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() }).also { if (it.isNotEmpty()) models = it }
+            val r = Http.get("https://generativelanguage.googleapis.com/v1beta/models?pageSize=200", mapOf("x-goog-api-key" to apiKey))
+            if (r.code !in 200..299) emptyList() else Gemini.modelNames(r.body).also { if (it.isNotEmpty()) models = it }
         } catch (e: Exception) {
             emptyList()
-        } finally {
-            conn.disconnect()
         }
     }
 
@@ -92,24 +84,9 @@ class GeminiClient(private val model: String, private val apiKey: String) : LlmC
 
     private fun callOnce(m: String, body: String): LlmReply {
         val url = "https://generativelanguage.googleapis.com/v1beta/models/" + URLEncoder.encode(m, "UTF-8") + ":generateContent"
-        val conn = URL(url).openConnection() as HttpURLConnection
-        try {
-            conn.requestMethod = "POST"
-            conn.connectTimeout = 12_000
-            conn.readTimeout = 45_000
-            conn.doOutput = true
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.setRequestProperty("x-goog-api-key", apiKey)
-            conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-            val code = conn.responseCode
-            if (code !in 200..299) {
-                val err = try { conn.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty() } catch (e: Exception) { "" }
-                throw LlmException(code, OpenAiCompat.errorMessage(err))
-            }
-            return Gemini.parse(conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
-        } finally {
-            conn.disconnect()
-        }
+        val r = Http.post(url, mapOf("x-goog-api-key" to apiKey), body)
+        if (r.code !in 200..299) throw LlmException(r.code, OpenAiCompat.errorMessage(r.body))
+        return Gemini.parse(r.body)
     }
 
     companion object {
@@ -154,7 +131,13 @@ object Gemini {
         }
     }
 
-    fun request(messages: List<LlmMessage>, tools: List<ToolSpec>, thinking: String = "none"): String {
+    /** Gemini 3 and newer are meant to run at their own default temperature; older ones answer more steadily at 0.4. */
+    fun temperatureFor(model: String): Double? {
+        val v = Regex("gemini-(\\d+(?:\\.\\d+)?)").find(model)?.groupValues?.get(1)?.toDoubleOrNull() ?: return null
+        return if (v < 3.0) 0.4 else null
+    }
+
+    fun request(messages: List<LlmMessage>, tools: List<ToolSpec>, thinking: String = "none", temperature: Double? = 0.4): String {
         val root = JSONObject()
         val system = messages.filterIsInstance<LlmMessage.System>().joinToString("\n\n") { it.text }
         if (system.isNotBlank()) root.put("systemInstruction", JSONObject().put("parts", JSONArray().put(JSONObject().put("text", system))))
@@ -207,7 +190,8 @@ object Gemini {
             }
             root.put("tools", JSONArray().put(JSONObject().put("functionDeclarations", decls)))
         }
-        val config = JSONObject().put("temperature", 0.4)
+        val config = JSONObject()
+        if (temperature != null) config.put("temperature", temperature)
         when (thinking) {
             "budget0" -> config.put("thinkingConfig", JSONObject().put("thinkingBudget", 0))
             "minimal", "low" -> config.put("thinkingConfig", JSONObject().put("thinkingLevel", thinking))

@@ -32,6 +32,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        com.aistock.assistant.voice.BeepMuter.restoreLeftovers(this)
         // Hands-free listening can only be (re)started while the app is on screen.
         lifecycleScope.launch {
             try {

@@ -139,6 +139,7 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf("") }
     var testOk by remember { mutableStateOf(false) }
+    var checks by remember { mutableStateOf<List<com.aistock.assistant.di.Check>>(emptyList()) }
 
     val notifyPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         scope.launch { vm.setLowStockAlerts(granted) }
@@ -238,17 +239,26 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
                     }) { Text(stringResource(R.string.save)) }
                     if (prefs.cloudKeySaved) OutlinedButton(onClick = { ownerCheck(ctx.getString(R.string.owner_check_key)) { scope.launch { vm.clearCloudKey(); toast(ctx.getString(R.string.ai_key_removed)) } } }) { Text(stringResource(R.string.remove_key)) }
                 }
-                if (prefs.cloudKeySaved) {
+                run {
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(enabled = !testing, onClick = {
-                        testing = true; testResult = ""
+                        testing = true; testResult = ""; checks = emptyList()
                         scope.launch {
-                            val problem = vm.testAi()
-                            testResult = problem ?: ctx.getString(R.string.ai_test_ok)
-                            testOk = problem == null
+                            checks = try { vm.diagnoseAi() } catch (e: Exception) { listOf(com.aistock.assistant.di.Check("Check", false, e.toString().take(200))) }
+                            testOk = checks.isNotEmpty() && checks.none { it.ok == false }
+                            testResult = if (testOk) ctx.getString(R.string.ai_test_ok) else ""
                             testing = false
                         }
                     }) { Text(stringResource(if (testing) R.string.ai_testing else R.string.ai_test)) }
+                    for (c in checks) {
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            (when (c.ok) { true -> "✓ "; false -> "✗ "; null -> "• " }) + c.title,
+                            style = MaterialTheme.typography.titleSmall,
+                            color = when (c.ok) { true -> MaterialTheme.colorScheme.primary; false -> MaterialTheme.colorScheme.error; null -> MaterialTheme.colorScheme.onSurfaceVariant },
+                        )
+                        if (c.detail.isNotBlank()) Text(c.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                     if (testResult.isNotEmpty()) {
                         Spacer(Modifier.height(6.dp))
                         Text(testResult, style = MaterialTheme.typography.bodyMedium, color = if (testOk) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
