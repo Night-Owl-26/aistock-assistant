@@ -16,9 +16,11 @@ Every push to `main` is built by GitHub Actions (`.github/workflows/build.yml`):
 2. `./gradlew testDebugUnitTest` runs the unit tests.
 3. When both pass, the APK is published under **Releases → "AIStock Assistant - latest build"** as `AIStockAssistant.apk`.
 
-To build on your own computer, open the folder in Android Studio, or run:
+To build on your own computer, first fetch the offline "Hey Stocky" model (about 40 MB, kept out of git),
+then open the folder in Android Studio, or run:
 
 ```
+bash tools/fetch_wake_model.sh   # puts the model in app/src/main/assets/model-wake
 ./gradlew assembleDebug        # APK: app/build/outputs/apk/debug/app-debug.apk
 ./gradlew testDebugUnitTest
 ```
