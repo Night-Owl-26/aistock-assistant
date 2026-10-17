@@ -30,6 +30,7 @@
     <string name="ai_key_not_saved">The key could not be stored securely on this phone</string>
     <string name="ai_key_removed">API key removed</string>
     <string name="ai_key_saved">Gemini API key (saved · type to replace)</string>
+    <string name="ai_live_on">Live voice</string>
     <string name="ai_local">On-device assistant</string>
     <string name="ai_mode">Understanding</string>
     <string name="ai_mode_cloud">Gemini AI when online (real conversation)</string>
@@ -39,6 +40,7 @@
     <string name="ai_provider">AI Provider</string>
     <string name="ai_requests_used">AI replies this period</string>
     <string name="ai_server_help">Sign in to your AIStock server. The AI key then stays on the server, never on this phone.%1$s</string>
+    <string name="ai_server_on">Stocky AI</string>
     <string name="ai_server_signed_in">Signed in as %1$s. Stocky\'s AI and voice go through your server.</string>
     <string name="ai_source">Stocky AI through</string>
     <string name="ai_source_key">My own Gemini key on this phone (testing)</string>

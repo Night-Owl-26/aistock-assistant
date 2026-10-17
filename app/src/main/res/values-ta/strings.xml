@@ -30,6 +30,7 @@
     <string name="ai_key_not_saved">Key-ஐ இந்த போனில் பாதுகாப்பாக சேமிக்க முடியவில்லை</string>
     <string name="ai_key_removed">API key நீக்கப்பட்டது</string>
     <string name="ai_key_saved">Gemini API key (சேமிக்கப்பட்டது · மாற்ற தட்டச்சு செய்யவும்)</string>
+    <string name="ai_live_on">நேரடி குரல்</string>
     <string name="ai_local">போனிலேயே இயங்கும் உதவியாளர்</string>
     <string name="ai_mode">புரிதல்</string>
     <string name="ai_mode_cloud">இணையம் இருக்கும்போது Gemini AI (இயல்பான உரையாடல்)</string>
@@ -39,6 +40,7 @@
     <string name="ai_provider">AI வழங்குநர்</string>
     <string name="ai_requests_used">இந்தக் காலத்தில் AI பதில்கள்</string>
     <string name="ai_server_help">உங்கள் AIStock சர்வரில் sign in செய்யுங்கள். AI key சர்வரிலேயே இருக்கும்.%1$s</string>
+    <string name="ai_server_on">Stocky AI</string>
     <string name="ai_server_signed_in">%1$s ஆக sign in. Stocky AI, குரல் உங்கள் சர்வர் வழியாக.</string>
     <string name="ai_source">Stocky AI வழி</string>
     <string name="ai_source_key">இந்த போனில் என் Gemini key (சோதனை)</string>

@@ -243,6 +243,7 @@ S = {
 }
 
 S.update({
+"ai_server_on": ("Stocky AI", "Stocky AI"), "ai_live_on": ("Live voice", "நேரடி குரல்"),
 "add": ("Add", "சேர்"), "loading": ("Loading…", "ஏற்றுகிறது…"), "status": ("Status", "நிலை"),
 "m_production": ("Production", "உற்பத்தி"),
 "m_production_one": ("Production order", "உற்பத்தி ஆர்டர்"),
