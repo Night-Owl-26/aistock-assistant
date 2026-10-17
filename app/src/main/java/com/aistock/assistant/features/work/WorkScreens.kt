@@ -33,6 +33,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -97,10 +99,11 @@ fun WorkListScreen(nav: AppNav, moduleKey: String, showBack: Boolean, vm: WorkVi
     val rows by vm.rows(m).collectAsState(initial = null)
     var filter by rememberSaveable { mutableStateOf("open") }
     val flow = cfg.workflow(m)
+    val newLabel = stringResource(R.string.new_item, moduleTitle(cfg, m, false))
     Scaffold(
         topBar = { AppTopBar(moduleTitle(cfg, m), if (showBack) nav.back else null) },
         floatingActionButton = {
-            ExtendedFloatingActionButton(onClick = { nav.go("workform/${m.key}") }, icon = { Icon(Icons.Default.Add, null) }, text = { Text(stringResource(R.string.new_item, moduleTitle(cfg, m, false))) })
+            ExtendedFloatingActionButton(onClick = { nav.go("workform/${m.key}") }, modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = newLabel }, icon = { Icon(Icons.Default.Add, null) }, text = { Text(stringResource(R.string.new_item, moduleTitle(cfg, m, false))) })
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {

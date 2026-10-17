@@ -39,6 +39,8 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -103,9 +105,10 @@ fun FollowupsScreen(nav: AppNav, vm: WorkViewModel = hiltViewModel()) {
     var tab by rememberSaveable { mutableStateOf("PENDING") }
     var adding by remember { mutableStateOf(false) }
     var completing by remember { mutableStateOf<FollowupEntity?>(null) }
+    val addLabel = stringResource(R.string.add_followup)
     Scaffold(
         topBar = { AppTopBar(stringResource(R.string.followups), nav.back) },
-        floatingActionButton = { ExtendedFloatingActionButton(onClick = { adding = true }, icon = { Icon(Icons.Default.Add, null) }, text = { Text(stringResource(R.string.add_followup)) }) },
+        floatingActionButton = { ExtendedFloatingActionButton(onClick = { adding = true }, modifier = Modifier.semantics(mergeDescendants = true) { contentDescription = addLabel }, icon = { Icon(Icons.Default.Add, null) }, text = { Text(stringResource(R.string.add_followup)) }) },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
             Row(Modifier.padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {

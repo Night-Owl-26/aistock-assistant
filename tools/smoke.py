@@ -77,6 +77,11 @@ def tap(label, secs=20, exact=False, last=False, required=True):
             adb("shell", "input", "swipe", "540", "1500", "540", "800", "400"); time.sleep(1.0)
             n = find(label, exact, last)
             if n: break
+        if not n:
+            for _ in range(9):
+                adb("shell", "input", "swipe", "540", "800", "540", "1500", "400"); time.sleep(1.0)
+                n = find(label, exact, last)
+                if n: break
     if not n:
         if required:
             problems.append(f"could not find '{label}'"); say("  !! missing:", label); shot("missing-" + re.sub(r"\W+", "_", label)[:30])
@@ -139,7 +144,7 @@ def check(step):
         adb("shell", "monkey", "-p", PKG, "-c", "android.intent.category.LAUNCHER", "1"); time.sleep(4)
 
 def expect(label, step, secs=15):
-    if not wait_for(label, secs):
+    if not wait_for(label, secs) and not scroll_to(label, 4):
         problems.append(f"{step}: expected to see '{label}'"); say("  !! expected", label, "at", step)
         return False
     return True
@@ -237,7 +242,7 @@ step("business setup: garment manufacturing")
 tap("More", exact=True); scroll_to("Business setup"); tap("Business setup"); expect("Type of business", "setup screen")
 tap("Garments / textile manufacturing"); time.sleep(1); shot("setup-garment"); tap("Save", exact=True, last=True); time.sleep(2)
 tap("Production", exact=True); expect("New Production order", "production tab"); shot("production-empty")
-tap("New Production order"); tap_field("Title"); type_text("500 polo shirts"); hide_keyboard()
+tap("New Production order", exact=True); tap_field("Title"); type_text("500 polo shirts"); hide_keyboard()
 tap("Save", exact=True, last=True); expect("PO-0001", "production order saved"); shot("production-list")
 tap("500 polo shirts"); expect("Move to Stitching", "production detail"); tap("Move to Stitching"); time.sleep(2)
 expect("[Stitching]", "moved to stitching"); shot("production-detail"); back()
@@ -245,7 +250,7 @@ check("production")
 
 step("follow-up with reminder")
 tap("More", exact=True); scroll_to("Follow-ups"); tap("Follow-ups"); expect("Add follow-up", "follow-ups")
-tap("Add follow-up"); tap_field("or type a new name"); type_text("Priya"); hide_keyboard(); tap("Save", exact=True, last=True); time.sleep(2)
+tap("Add follow-up", exact=True); tap_field("or type a new name"); type_text("Priya"); hide_keyboard(); tap("Save", exact=True, last=True); time.sleep(2)
 expect("Priya", "follow-up saved"); shot("followups"); back()
 tap("More", exact=True); scroll_to("Reminders"); tap("Reminders"); expect("Call Priya", "reminder scheduled"); shot("reminders"); back()
 check("follow-up")
