@@ -13,7 +13,12 @@ class TestEnv(var allowNegative: Boolean = false) {
     val inventory = InventoryRepository(db, object : StockRules { override fun allowNegativeStock() = allowNegative })
     val trade = TradeRepository(db, inventory)
     val parties = PartyRepository(db)
-    val backend = RoomAssistantBackend(db, inventory, trade, parties)
+    val scheduled = ArrayList<Triple<String, String, Long>>()
+    val business = com.aistock.assistant.business.RoomBusinessBackend(db, parties, object : com.aistock.assistant.business.ReminderSink {
+        override fun schedule(id: String, text: String, at: Long) { scheduled.add(Triple(id, text, at)) }
+        override fun cancel(id: String) { scheduled.removeAll { it.first == id } }
+    })
+    val backend = RoomAssistantBackend(db, inventory, trade, parties, business)
 
     suspend fun product(name: String, stock: Long = 0, min: Long = 0, sell: Long = 0, buy: Long = 0, unit: String = "PCS") =
         inventory.createProduct(ProductInput(name, unit = unit, openingStock = stock * 1000, minimumStock = min * 1000, sellingPrice = sell * 100, purchasePrice = buy * 100)).orThrow()

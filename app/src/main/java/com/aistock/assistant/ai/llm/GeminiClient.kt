@@ -169,7 +169,19 @@ object Gemini {
         for (i in roles.indices) contents.put(JSONObject().put("role", roles[i]).put("parts", parts[i]))
         root.put("contents", contents)
 
-        if (tools.isNotEmpty()) {
+        if (tools.isNotEmpty()) root.put("tools", JSONArray().put(JSONObject().put("functionDeclarations", declarations(tools))))
+        val config = JSONObject()
+        if (temperature != null) config.put("temperature", temperature)
+        when (thinking) {
+            "budget0" -> config.put("thinkingConfig", JSONObject().put("thinkingBudget", 0))
+            "minimal", "low" -> config.put("thinkingConfig", JSONObject().put("thinkingLevel", thinking))
+        }
+        root.put("generationConfig", config)
+        return root.toString()
+    }
+
+    /** Tool descriptions in Gemini's function-declaration format (also used by the real-time voice session). */
+    fun declarations(tools: List<ToolSpec>): JSONArray {
             val decls = JSONArray()
             for (t in tools) {
                 val d = JSONObject().put("name", t.name).put("description", t.description)
@@ -188,16 +200,7 @@ object Gemini {
                 }
                 decls.put(d)
             }
-            root.put("tools", JSONArray().put(JSONObject().put("functionDeclarations", decls)))
-        }
-        val config = JSONObject()
-        if (temperature != null) config.put("temperature", temperature)
-        when (thinking) {
-            "budget0" -> config.put("thinkingConfig", JSONObject().put("thinkingBudget", 0))
-            "minimal", "low" -> config.put("thinkingConfig", JSONObject().put("thinkingLevel", thinking))
-        }
-        root.put("generationConfig", config)
-        return root.toString()
+        return decls
     }
 
     fun parse(body: String): LlmReply {

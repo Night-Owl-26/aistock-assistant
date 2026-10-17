@@ -166,8 +166,11 @@ class Stocky(
         return VoiceToolResult(text.take(6000), card, executed, liveTurn.fx.actions.drop(actionsBefore))
     }
 
-    /** The voice session finished speaking a turn: keep it in the conversation history. */
-    fun voiceTurnDone(assistantText: String) { if (assistantText.isNotBlank()) remember(null, assistantText) }
+    /** A voice turn finished: keep what was said in the conversation history and the audit text. */
+    fun voiceTurnDone(userText: String, assistantText: String) {
+        if (userText.isNotBlank()) engine.commandText = userText
+        remember(userText.takeIf { it.isNotBlank() }, assistantText)
+    }
 
     suspend fun confirm(): AssistantReply = engine.confirm().also { remember(null, it.text) }
     suspend fun cancel(): AssistantReply = engine.cancel().also { remember(null, it.text) }
