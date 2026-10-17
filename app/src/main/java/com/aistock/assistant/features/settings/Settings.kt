@@ -64,7 +64,7 @@ import kotlinx.coroutines.launch
 
 /** The "More" tab: everything that is not day-to-day stock and money entry. */
 @Composable
-fun MoreScreen(nav: AppNav, vm: MainViewModel, cfg: com.aistock.assistant.business.BusinessConfig, inNav: Set<com.aistock.assistant.business.Module>) {
+fun MoreScreen(nav: AppNav, vm: MainViewModel, cfg: com.aistock.assistant.business.BusinessConfig, inNav: Set<com.aistock.assistant.business.Module>, tabRoutes: Set<String> = emptySet()) {
     val business by vm.businessProfile.collectAsStateWithLifecycle()
     Column(
         Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
@@ -73,16 +73,16 @@ fun MoreScreen(nav: AppNav, vm: MainViewModel, cfg: com.aistock.assistant.busine
         Text(stringResource(R.string.nav_more), style = MaterialTheme.typography.headlineSmall)
         business?.let { Text(it.name + " · " + it.ownerName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Spacer(Modifier.height(4.dp))
-        // Work modules that are not in the bottom bar, and the people side of the business.
+        // Everyday things first; work modules that are not in the bottom bar next; setup and account last.
         for (m in cfg.workModules.filter { it !in inNav }) MenuRow(R.drawable.ic_work, com.aistock.assistant.features.work.moduleTitle(cfg, m), stringResource(R.string.work_sub)) { nav.go("worklist/${m.key}") }
         if (cfg.has(com.aistock.assistant.business.Module.FOLLOWUPS)) MenuRow(R.drawable.ic_people, stringResource(R.string.followups), stringResource(R.string.followups_sub)) { nav.go("followups") }
-        MenuRow(R.drawable.ic_settings, stringResource(R.string.reminders), stringResource(R.string.reminders_sub)) { nav.go("reminders") }
-        if (cfg.has(com.aistock.assistant.business.Module.STAFF) || cfg.has(com.aistock.assistant.business.Module.TASKS)) MenuRow(R.drawable.ic_people, stringResource(R.string.staff), stringResource(R.string.staff_sub)) { nav.go("staff") }
-        if (!inNav.contains(com.aistock.assistant.business.Module.INVENTORY) && cfg.has(com.aistock.assistant.business.Module.INVENTORY)) MenuRow(R.drawable.ic_inventory, stringResource(R.string.nav_inventory), stringResource(R.string.inventory_sub)) { nav.go("inventory") }
-        MenuRow(R.drawable.ic_receipt, stringResource(R.string.nav_transactions), stringResource(R.string.transactions_sub)) { nav.go("transactions") }
         MenuRow(R.drawable.ic_people, stringResource(R.string.customers), stringResource(R.string.customers_sub)) { nav.go("parties/customer") }
         MenuRow(R.drawable.ic_people, stringResource(R.string.suppliers), stringResource(R.string.suppliers_sub)) { nav.go("parties/supplier") }
         MenuRow(R.drawable.ic_report, stringResource(R.string.reports), stringResource(R.string.reports_sub)) { nav.go("reports") }
+        if ("inventory" !in tabRoutes && cfg.has(com.aistock.assistant.business.Module.INVENTORY)) MenuRow(R.drawable.ic_inventory, stringResource(R.string.nav_inventory), stringResource(R.string.inventory_sub)) { nav.go("inventory") }
+        if ("transactions" !in tabRoutes) MenuRow(R.drawable.ic_receipt, stringResource(R.string.nav_transactions), stringResource(R.string.transactions_sub)) { nav.go("transactions") }
+        MenuRow(R.drawable.ic_settings, stringResource(R.string.reminders), stringResource(R.string.reminders_sub)) { nav.go("reminders") }
+        if (cfg.has(com.aistock.assistant.business.Module.STAFF) || cfg.has(com.aistock.assistant.business.Module.TASKS)) MenuRow(R.drawable.ic_people, stringResource(R.string.staff), stringResource(R.string.staff_sub)) { nav.go("staff") }
         MenuRow(R.drawable.ic_stock_in, stringResource(R.string.import_export), stringResource(R.string.import_export_sub)) { nav.go("data") }
         MenuRow(R.drawable.ic_backup, stringResource(R.string.backup_restore), stringResource(R.string.backup_restore_sub)) { nav.go("backup") }
         MenuRow(R.drawable.ic_work, stringResource(R.string.business_setup), stringResource(R.string.business_setup_sub)) { nav.go("setup") }

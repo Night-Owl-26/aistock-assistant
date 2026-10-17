@@ -63,17 +63,8 @@ class WorkViewModel @Inject constructor(
 
     suspend fun run(action: BusinessAction): ExecResult = platform.execute(action)
 
-    /** Saves the setup on the phone and, when signed in, on the server too (so another phone gets the same setup). */
-    suspend fun saveSetup(c: BusinessConfig): ExecResult {
-        val r = platform.execute(BusinessAction.SetupBusiness(c))
-        if (r.ok && server.signedIn) viewModelScope.launch {
-            try {
-                val (v, _) = server.profile()
-                server.saveProfile(BusinessConfigJson.write(c), v)
-            } catch (e: Exception) { /* the phone copy is what the app uses; the server copy is a convenience */ }
-        }
-        return r
-    }
+    /** Saves the setup on the phone; ProfileSync copies it to the server when signed in. */
+    suspend fun saveSetup(c: BusinessConfig): ExecResult = platform.execute(BusinessAction.SetupBusiness(c))
 
     fun ref(r: WorkRow, cfg: BusinessConfig): WorkRef? = Module.of(r.module)?.let { m ->
         WorkRef(r.id, m, r.number, r.title, r.status, r.stage, r.customerId, r.customerName, r.staffId, r.staffName, r.productName,

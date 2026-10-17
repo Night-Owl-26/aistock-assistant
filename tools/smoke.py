@@ -71,6 +71,12 @@ def tap(label, secs=20, exact=False, last=False, required=True):
         n = find(label, exact, last)
         if n: break
         time.sleep(0.7)
+    if not n and required:
+        # The item may be further down a long page: scroll and look again.
+        for _ in range(5):
+            adb("shell", "input", "swipe", "540", "1500", "540", "800", "400"); time.sleep(1.0)
+            n = find(label, exact, last)
+            if n: break
     if not n:
         if required:
             problems.append(f"could not find '{label}'"); say("  !! missing:", label); shot("missing-" + re.sub(r"\W+", "_", label)[:30])
@@ -203,7 +209,9 @@ tap("Transactions", exact=True); expect("INV-0001", "sales list"); shot("sales")
 tap("INV-0001"); expect("Cancel sale", "sale detail"); shot("sale-detail"); tap("Close", exact=True)
 tap("Home", exact=True); tap("Sale", exact=True); expect("Add item", "sale form"); tap("Add item"); tap("A4 Paper"); expect("Subtotal", "sale form with item")
 shot("sale-form"); tap("Save ·"); expect("Today's Sales", "back on home after sale")
-adb("shell", "input", "swipe", "900", "920", "200", "920", "300"); time.sleep(1)
+sale = find("Sale", exact=True)
+row_y = str(sale["y"]) if sale else "920"
+adb("shell", "input", "swipe", "900", row_y, "200", row_y, "300"); time.sleep(1)
 tap("Expense", exact=True); expect("Payment method", "expense form")
 tap_field("Amount", 0); type_text("2500"); hide_keyboard(); tap("Transport", exact=True); shot("expense-form"); tap("Save", exact=True)
 expect("Today's Sales", "back on home after expense")

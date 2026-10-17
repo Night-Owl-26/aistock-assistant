@@ -135,14 +135,22 @@ class Stocky(
 
     // ------------------------------------------------------------------ real-time voice
 
-    private var liveTurn = TurnState()
+    private var liveTurn = TurnState(voice = true)
+
+    /**
+     * Spoken confirmation needs this order: a proposal was shown, Stocky finished asking (or was interrupted),
+     * and only then the owner spoke. A late transcript of the original request cannot count as a "yes".
+     */
+    private var voiceGate = 0
+    fun voiceModelDone() { if (voiceGate == 1) voiceGate = 2 }
+    fun voiceHeard() { if (voiceGate == 2) voiceGate = 3 }
 
     /** The instructions for a real-time voice session: the same persona and live business context. */
     suspend fun voiceInstructions(): String = systemPrompt() + "\n\n" + VOICE_STYLE
 
     /** Called when the owner starts speaking a new turn in a voice session. */
     fun newVoiceTurn(userText: String?) {
-        liveTurn = TurnState(cardWasShown = engine.awaitingConfirmation)
+        liveTurn = TurnState(cardWasShown = engine.awaitingConfirmation, voice = true)
         if (!userText.isNullOrBlank()) { engine.commandText = userText; remember(userText, "") }
     }
 
@@ -161,8 +169,10 @@ class Stocky(
             "ERROR: that could not be done. Nothing was changed."
         }
         val executed = liveTurn.executed?.takeIf { it !== before }
-        executed?.let { remember(null, it.text) }
-        val card = if (liveTurn.proposed && executed == null) engine.pendingReply else null
+        executed?.let { remember(null, it.text); voiceGate = 0 }
+        val card = if (liveTurn.proposed && executed == null && engine.awaitingConfirmation) engine.pendingReply else null
+        if (card != null) voiceGate = 1
+        if (!engine.awaitingConfirmation) voiceGate = 0
         return VoiceToolResult(text.take(6000), card, executed, liveTurn.fx.actions.drop(actionsBefore))
     }
 
@@ -225,7 +235,7 @@ class Stocky(
     }
 
     /** @param cardWasShown a confirmation card was already on screen when the owner sent this message */
-    private class TurnState(val cardWasShown: Boolean = false) {
+    private class TurnState(val cardWasShown: Boolean = false, val voice: Boolean = false) {
         val fx = ToolEffects()
         var proposed = false
         var executed: AssistantReply? = null
@@ -582,7 +592,8 @@ class Stocky(
             }
             "confirm_pending" -> {
                 if (!engine.awaitingConfirmation) return "Nothing is waiting for confirmation."
-                if (turn.proposed || !turn.cardWasShown) {
+                val ownerSawIt = if (turn.voice) voiceGate == 3 else (!turn.proposed && turn.cardWasShown)
+                if (!ownerSawIt) {
                     // The owner has not seen this proposal yet: it must be shown and agreed to first.
                     turn.proposed = true
                     return "NOT DONE: the owner has not seen this proposal yet. Do not confirm it now; the app is showing it. Ask them to check it and say yes."

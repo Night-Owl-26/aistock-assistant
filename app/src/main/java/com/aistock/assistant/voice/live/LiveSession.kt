@@ -91,6 +91,8 @@ class LiveSession(
     @Volatile private var generationDone = false
     @Volatile private var hasEchoCanceller = false
     private var reconnects = 0
+    /** A reconnection is already under way (watchdog and connection loss must not start a second one). */
+    private val renewing = java.util.concurrent.atomic.AtomicBoolean(false)
 
     private var recorder: AudioRecord? = null
     private var micThread: Thread? = null
@@ -117,12 +119,12 @@ class LiveSession(
                 if (_state.value == LiveState.LISTENING && System.currentTimeMillis() - lastActivity > idleSeconds * 1000L) stop("idle")
                 if (elapsed > t.maxSeconds - 5) {
                     // The token is about to run out: continue the same conversation on a fresh one, or end politely.
-                    if (resumeHandle != null && reconnects < 3) {
+                    if (resumeHandle != null && reconnects < 3 && t.mode == "token" && renewing.compareAndSet(false, true)) {
                         reconnects++
                         val old = ws; ws = null; ready = false
                         try { old?.close(1000, "renew") } catch (e: Exception) { }
                         launch(Dispatchers.IO) { connect(resume = true) }
-                    } else stop("time")
+                    } else if (t.mode == "token" && !renewing.get()) stop("time")
                 }
             }
         }
@@ -133,20 +135,29 @@ class LiveSession(
         val t = try {
             server.liveSession()
         } catch (e: Exception) {
-            fail(e.message ?: "Could not start a voice session."); return
+            renewing.set(false)
+            if (!stopped) fail(e.message ?: "Could not start a voice session."); return
         }
+        // Stopped while waiting for the server: close the session we were given and open nothing.
+        if (stopped) { server.liveUsage(t.sessionId, 0, true); return }
         ticket?.let { old -> server.liveUsage(old.sessionId, ((System.currentTimeMillis() - ticketStartedAt) / 1000).toInt(), true) }
         ticket = t
         ticketStartedAt = System.currentTimeMillis()
         ready = false
         val instructions = try { stocky.voiceInstructions() } catch (e: Exception) { "" }
         val setup = LiveProtocol.setup(t.model, instructions, stocky.tools, if (resume) resumeHandle else null, voiceName)
-        val url = t.wsUrl + (if ('?' in t.wsUrl) "&" else "?") + "access_token=" + URLEncoder.encode(t.token, "UTF-8")
+        val request = if (t.mode == "relay") {
+            val bearer = try { server.bearer() } catch (e: Exception) { renewing.set(false); if (!stopped) fail(e.message ?: "Sign in again."); return }
+            Request.Builder().url(t.wsUrl).header("Authorization", "Bearer $bearer").build()
+        } else {
+            Request.Builder().url(t.wsUrl + (if ('?' in t.wsUrl) "&" else "?") + "access_token=" + URLEncoder.encode(t.token, "UTF-8")).build()
+        }
+        if (stopped) return
         val client = Http.client.newBuilder().readTimeout(0, TimeUnit.MILLISECONDS).pingInterval(20, TimeUnit.SECONDS).build()
-        ws = client.newWebSocket(Request.Builder().url(url).build(), object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) { webSocket.send(setup) }
-            override fun onMessage(webSocket: WebSocket, text: String) = handle(text)
-            override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) = handle(bytes.utf8())
+        ws = client.newWebSocket(request, object : WebSocketListener() {
+            override fun onOpen(webSocket: WebSocket, response: Response) { if (webSocket === ws && !stopped) webSocket.send(setup) else webSocket.close(1000, null) }
+            override fun onMessage(webSocket: WebSocket, text: String) { if (webSocket === ws && !stopped) handle(text) }
+            override fun onMessage(webSocket: WebSocket, bytes: okio.ByteString) { if (webSocket === ws && !stopped) handle(bytes.utf8()) }
             override fun onClosing(webSocket: WebSocket, code: Int, reason: String) { webSocket.close(1000, null) }
             override fun onClosed(webSocket: WebSocket, code: Int, reason: String) { if (webSocket === ws) lost(code, reason) }
             override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) { if (webSocket === ws) lost(response?.code ?: -1, t.message ?: t.javaClass.simpleName) }
@@ -156,15 +167,18 @@ class LiveSession(
     private fun lost(code: Int, reason: String) {
         if (stopped) return
         ready = false
-        // Google ends long sessions; with a resume handle the conversation continues where it was.
-        if (resumeHandle != null && reconnects < 3) {
+        // The server ends a session at its time limit (4000); Google ends long ones. With a resume handle the
+        // conversation continues where it was, on a fresh session.
+        if (resumeHandle != null && reconnects < 3 && code !in setOf(4401, 4402, 4429, 4400)) {
+            if (!renewing.compareAndSet(false, true)) return
             reconnects++
-            scope.launch(Dispatchers.IO) { delay(400); if (!stopped) connect(resume = true) }
-        } else fail(explain(code, reason))
+            scope.launch(Dispatchers.IO) { delay(400); if (!stopped) connect(resume = true) else renewing.set(false) }
+        } else if (code == 4000) stop("time") else fail(explain(code, reason))
     }
 
     private fun explain(code: Int, reason: String): String = when {
         reason.contains("quota", true) || code == 429 -> "The voice service is busy or its limit is reached. Typing to Stocky still works."
+        code == 4402 || code == 4429 || code == 4401 -> reason.ifBlank { "The voice session was refused." }
         code == 1008 || reason.contains("auth", true) || reason.contains("token", true) -> "The voice session was refused ($reason)."
         else -> "The voice connection dropped" + if (reason.isNotBlank()) " ($reason)." else "."
     }
@@ -180,10 +194,11 @@ class LiveSession(
     private fun handle(frame: String) {
         for (e in LiveProtocol.parse(frame)) when (e) {
             LiveEvent.SetupComplete -> {
+                renewing.set(false)
                 ready = true; reconnects = 0; lastActivity = System.currentTimeMillis(); startAudio(); set(LiveState.LISTENING)
                 if (!firstSent && !firstText.isNullOrBlank()) {
                     firstSent = true
-                    turns.onUser(firstText); stocky.newVoiceTurn(null)
+                    turns.onUser(firstText); stocky.newVoiceTurn(null); stocky.voiceHeard()
                     ws?.send(LiveProtocol.note(firstText))
                     set(LiveState.THINKING)
                 }
@@ -191,6 +206,7 @@ class LiveSession(
             is LiveEvent.UserText -> {
                 lastActivity = System.currentTimeMillis()
                 if (turns.onUser(e.text)) { stocky.newVoiceTurn(null); userText.clear() }
+                stocky.voiceHeard()
                 userText.append(e.text)
                 _updates.tryEmit(LiveUpdate.UserSpeech(userText.toString().trim(), false))
                 if (_state.value == LiveState.LISTENING) set(LiveState.THINKING)
@@ -203,6 +219,7 @@ class LiveSession(
             }
             is LiveEvent.StockyText -> { turns.onStocky(e.text); stockyText.append(e.text); _updates.tryEmit(LiveUpdate.StockySpeech(stockyText.toString().trim(), false)) }
             LiveEvent.Interrupted -> {
+                stocky.voiceModelDone()
                 // The owner spoke over Stocky: stop talking at once.
                 playQueue.clear()
                 try { track?.pause(); track?.flush(); track?.play() } catch (x: Exception) { }
@@ -215,6 +232,7 @@ class LiveSession(
             LiveEvent.GenerationComplete -> generationDone = true
             LiveEvent.TurnComplete -> {
                 generationDone = true
+                stocky.voiceModelDone()
                 val (u, s) = turns.onTurnComplete()
                 if (u.isNotBlank()) _updates.tryEmit(LiveUpdate.UserSpeech(u, true))
                 if (s.isNotBlank()) _updates.tryEmit(LiveUpdate.StockySpeech(s, true))
@@ -232,7 +250,6 @@ class LiveSession(
 
     private fun runTools(calls: List<com.aistock.assistant.ai.llm.ToolCall>) {
         set(LiveState.THINKING)
-        if (!turns.inTurn) { turns.onUser(""); stocky.newVoiceTurn(null) }
         scope.launch {
             // One at a time, in order, and never the same call twice.
             val results = toolLock.withLock {
@@ -281,7 +298,7 @@ class LiveSession(
 
     @SuppressLint("MissingPermission")
     private fun startAudio() {
-        if (recorder != null) return
+        if (recorder != null || stopped) return
         route()
         val rate = 16_000
         val minIn = AudioRecord.getMinBufferSize(rate, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT)

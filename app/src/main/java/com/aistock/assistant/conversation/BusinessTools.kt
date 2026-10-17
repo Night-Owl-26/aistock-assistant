@@ -189,7 +189,9 @@ class BusinessTools(
 
             "propose_business_setup" -> {
                 val type = a(call, "business_type") ?: return "Say which business_type."
-                val base = Templates.ALL.firstOrNull { it.type == type }?.config ?: return "Unknown business_type. Use one of: ${Templates.TYPES.joinToString()}."
+                // Changing the same kind of business keeps the owner's own words, steps and details.
+                val base = (if (type == cfg.businessType && business.configured()) cfg else Templates.ALL.firstOrNull { it.type == type }?.config)
+                    ?: return "Unknown business_type. Use one of: ${Templates.TYPES.joinToString()}."
                 var modules = base.modules
                 a(call, "modules")?.let { list ->
                     val ms = list.split(',', ';').mapNotNull { Module.of(it) }.toSet()

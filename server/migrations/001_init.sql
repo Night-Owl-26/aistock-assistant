@@ -98,7 +98,7 @@ CREATE TABLE live_sessions (
   closed       boolean NOT NULL DEFAULT false
 );
 
--- Encrypted backups uploaded by the app (opaque to the server).
+-- Backup files uploaded by the app over HTTPS (stored as sent, on the owner's own server).
 CREATE TABLE backups (
   id           uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   business_id  uuid NOT NULL REFERENCES businesses(id) ON DELETE CASCADE,

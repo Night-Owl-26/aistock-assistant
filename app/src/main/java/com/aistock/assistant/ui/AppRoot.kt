@@ -189,7 +189,7 @@ private fun MainScaffold(vm: MainViewModel, startTalking: Boolean, openChat: Boo
                         navArgument("listen") { type = NavType.BoolType; defaultValue = false },
                     ),
                 ) { AssistantScreen(nav, prefs, it.arguments?.getString("conv"), it.arguments?.getBoolean("listen") ?: false) }
-                composable("more") { MoreScreen(nav, vm, cfg, tabs.mapNotNull { it.module }.toSet()) }
+                composable("more") { MoreScreen(nav, vm, cfg, tabs.mapNotNull { it.module }.toSet(), tabs.map { it.base }.toSet()) }
                 for (m in Module.WORK) composable("w_${m.key}") { WorkListScreen(nav, m.key, showBack = false) }
                 composable("worklist/{module}", arguments = listOf(navArgument("module") { type = NavType.StringType })) { WorkListScreen(nav, it.arguments?.getString("module") ?: "tasks", showBack = true) }
                 composable("work/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { WorkDetailScreen(nav, it.arguments?.getString("id").orEmpty()) }

@@ -18,7 +18,8 @@ class ServerException(val status: Int, val code: String, message: String) : Exce
 
 data class Usage(val active: Boolean, val status: String, val planName: String, val periodEnd: String, val aiUsed: Int, val aiLimit: Int, val liveUsedSec: Int, val liveLimitSec: Int, val priceMinor: Int)
 data class Account(val email: String, val businessId: String, val businessName: String, val role: String, val usage: Usage?, val aiConfigured: Boolean, val textModel: String, val liveModel: String)
-data class LiveTicket(val sessionId: String, val token: String, val wsUrl: String, val model: String, val maxSeconds: Int)
+/** mode "relay": voice goes through the AIStock server (signed in with the bearer token); "token": straight to Google with a one-use token. */
+data class LiveTicket(val mode: String, val sessionId: String, val token: String, val wsUrl: String, val model: String, val maxSeconds: Int)
 
 /**
  * Talks to the AIStock server (your own deployment). The app keeps only a refresh token, encrypted with the Android
@@ -147,10 +148,14 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
 
     suspend fun liveSession(): LiveTicket {
         val o = obj("POST", "/v1/businesses/$businessId/ai/live-session")
-        return LiveTicket(o.getString("sessionId"), o.getString("token"), o.getString("wsUrl"), o.getString("model"), o.optInt("maxSeconds", 600))
+        return LiveTicket(o.optString("mode", "token"), o.optString("sessionId"), o.optString("token"), o.getString("wsUrl"), o.getString("model"), o.optInt("maxSeconds", 600))
     }
 
+    /** A current access token, for the voice WebSocket through the server. */
+    suspend fun bearer(): String = accessToken()
+
     suspend fun liveUsage(sessionId: String, seconds: Int, final: Boolean) {
+        if (sessionId.isBlank()) return // relayed sessions are measured by the server itself
         try { obj("POST", "/v1/businesses/$businessId/ai/live-usage", JSONObject().put("sessionId", sessionId).put("seconds", seconds).put("final", final)) } catch (e: Exception) { }
     }
 

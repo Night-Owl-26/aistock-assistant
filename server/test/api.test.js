@@ -4,6 +4,7 @@ import { createPool } from '../src/db.js'
 import { migrate } from '../src/migrate.js'
 import { buildApp } from '../src/app.js'
 import { loadConfig } from '../src/config.js'
+import { sha256 as sha } from '../src/auth.js'
 
 // Runs against a real PostgreSQL (TEST_DATABASE_URL) and a fake Google.
 const url = process.env.TEST_DATABASE_URL ?? 'postgres://postgres@localhost:55432/aistock_test?host=/srv/pgtest'
@@ -27,7 +28,7 @@ before(async () => {
   pool = createPool(url)
   await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
   await migrate(pool)
-  const cfg = loadConfig({ DATABASE_URL: url, JWT_SECRET: 'x'.repeat(40), GEMINI_API_KEY: 'server-key', ADMIN_TOKEN: 'admin-secret-token', GEMINI_BASE_URL: 'https://google.test', REGISTER_PER_HOUR: '1000' })
+  const cfg = loadConfig({ DATABASE_URL: url, JWT_SECRET: 'x'.repeat(40), GEMINI_API_KEY: 'server-key', ADMIN_TOKEN: 'admin-secret-token', GEMINI_BASE_URL: 'https://google.test', REGISTER_PER_HOUR: '1000', LIVE_MODE: 'token' })
   app = await buildApp({ cfg, pool, fetchImpl: fakeFetch })
 })
 after(async () => { await app?.close(); await pool?.end() })
@@ -52,8 +53,11 @@ test('register, sign in, refresh rotates, me shows trial', async () => {
   assert.equal(l.status, 200)
   const r1 = await call('POST', '/v1/auth/refresh', { body: { refreshToken: l.json.refreshToken } })
   assert.equal(r1.status, 200)
+  await pool.query("UPDATE refresh_tokens SET revoked_at = now() - interval '5 minutes' WHERE token_hash = $1", [sha(l.json.refreshToken)])
   assert.equal((await call('POST', '/v1/auth/refresh', { body: { refreshToken: l.json.refreshToken } })).status, 401, 'a used refresh token must not work twice')
-  const me = await call('GET', '/v1/me', { token: r1.json.accessToken })
+  const again = await call('POST', '/v1/auth/login', { body: { email: 'owner1@shop.in', password: 'correct horse 1' } })
+  const r1b = await call('POST', '/v1/auth/refresh', { body: { refreshToken: again.json.refreshToken } })
+  const me = await call('GET', '/v1/me', { token: r1b.json.accessToken })
   assert.equal(me.status, 200)
   assert.equal(me.json.businesses[0].entitlement.status, 'trial')
   assert.equal(me.json.businesses[0].role, 'owner')
@@ -132,7 +136,7 @@ test('AI proxy: key stays on the server, tools only, usage metered, limits enfor
   await pool.query("UPDATE subscriptions SET current_period_end = now() - interval '1 day' WHERE business_id = $1", [a.businessId])
   assert.equal((await call('POST', `/v1/businesses/${a.businessId}/ai/generate`, { token: a.accessToken, body: { request } })).status, 402)
   assert.equal((await call('GET', '/v1/me', { token: a.accessToken })).status, 200)
-  assert.equal((await call('POST', `/v1/businesses/${a.businessId}/ai/generate`, { token: a.accessToken, body: { request: { contents: [] } } })).status, 402)
+  assert.equal((await call('POST', `/v1/businesses/${a.businessId}/ai/generate`, { token: a.accessToken, body: { request: { contents: [] } } })).status, 400)
 })
 
 test('live voice: short-lived token, usage capped by the clock, never counted twice', async () => {
@@ -154,14 +158,12 @@ test('live voice: short-lived token, usage capped by the clock, never counted tw
   await call('POST', `/v1/businesses/${a.businessId}/ai/live-usage`, { token: a.accessToken, body: { sessionId: r.json.sessionId, seconds: 90, final: true } })
   await call('POST', `/v1/businesses/${a.businessId}/ai/live-usage`, { token: a.accessToken, body: { sessionId: r.json.sessionId, seconds: 90, final: true } })
   const u = await call('GET', `/v1/businesses/${a.businessId}/usage`, { token: a.accessToken })
-  assert.equal(u.json.liveSeconds.used, 90)
-  // A session that never reports is charged for the time it could have run.
+  assert.equal(u.json.liveSeconds.used, 200, 'a closed session is charged at least the time it was open')
+  // An open session counts at its full length until it is closed.
   const r2 = await call('POST', `/v1/businesses/${a.businessId}/ai/live-session`, { token: a.accessToken })
-  await pool.query("UPDATE live_sessions SET started_at = now() - interval '100 seconds' WHERE id = $1", [r2.json.sessionId])
   const u2 = await call('GET', `/v1/businesses/${a.businessId}/usage`, { token: a.accessToken })
-  assert.ok(u2.json.liveSeconds.used >= 189 && u2.json.liveSeconds.used <= 192, String(u2.json.liveSeconds.used))
-  // Out of minutes.
-  await pool.query("UPDATE live_sessions SET reported_seconds = 1800, closed = true WHERE id = $1", [r2.json.sessionId])
+  assert.equal(u2.json.liveSeconds.used, 200 + r2.json.maxSeconds)
+  await pool.query("UPDATE live_sessions SET max_seconds = 1700 WHERE id = $1", [r2.json.sessionId])
   assert.equal((await call('POST', `/v1/businesses/${a.businessId}/ai/live-session`, { token: a.accessToken })).json.error, 'quota_exceeded')
 })
 
@@ -204,4 +206,31 @@ test('health and plans are public', async () => {
   assert.equal((await call('GET', '/healthz')).json.ok, true)
   const p = await call('GET', '/v1/plans')
   assert.equal(p.json.plans.find(x => x.id === 'basic').price_minor, 19900)
+})
+
+test('parallel requests cannot slip past the monthly limit', async () => {
+  const a = await register('race@shop.in')
+  await pool.query("INSERT INTO usage_events (business_id, kind, quantity) VALUES ($1,'ai_request',298)", [a.businessId])
+  const request = { contents: [{ role: 'user', parts: [{ text: 'hi' }] }] }
+  const results = await Promise.all(Array.from({ length: 10 }, () => call('POST', `/v1/businesses/${a.businessId}/ai/generate`, { token: a.accessToken, body: { request } })))
+  assert.equal(results.filter(r => r.status === 200).length, 2, results.map(r => r.status).join(','))
+})
+
+test('a refresh token works once even in parallel; a stolen old one signs the person out', async () => {
+  const a = await register('rot@shop.in')
+  const rs = await Promise.all(Array.from({ length: 4 }, () => call('POST', '/v1/auth/refresh', { body: { refreshToken: a.refreshToken } })))
+  // One wins; the others are inside the 60-second grace for lost answers and get their own new session.
+  assert.ok(rs.every(r => r.status === 200))
+  const fresh = rs[0].json.refreshToken
+  await pool.query("UPDATE refresh_tokens SET revoked_at = now() - interval '5 minutes' WHERE token_hash = $1", [sha(a.refreshToken)])
+  assert.equal((await call('POST', '/v1/auth/refresh', { body: { refreshToken: a.refreshToken } })).status, 401)
+  assert.equal((await call('POST', '/v1/auth/refresh', { body: { refreshToken: fresh } })).status, 401, 'reuse of an old token ends every session')
+})
+
+test('owners cannot be demoted by mistake; bad admin input is refused', async () => {
+  const o = await register('own@shop.in')
+  await call('POST', '/admin/subscriptions', { headers: { authorization: 'Bearer admin-secret-token' }, body: { businessId: o.businessId, planId: 'pro', days: 30 } })
+  assert.equal((await call('POST', `/v1/businesses/${o.businessId}/members`, { token: o.accessToken, body: { email: 'own@shop.in', role: 'staff' } })).status, 400)
+  assert.equal((await call('POST', '/admin/subscriptions', { headers: { authorization: 'Bearer admin-secret-token' }, body: { businessId: 'x', planId: 'pro' } })).status, 400)
+  assert.equal((await call('POST', '/admin/subscriptions', { headers: { authorization: 'Bearer admin-secret-token' }, body: { businessId: o.businessId, planId: 'pro', days: -5 } })).status, 400)
 })

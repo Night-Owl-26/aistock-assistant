@@ -28,12 +28,13 @@ data class Insight(val kind: String, val priority: Int, val text: String, val ev
 object Insights {
     private const val DAY = 86_400_000L
 
-    fun build(i: InsightsInput, symbol: String = "₹"): List<Insight> {
+    /** @param dayLabel and [prevDayLabel] name a one-day period ("today"/"yesterday", or "yesterday"/"the day before" for a morning summary) */
+    fun build(i: InsightsInput, symbol: String = "₹", dayLabel: String = "today", prevDayLabel: String = "yesterday"): List<Insight> {
         val out = ArrayList<Insight>()
         fun money(p: Long) = Money.format(p, symbol)
         fun pct(now: Long, prev: Long) = if (prev <= 0) null else ((now - prev) * 100.0 / prev)
-        val period = if (i.periodDays == 1) "today" else "the last ${i.periodDays} days"
-        val prevPeriod = if (i.periodDays == 1) "yesterday" else "the ${i.periodDays} days before"
+        val period = if (i.periodDays == 1) dayLabel else "the last ${i.periodDays} days"
+        val prevPeriod = if (i.periodDays == 1) prevDayLabel else "the ${i.periodDays} days before"
         val byName = i.products.associateBy { it.name.lowercase() }
 
         // 1. Sales against the same length of time just before.

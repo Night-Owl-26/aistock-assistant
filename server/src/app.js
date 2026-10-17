@@ -1,5 +1,7 @@
 import Fastify from 'fastify'
 import rateLimit from '@fastify/rate-limit'
+import websocket from '@fastify/websocket'
+import { registerLiveRelay } from './liveRelay.js'
 import { checkPassword, hashPassword, randomToken, sameSecret, sha256, tokens } from './auth.js'
 import { tx } from './db.js'
 import { geminiApi, sanitizeRequest } from './gemini.js'
@@ -16,12 +18,22 @@ const fail = (status, code, message) => { throw new HttpError(status, code, mess
  * Builds the API. Every business route goes through member(): the caller must belong to that business,
  * and the role must be allowed. Data of one business is never readable with another business's id.
  */
-export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false }) {
+export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, WebSocketImpl }) {
   const app = Fastify({ logger, bodyLimit: 1024 * 1024, trustProxy: true })
   const jwt = tokens(cfg)
   const gemini = geminiApi(cfg, fetchImpl)
 
-  await app.register(rateLimit, { max: 120, timeWindow: '1 minute', keyGenerator: (req) => req.userId ?? req.ip })
+  // Signed-in requests are limited per person (many shops can share one mobile-network address); others per address.
+  await app.register(rateLimit, {
+    max: 120, timeWindow: '1 minute',
+    keyGenerator: async (req) => {
+      const h = req.headers.authorization ?? ''
+      if (h.startsWith('Bearer ')) { try { return 'u:' + await jwt.verify(h.slice(7)) } catch { /* fall through */ } }
+      return 'ip:' + req.ip
+    },
+  })
+
+  await app.register(websocket, { options: { maxPayload: 1024 * 1024 } })
 
   app.addContentTypeParser('application/octet-stream', { parseAs: 'buffer', bodyLimit: cfg.maxBackupBytes }, (req, body, done) => done(null, body))
 
@@ -70,20 +82,24 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false })
 
   // ---------------------------------------------------------------- entitlements and usage
 
-  async function entitlement(businessId) {
-    const s = (await pool.query(
+  async function entitlement(businessId, db = pool) {
+    const s = (await db.query(
       `SELECT s.*, p.name AS plan_name, p.price_minor, p.currency, p.ai_requests_month, p.live_seconds_month, p.max_staff
          FROM subscriptions s JOIN plans p ON p.id = s.plan_id WHERE s.business_id = $1`, [businessId])).rows[0]
     if (!s) return { active: false, reason: 'no_subscription' }
     const now = new Date()
     const active = ['trial', 'active'].includes(s.status) && new Date(s.current_period_end) > now
     const from = s.current_period_start
-    const ai = Number((await pool.query(
+    const ai = Number((await db.query(
       "SELECT COALESCE(SUM(quantity),0) AS n FROM usage_events WHERE business_id = $1 AND kind = 'ai_request' AND created_at >= $2", [businessId, from])).rows[0].n)
     // Voice time: what the app reported, or, for a session that never reported, the time it could have run.
-    const live = Number((await pool.query(
-      `SELECT COALESCE(SUM(CASE WHEN closed THEN reported_seconds
-                                ELSE GREATEST(reported_seconds, LEAST(max_seconds, EXTRACT(EPOCH FROM (LEAST(now(), expires_at) - started_at))::int)) END),0) AS n
+    const live = Number((await db.query(
+      // An open session counts at its full allowance until it is closed; a closed one at what was reported,
+      // but never less than the time it was actually open.
+      `SELECT COALESCE(SUM(CASE WHEN closed AND closed_at IS NOT NULL
+                                THEN LEAST(max_seconds, GREATEST(reported_seconds, EXTRACT(EPOCH FROM (closed_at - started_at))::int))
+                                WHEN expires_at <= now() THEN GREATEST(reported_seconds, LEAST(max_seconds, EXTRACT(EPOCH FROM (expires_at - started_at))::int))
+                                ELSE max_seconds END),0) AS n
          FROM live_sessions WHERE business_id = $1 AND expires_at > $2`, [businessId, from])).rows[0].n)
     return {
       active, status: s.status, planId: s.plan_id, planName: s.plan_name, priceMinor: s.price_minor, currency: s.currency,
@@ -140,12 +156,18 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false })
   })
 
   app.post('/v1/auth/refresh', async (req) => {
-    const t = String(req.body?.refreshToken ?? '')
-    const row = (await pool.query('SELECT id, user_id FROM refresh_tokens WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now()', [sha256(t)])).rows[0]
-    if (!row) fail(401, 'unauthorized', 'Sign in again.')
-    // Each refresh token works once; a stolen one that is replayed stops working.
-    await pool.query('UPDATE refresh_tokens SET revoked_at = now() WHERE id = $1', [row.id])
-    return issueSession(row.user_id)
+    const hash = sha256(String(req.body?.refreshToken ?? ''))
+    // Each refresh token works once, claimed in one statement so two parallel refreshes cannot both win.
+    const row = (await pool.query(
+      'UPDATE refresh_tokens SET revoked_at = now() WHERE token_hash = $1 AND revoked_at IS NULL AND expires_at > now() RETURNING user_id', [hash])).rows[0]
+    if (row) return issueSession(row.user_id)
+    const used = (await pool.query('SELECT user_id, revoked_at > now() - interval \'60 seconds\' AS recent FROM refresh_tokens WHERE token_hash = $1 AND expires_at > now()', [hash])).rows[0]
+    // Used a moment ago: the answer was probably lost on a bad network, so the phone may try once more.
+    if (used?.recent) return issueSession(used.user_id)
+    // An old used token coming back means it was copied: sign that person out everywhere.
+    // (Dated back an hour so the short grace above cannot bring them back.)
+    if (used) { await pool.query("UPDATE refresh_tokens SET revoked_at = now() - interval '1 hour' WHERE user_id = $1 AND (revoked_at IS NULL OR revoked_at > now() - interval '60 seconds')", [used.user_id]); audit(null, used.user_id, 'refresh_reuse', {}, req.ip) }
+    fail(401, 'unauthorized', 'Sign in again.')
   })
 
   app.post('/v1/auth/logout', async (req) => {
@@ -234,9 +256,12 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false })
     const em = String(req.body?.email ?? '').trim().toLowerCase()
     const target = (await pool.query('SELECT id FROM users WHERE email = $1', [em])).rows[0]
     if (!target) fail(404, 'user_not_found', 'Ask this person to create an AIStock account first.')
+    if (target.id === user.id) fail(400, 'bad_request', 'You are already the owner.')
+    const existing = (await pool.query('SELECT role FROM memberships WHERE user_id = $1 AND business_id = $2', [target.id, req.params.id])).rows[0]
+    if (existing?.role === 'owner') fail(400, 'bad_request', 'An owner cannot be changed to another role here.')
     const e = await entitlement(req.params.id)
     const count = Number((await pool.query('SELECT COUNT(*) AS n FROM memberships WHERE business_id = $1', [req.params.id])).rows[0].n)
-    if (count >= (e.maxStaff ?? 1)) fail(402, 'staff_limit', `Your plan allows ${e.maxStaff} people.`)
+    if (!existing && count >= (e.maxStaff ?? 1)) fail(402, 'staff_limit', `Your plan allows ${e.maxStaff} people.`)
     await pool.query('INSERT INTO memberships (user_id, business_id, role) VALUES ($1,$2,$3) ON CONFLICT (user_id, business_id) DO UPDATE SET role = EXCLUDED.role', [target.id, req.params.id, role])
     audit(req.params.id, user.id, 'member_added', { role }, req.ip)
     return { ok: true }
@@ -244,19 +269,34 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false })
 
   // ---------------------------------------------------------------- AI: text conversation proxy
 
+  /** Checks the plan and books one use in the same transaction, so parallel requests cannot all slip under the limit. */
+  async function reserve(businessId, check) {
+    return tx(pool, async (c) => {
+      await c.query('SELECT 1 FROM subscriptions WHERE business_id = $1 FOR UPDATE', [businessId])
+      const e = await entitlement(businessId, c)
+      requireActive(e)
+      return check(c, e)
+    })
+  }
+
   app.post('/v1/businesses/:id/ai/generate', { config: { rateLimit: { max: 40, timeWindow: '1 minute' } } }, async (req, reply) => {
     const { user } = await member(req, req.params.id)
     if (!gemini.configured()) fail(503, 'ai_not_configured', 'The server has no Gemini key yet.')
-    const e = await entitlement(req.params.id)
-    requireActive(e)
-    if (e.aiRequests.used >= e.aiRequests.limit) fail(429, 'quota_exceeded', 'This month\'s Stocky AI limit is used up. It resets on your renewal date.')
     const body = sanitizeRequest(req.body?.request)
     if (!body) fail(400, 'bad_request', 'Not a valid conversation request.')
-    const r = await gemini.generate(cfg.textModel, body)
+    const usageId = await reserve(req.params.id, async (c, e) => {
+      if (e.aiRequests.used >= e.aiRequests.limit) fail(429, 'quota_exceeded', 'This month\'s Stocky AI limit is used up. It resets on your renewal date.')
+      return (await c.query("INSERT INTO usage_events (business_id, user_id, kind, quantity, model) VALUES ($1,$2,'ai_request',1,$3) RETURNING id", [req.params.id, user.id, cfg.textModel])).rows[0].id
+    })
+    let r
+    try { r = await gemini.generate(cfg.textModel, body) } catch (err) { await pool.query('DELETE FROM usage_events WHERE id = $1', [usageId]); throw err }
     if (r.status >= 200 && r.status < 300) {
       const m = r.body?.usageMetadata ?? {}
-      await pool.query("INSERT INTO usage_events (business_id, user_id, kind, quantity, input_tokens, output_tokens, model) VALUES ($1,$2,'ai_request',1,$3,$4,$5)",
-        [req.params.id, user.id, m.promptTokenCount ?? 0, (m.candidatesTokenCount ?? 0) + (m.thoughtsTokenCount ?? 0), cfg.textModel])
+      await pool.query('UPDATE usage_events SET input_tokens = $2, output_tokens = $3 WHERE id = $1',
+        [usageId, m.promptTokenCount ?? 0, (m.candidatesTokenCount ?? 0) + (m.thoughtsTokenCount ?? 0)])
+    } else {
+      // Google refused: the use is given back.
+      await pool.query('DELETE FROM usage_events WHERE id = $1', [usageId])
     }
     // Google's answer (or its error) goes back as it is, so the app can read function calls and explain errors.
     return reply.code(r.status).send(r.body)
@@ -264,22 +304,49 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false })
 
   // ---------------------------------------------------------------- AI: real-time voice
 
-  app.post('/v1/businesses/:id/ai/live-session', { config: { rateLimit: { max: 20, timeWindow: '10 minutes' } } }, async (req) => {
+  /** One voice session row, counted at its full length while open; checked under the plan lock. */
+  async function reserveLive(businessId, userId) {
+    if (!gemini.configured()) fail(503, 'ai_not_configured', 'The server has no Gemini key yet.')
+    return reserve(businessId, async (c, e) => {
+      const left = e.liveSeconds.limit - e.liveSeconds.used
+      if (left < 30) fail(429, 'quota_exceeded', 'This month\'s voice conversation minutes are used up. Typing to Stocky still works.')
+      const open = Number((await c.query("SELECT COUNT(*) AS n FROM live_sessions WHERE business_id = $1 AND NOT closed AND expires_at > now()", [businessId])).rows[0].n)
+      if (open >= 3) fail(429, 'too_many_sessions', 'Too many voice conversations are open at once. Close one and try again.')
+      const seconds = Math.min(cfg.liveMaxSeconds, left)
+      const row = (await c.query(
+        'INSERT INTO live_sessions (business_id, user_id, model, max_seconds, expires_at) VALUES ($1,$2,$3,$4, now() + make_interval(secs => $5)) RETURNING id',
+        [businessId, userId, cfg.liveModel, seconds, seconds + 120])).rows[0]
+      return { id: row.id, seconds }
+    })
+  }
+
+  /**
+   * How to start a voice conversation. Default ("relay"): through this server's WebSocket, which measures minutes itself.
+   * Optional ("token", LIVE_MODE=token): a one-use Google token so audio goes straight to Google (less server traffic,
+   * but minutes are then reported by the phone).
+   */
+  app.post('/v1/businesses/:id/ai/live-session', { config: { rateLimit: { max: 12, timeWindow: '10 minutes' } } }, async (req) => {
     const { user } = await member(req, req.params.id)
     if (!gemini.configured()) fail(503, 'ai_not_configured', 'The server has no Gemini key yet.')
-    const e = await entitlement(req.params.id)
-    requireActive(e)
-    const left = e.liveSeconds.limit - e.liveSeconds.used
-    if (left < 30) fail(429, 'quota_exceeded', 'This month\'s voice conversation minutes are used up. Typing to Stocky still works.')
-    const seconds = Math.min(cfg.liveMaxSeconds, left)
+    if (cfg.liveMode === 'relay') {
+      const e = await entitlement(req.params.id)
+      requireActive(e)
+      const left = e.liveSeconds.limit - e.liveSeconds.used
+      if (left < 30) fail(429, 'quota_exceeded', 'This month\'s voice conversation minutes are used up. Typing to Stocky still works.')
+      const scheme = req.protocol === 'https' ? 'wss' : 'ws'
+      return { mode: 'relay', sessionId: '', token: '', wsUrl: `${scheme}://${req.host}/v1/businesses/${req.params.id}/ai/live`, model: cfg.liveModel, maxSeconds: Math.min(cfg.liveMaxSeconds, left) }
+    }
+    const s = await reserveLive(req.params.id, user.id)
     let tok
-    try { tok = await gemini.liveToken(cfg.liveModel, seconds) } catch (err) { fail(502, 'ai_token_failed', `Google did not give a voice session: ${err.message}`) }
-    const s = (await pool.query(
-      'INSERT INTO live_sessions (business_id, user_id, model, max_seconds, expires_at) VALUES ($1,$2,$3,$4, now() + make_interval(secs => $5)) RETURNING id',
-      [req.params.id, user.id, cfg.liveModel, seconds, seconds + 120])).rows[0]
-    audit(req.params.id, user.id, 'live_session', { seconds }, req.ip)
-    return { sessionId: s.id, token: tok.token, wsUrl: cfg.liveWsUrl, model: cfg.liveModel, maxSeconds: seconds, expiresAt: tok.expiresAt }
+    try { tok = await gemini.liveToken(cfg.liveModel, s.seconds) } catch (err) {
+      await pool.query('DELETE FROM live_sessions WHERE id = $1', [s.id])
+      fail(502, 'ai_token_failed', `Google did not give a voice session: ${err.message}`)
+    }
+    audit(req.params.id, user.id, 'live_session', { seconds: s.seconds }, req.ip)
+    return { mode: 'token', sessionId: s.id, token: tok.token, wsUrl: cfg.liveWsUrl, model: cfg.liveModel, maxSeconds: s.seconds, expiresAt: tok.expiresAt }
   })
+
+  registerLiveRelay(app, { cfg, pool, member, reserveLive, audit, ...(WebSocketImpl ? { WebSocketImpl } : {}) })
 
   /** The app reports how long the voice session really ran. Repeated reports only ever raise the number, capped by the clock. */
   app.post('/v1/businesses/:id/ai/live-usage', async (req) => {
@@ -290,7 +357,8 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false })
     const r = await pool.query(
       `UPDATE live_sessions SET
           reported_seconds = GREATEST(reported_seconds, LEAST($3::int, max_seconds, EXTRACT(EPOCH FROM (now() - started_at))::int + 5)),
-          closed = closed OR $4::boolean
+          closed = closed OR $4::boolean,
+          closed_at = CASE WHEN $4::boolean AND closed_at IS NULL THEN now() ELSE closed_at END
         WHERE id = $1 AND business_id = $2 RETURNING reported_seconds`, [sid, req.params.id, seconds, req.body?.final === true])
     if (!r.rowCount) fail(404, 'not_found', 'Session not found.')
     return { recordedSeconds: r.rows[0].reported_seconds }
@@ -344,6 +412,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false })
     const h = req.headers.authorization ?? ''
     if (!cfg.adminToken || !sameSecret(h.replace(/^Bearer /, ''), cfg.adminToken)) fail(401, 'unauthorized', 'Admin token required.')
     const { businessId, planId, days = 30, reference = '' } = req.body ?? {}
+    if (!/^[0-9a-f-]{36}$/i.test(String(businessId)) || !Number.isInteger(Number(days)) || Number(days) < 1 || Number(days) > 3660) fail(400, 'bad_request', 'businessId must be an id and days 1-3660.')
     const plan = (await pool.query('SELECT id FROM plans WHERE id = $1', [planId])).rows[0]
     if (!plan) fail(400, 'bad_plan', 'Unknown plan.')
     const r = await pool.query(

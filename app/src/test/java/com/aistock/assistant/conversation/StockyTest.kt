@@ -307,3 +307,26 @@ class StockySafetyTest {
         org.junit.Assert.assertEquals(100L, b.stock("Blue Cotton"))
     }
 }
+
+class StockyVoiceGateTest {
+    private fun tc(name: String, vararg a: Pair<String, String>) = com.aistock.assistant.ai.llm.ToolCall("v$name${a.size}", name, mapOf(*a))
+
+    @org.junit.Test
+    fun spoken_yes_counts_only_after_stocky_asked() = kotlinx.coroutines.runBlocking {
+        val b = FakeBackend()
+        b.addProduct("Pink Clip", unit = "PIECE", stock = 40)
+        val s = Stocky(b, AssistantEngine(b, LocalFallbackAIProvider()), { null })
+        s.newVoiceTurn(null); s.voiceHeard()
+        val p = s.runVoiceTool(tc("propose_stock_in", "product" to "pink clip", "quantity" to "10"))
+        org.junit.Assert.assertNotNull("a card is shown", p.card)
+        // The model tries to confirm straight away, and a late transcript of the request arrives: both refused.
+        s.voiceHeard()
+        org.junit.Assert.assertTrue(s.runVoiceTool(tc("confirm_pending")).text.startsWith("NOT DONE"))
+        org.junit.Assert.assertEquals(40L, b.stock("Pink Clip"))
+        // Stocky finishes asking, the owner answers, then it may be saved.
+        s.voiceModelDone(); s.newVoiceTurn(null); s.voiceHeard()
+        val done = s.runVoiceTool(com.aistock.assistant.ai.llm.ToolCall("v2", "confirm_pending", emptyMap()))
+        org.junit.Assert.assertNotNull(done.text, done.executed)
+        org.junit.Assert.assertEquals(50L, b.stock("Pink Clip"))
+    }
+}

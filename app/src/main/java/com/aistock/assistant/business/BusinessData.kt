@@ -194,6 +194,8 @@ interface WorkDao {
     @Update suspend fun updateReminder(r: ReminderEntity)
     @Query("SELECT * FROM reminders WHERE id = :id") suspend fun reminder(id: String): ReminderEntity?
     @Query("SELECT * FROM reminders WHERE status = 'SCHEDULED' ORDER BY dueAt") suspend fun scheduledReminders(): List<ReminderEntity>
+    @Query("SELECT * FROM reminders WHERE status = 'SCHEDULED' AND followupId = :followupId") suspend fun remindersFor(followupId: String): List<ReminderEntity>
+    @Query("UPDATE business_profiles SET serverVersion = :serverVersion WHERE version = :version") suspend fun setServerVersion(version: Int, serverVersion: Int)
     @Query("SELECT * FROM reminders ORDER BY (status != 'SCHEDULED'), dueAt DESC LIMIT 200") fun observeReminders(): Flow<List<ReminderEntity>>
 
     // batches

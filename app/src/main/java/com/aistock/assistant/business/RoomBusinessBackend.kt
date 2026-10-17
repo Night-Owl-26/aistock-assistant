@@ -115,16 +115,21 @@ class RoomBusinessBackend @Inject constructor(
         dao.insertEvent(WorkEventEntity(newId(), id, kind, from.take(120), to.take(120), note.take(500), source, System.currentTimeMillis()))
 
     /** Used by Stocky (through the confirmation card) and by the screens. */
+    /** Called after the business setup is saved, so it can be copied to the owner's server. */
+    @Volatile var onSetupSaved: (suspend (BusinessConfig) -> Unit)? = null
+
     override suspend fun execute(action: BusinessAction): ExecResult {
         var reminder: Triple<String, String, Long>? = null
+        val cancelled = ArrayList<String>()
         val r: Op<ExecResult> = db.op {
             val now = System.currentTimeMillis()
             val cfg = config()
             when (action) {
                 is BusinessAction.SetupBusiness -> {
                     if (action.config.validate().isNotEmpty()) fail(ErrCode.INVALID)
-                    val v = (dao.profile()?.version ?: 0) + 1
-                    dao.insertProfile(BusinessProfileEntity(v, BusinessConfigJson.write(action.config), now))
+                    val prev = dao.profile()
+                    // The new version remembers which server version it was based on, for conflict checks.
+                    dao.insertProfile(BusinessProfileEntity((prev?.version ?: 0) + 1, BusinessConfigJson.write(action.config), now, prev?.serverVersion ?: 0))
                     ExecResult(true)
                 }
                 is BusinessAction.NewWork -> {
@@ -196,6 +201,7 @@ class RoomBusinessBackend @Inject constructor(
                     val f = dao.followup(action.followup.id) ?: fail(ErrCode.NOT_FOUND)
                     if (f.status != "PENDING") fail(ErrCode.NOT_FOUND)
                     dao.updateFollowup(f.copy(status = "DONE", result = action.result, completedAt = now))
+                    for (r in dao.remindersFor(f.id)) { dao.updateReminder(r.copy(status = "CANCELLED")); cancelled.add(r.id) }
                     dao.insertContact(ContactLogEntity(newId(), f.customerId, f.personName, if (f.kind == "MESSAGE") "MESSAGE" else f.kind, action.result, now))
                     action.nextDueAt?.let { d ->
                         dao.insertFollowup(FollowupEntity(newId(), f.customerId, f.personName, f.phone, f.kind, action.nextNote ?: f.note, d, "PENDING", "", f.workItemId, now))
@@ -208,7 +214,10 @@ class RoomBusinessBackend @Inject constructor(
                     dao.insertContact(ContactLogEntity(newId(), action.customer?.id, action.personName, "CALL", action.result, now))
                     action.followup?.let { fr ->
                         val f = dao.followup(fr.id)
-                        if (f != null && f.status == "PENDING") dao.updateFollowup(f.copy(status = "DONE", result = action.result, completedAt = now))
+                        if (f != null && f.status == "PENDING") {
+                            dao.updateFollowup(f.copy(status = "DONE", result = action.result, completedAt = now))
+                            for (r in dao.remindersFor(f.id)) { dao.updateReminder(r.copy(status = "CANCELLED")); cancelled.add(r.id) }
+                        }
                     }
                     action.nextDueAt?.let { d ->
                         dao.insertFollowup(FollowupEntity(newId(), action.customer?.id, action.personName, action.customer?.phone.orEmpty(), "CALL", action.nextNote.orEmpty(), d, "PENDING", "", null, now))
@@ -239,6 +248,8 @@ class RoomBusinessBackend @Inject constructor(
             is Op.Ok -> {
                 // The alarm is set only after the reminder is safely saved.
                 reminder?.let { (id, text, at) -> try { reminders.schedule(id, text, at) } catch (e: Exception) { } }
+                for (id in cancelled) try { reminders.cancel(id) } catch (e: Exception) { }
+                if (action is BusinessAction.SetupBusiness) try { onSetupSaved?.invoke(action.config) } catch (e: Exception) { }
                 r.value
             }
             is Op.Err -> ExecResult(false, r.code)
@@ -251,7 +262,16 @@ class RoomBusinessBackend @Inject constructor(
         reminders.cancel(id)
     }
 
-    suspend fun reminderShown(id: String) { dao.reminder(id)?.let { dao.updateReminder(it.copy(status = "SHOWN")) } }
+    /** @return false when the reminder was cancelled meanwhile (e.g. its follow-up was done), so nothing is shown. */
+    suspend fun reminderDue(id: String): Boolean {
+        val r = dao.reminder(id) ?: return false
+        if (r.status != "SCHEDULED") return false
+        dao.updateReminder(r.copy(status = "SHOWN"))
+        return true
+    }
+
+    suspend fun latestProfile() = dao.profile()
+    suspend fun markSynced(version: Int, serverVersion: Int) = dao.setServerVersion(version, serverVersion)
 
     /** After a restart or an update the alarms are gone; set them again. */
     suspend fun rescheduleAll() {

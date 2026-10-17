@@ -72,6 +72,33 @@ Until that is filled in: **Cloud AI credentials not configured; local fallback i
 * Restore validates the entire backup file first and replaces data inside one transaction; a bad file changes nothing.
 * The database uses real Room migrations (`AppDatabase.MIGRATIONS`); destructive fallback is not enabled.
 
+## Version 3: one app for many kinds of business
+
+**Business platform** (`app/.../business/`). A versioned, validated `BusinessConfig` says which modules a business uses
+(inventory, sales, purchases, expenses, customers, suppliers, orders, production, service tickets, appointments,
+projects, tasks, follow-ups, staff), its own words for things, its process steps and extra fields. Ten templates
+(`Templates.kt`): retail, garment manufacturing, wholesale, grocery, restaurant, service/repair, salon, construction,
+agency, custom. The bottom bar, the More menu, the forms and Stocky's tools all follow the configuration. Nothing in a
+configuration can run code or SQL; the server validates the same JSON shape (`server/src/businessConfig.js`).
+
+**Work items, follow-ups, staff, reminders, expiry, briefing.** One `work_items` table (with a `work_events` history)
+serves production orders, job cards, appointments, projects, orders and tasks. Follow-ups with reminders
+(AlarmManager, restored after reboot), a contact log, staff, batch expiry dates, and `Insights` — sales compared with the
+previous period, estimated margin (labelled as an estimate), fast/slow sellers, low stock with reorder amounts, prices at
+or below cost, expense jumps, missing entries, overdue work and follow-ups. Calls and messages are only handed to the
+dialler / WhatsApp / SMS; nothing is sent or dialled by the app.
+
+**Server** (`server/`, Node 22 + PostgreSQL + Caddy, Docker Compose). Accounts, businesses and roles, the Gemini key,
+plan limits and usage, real-time voice relay, backups, audit log. See `server/README.md` for deployment on Oracle Cloud.
+
+**Real-time voice** (`app/.../voice/live/`). The Gemini Live API through the owner's server: 16 kHz microphone audio
+streams up, Stocky's 24 kHz voice streams back and plays as it arrives; Google's voice detection lets the owner interrupt.
+Echo cancelling and noise suppression from the phone are switched on. Tool calls run in the app with the same rules as
+typed chat; a spoken "yes" only counts after Stocky has finished asking. Without a server the earlier speech-to-text →
+Gemini text → text-to-speech path (or the on-device rules) is used.
+
+**Database.** Room version 3; `MIGRATION_2_3` only adds tables, so V1/V2 data is kept (tested from a real version-1 file).
+
 ## Project layout
 
 ```

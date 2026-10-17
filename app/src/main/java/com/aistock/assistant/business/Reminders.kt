@@ -96,11 +96,13 @@ class ReminderReceiver : BroadcastReceiver() {
                 when (intent.action) {
                     AlarmReminders.ACTION_REMIND -> {
                         val id = intent.getStringExtra("id") ?: return@launch
-                        AlarmReminders.post(context, id.hashCode(), context.getString(R.string.reminder_title), intent.getStringExtra("text").orEmpty())
-                        business.reminderShown(id)
+                        if (business.reminderDue(id)) AlarmReminders.post(context, id.hashCode(), context.getString(R.string.reminder_title), intent.getStringExtra("text").orEmpty())
                     }
                     AlarmReminders.ACTION_BRIEFING -> {
-                        val list = Insights.build(business.insightsInput(System.currentTimeMillis(), 1), settings.current.value.currencySymbol)
+                        // A morning summary is about yesterday's full day compared with the day before.
+                        val now = System.currentTimeMillis()
+                        val yesterdayEnd = now - Math.floorMod(now + 19_800_000L, 86_400_000L) - 1
+                        val list = Insights.build(business.insightsInput(yesterdayEnd, 1), settings.current.value.currencySymbol, "yesterday", "the day before")
                         if (list.isNotEmpty()) AlarmReminders.post(context, 77_001, context.getString(R.string.briefing_title), list.take(5).joinToString("\n") { "• " + it.text })
                         alarms.scheduleBriefing(settings.current.value.briefingHour)
                     }

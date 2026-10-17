@@ -18,6 +18,8 @@ export function loadConfig(env = process.env) {
     textModel: get('GEMINI_TEXT_MODEL', 'gemini-flash-latest'),
     liveModel: get('GEMINI_LIVE_MODEL', 'gemini-3.8-live'),
     liveWsUrl: get('GEMINI_LIVE_WS_URL', 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained'),
+    liveMode: get('LIVE_MODE', 'relay'),
+    liveUpstreamUrl: get('GEMINI_LIVE_UPSTREAM_URL', 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent'),
     liveMaxSeconds: Number(get('LIVE_MAX_SECONDS', 600)),
     trialDays: Number(get('TRIAL_DAYS', 14)),
     accessTtlSeconds: Number(get('ACCESS_TTL_SECONDS', 3600)),
