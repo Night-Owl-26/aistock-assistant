@@ -95,9 +95,28 @@ jobs:
     needs: build
     if: github.event_name == 'workflow_dispatch' || contains(github.event.head_commit.message, '[device]')
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 45
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: aistock
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 20
     steps:
       - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Start a test AIStock server (fake Google behind it)
+        working-directory: server
+        run: |
+          npm ci
+          nohup node test/fakeGemini.js > ../fake-gemini.log 2>&1 &
+          DATABASE_URL=postgres://postgres:postgres@localhost:5432/aistock JWT_SECRET=$(openssl rand -hex 32) GEMINI_API_KEY=test-key \
+            GEMINI_BASE_URL=http://127.0.0.1:9090 REGISTER_PER_HOUR=100 nohup node src/server.js > ../test-server.log 2>&1 &
+          for i in $(seq 1 30); do curl -sf http://127.0.0.1:8080/healthz && break; sleep 1; done
       - uses: actions/download-artifact@v4
         with:
           name: AIStockAssistant-debug-apk
@@ -124,6 +143,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p device-out
+          cp test-server.log device-out/ 2>/dev/null || true
           echo "$GITHUB_SHA" > device-out/sha.txt
           cd device-out
           git init -q -b ci-device
