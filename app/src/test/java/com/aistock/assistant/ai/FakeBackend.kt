@@ -4,6 +4,8 @@ import java.util.UUID
 
 /** In-memory stand-in for the database so the conversation logic can be tested on its own. */
 open class FakeBackend : AssistantBackend {
+    var business: com.aistock.assistant.business.BusinessBackend? = null
+
     val productList = ArrayList<ProductRef>()
     val customers = ArrayList<PartyRef>()
     val suppliers = ArrayList<PartyRef>()
@@ -141,6 +143,7 @@ open class FakeBackend : AssistantBackend {
                 return ExecResult(true)
             }
             is Plan.RememberAlias -> { aliasList.removeAll { it.phrase.equals(plan.phrase, true) }; aliasList.add(AliasRef(plan.phrase, plan.productName)); return ExecResult(true) }
+            is Plan.Business -> return business?.execute(plan.action) ?: ExecResult(false, "FAILED")
         }
     }
 

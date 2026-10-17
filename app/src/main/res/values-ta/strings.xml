@@ -65,6 +65,7 @@
     <string name="barcode">பார்கோடு</string>
     <string name="before">முன்</string>
     <string name="bill">பில்</string>
+    <string name="briefing_title">இன்றைய வணிகச் சுருக்கம்</string>
     <string name="business_name">வணிகத்தின் பெயர்</string>
     <string name="business_position">உங்கள் வணிகம்</string>
     <string name="business_settings">வணிகம்</string>
@@ -371,6 +372,8 @@
     <string name="record_payment_made">கொடுத்த பணத்தைப் பதிவுசெய்</string>
     <string name="record_payment_received">பெற்ற பணத்தைப் பதிவுசெய்</string>
     <string name="reference_optional">குறிப்பு எண் (விருப்பம்)</string>
+    <string name="reminder_title">Stocky நினைவூட்டல்</string>
+    <string name="reminders">நினைவூட்டல்கள்</string>
     <string name="remove_item">பொருளை நீக்கு</string>
     <string name="remove_key">Key-ஐ நீக்கு</string>
     <string name="remove_short">கழி</string>

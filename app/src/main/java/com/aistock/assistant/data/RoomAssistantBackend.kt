@@ -36,6 +36,7 @@ class RoomAssistantBackend @Inject constructor(
     private val inventory: InventoryRepository,
     private val trade: TradeRepository,
     private val parties: PartyRepository,
+    private val business: com.aistock.assistant.business.RoomBusinessBackend,
 ) : AssistantBackend {
 
     /** Set by the assistant screen so audit entries point at the conversation they came from. */
@@ -49,8 +50,11 @@ class RoomAssistantBackend @Inject constructor(
         parties.list(kind).map { PartyRef(it.id, it.name, it.phone, it.balance, kind) }
 
     override suspend fun execute(plan: Plan): ExecResult {
+        // The business platform runs its own all-or-nothing transaction.
+        if (plan is Plan.Business) return business.execute(plan.action)
         val r: Op<ExecResult> = db.op {
             when (plan) {
+                is Plan.Business -> fail(ErrCode.INVALID)
                 is Plan.AddProduct -> {
                     val p = inventory.createProduct(
                         ProductInput(

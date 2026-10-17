@@ -243,6 +243,8 @@ S = {
 }
 
 S.update({
+"reminders": ("Reminders", "நினைவூட்டல்கள்"), "reminder_title": ("Reminder from Stocky", "Stocky நினைவூட்டல்"),
+"briefing_title": ("Today's business summary", "இன்றைய வணிகச் சுருக்கம்"),
 "greet_morning": ("Good morning", "காலை வணக்கம்"), "greet_afternoon": ("Good afternoon", "மதிய வணக்கம்"), "greet_evening": ("Good evening", "மாலை வணக்கம்"),
 "ask_ai_hint_handsfree": ("Listening for \"Hey Stocky\" — or tap the microphone.", "\"ஹே ஸ்டாக்கி\" என்று சொல்லுங்கள் — அல்லது மைக்கைத் தட்டுங்கள்."),
 "handsfree_title": ("Hey Stocky", "ஹே ஸ்டாக்கி"),

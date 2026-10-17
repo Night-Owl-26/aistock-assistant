@@ -6,6 +6,7 @@ import android.security.keystore.KeyProperties
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -58,6 +59,16 @@ data class Prefs(
     val ownerCheck: Boolean = true,
     /** "Hey Stocky" listening in the background is switched on. */
     val handsFree: Boolean = false,
+    /** Hour of the daily business briefing notification, -1 = off. */
+    val briefingHour: Int = -1,
+    /** AIStock server address; empty = not connected. */
+    val serverUrl: String = "",
+    val serverEmail: String = "",
+    val serverBusinessId: String = "",
+    /** "server" = Stocky AI through the AIStock server; "key" = own Gemini key on this phone (advanced). */
+    val aiSource: String = "server",
+    /** Real-time spoken conversation (Gemini Live) when signed in. */
+    val liveVoice: Boolean = true,
 ) {
     val tamil: Boolean get() = language == "ta"
     val cloudReady: Boolean get() = cloudEndpoint.startsWith("https://") && cloudModel.isNotBlank() && cloudKeySaved
@@ -82,6 +93,13 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
         val importOffered = booleanPreferencesKey("import_offered")
         val ownerCheck = booleanPreferencesKey("owner_check")
         val handsFree = booleanPreferencesKey("hands_free")
+        val briefing = intPreferencesKey("briefing_hour")
+        val serverUrl = stringPreferencesKey("server_url")
+        val serverEmail = stringPreferencesKey("server_email")
+        val serverBusiness = stringPreferencesKey("server_business")
+        val aiSource = stringPreferencesKey("ai_source")
+        val liveVoice = booleanPreferencesKey("live_voice")
+        val session = stringPreferencesKey("server_session_enc")
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -104,6 +122,13 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
             importOffered = p[K.importOffered] ?: false,
             ownerCheck = p[K.ownerCheck] ?: true,
             handsFree = p[K.handsFree] ?: false,
+            briefingHour = p[K.briefing] ?: -1,
+            serverUrl = p[K.serverUrl].orEmpty(),
+            serverEmail = p[K.serverEmail].orEmpty(),
+            serverBusinessId = p[K.serverBusiness].orEmpty(),
+            // Phones that already used their own key keep doing so until they sign in.
+            aiSource = p[K.aiSource] ?: (if (!p[K.key].isNullOrEmpty()) "key" else "server"),
+            liveVoice = p[K.liveVoice] ?: true,
         )
     }
 
@@ -131,6 +156,31 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
     suspend fun setImportOffered() = context.dataStore.edit { it[K.importOffered] = true }.let { }
 
     suspend fun setOwnerCheck(on: Boolean) = context.dataStore.edit { it[K.ownerCheck] = on }.let { }
+    suspend fun setBriefingHour(h: Int) = context.dataStore.edit { it[K.briefing] = h }.let { }
+    suspend fun setAiSource(s: String) = context.dataStore.edit { it[K.aiSource] = s }.let { }
+    suspend fun setLiveVoice(on: Boolean) = context.dataStore.edit { it[K.liveVoice] = on }.let { }
+
+    /** Saves the signed-in session. The refresh token is encrypted with the Android Keystore. */
+    suspend fun setServerSession(url: String, email: String, businessId: String, refreshToken: String): Boolean {
+        val enc = SecretBox.encrypt(refreshToken) ?: return false
+        context.dataStore.edit {
+            it[K.serverUrl] = url.trimEnd('/'); it[K.serverEmail] = email; it[K.serverBusiness] = businessId; it[K.session] = enc; it[K.aiSource] = "server"
+        }
+        return true
+    }
+
+    suspend fun updateRefreshToken(refreshToken: String) {
+        val enc = SecretBox.encrypt(refreshToken) ?: return
+        context.dataStore.edit { it[K.session] = enc }
+    }
+
+    suspend fun setServerBusiness(id: String) = context.dataStore.edit { it[K.serverBusiness] = id }.let { }
+    suspend fun setServerUrl(url: String) = context.dataStore.edit { it[K.serverUrl] = url.trim().trimEnd('/') }.let { }
+
+    suspend fun refreshToken(): String? = context.dataStore.data.first()[K.session]?.let { SecretBox.decrypt(it) }
+
+    suspend fun clearServerSession() = context.dataStore.edit { it.remove(K.session); it.remove(K.serverBusiness); it.remove(K.serverEmail) }.let { }
+
     suspend fun setHandsFree(on: Boolean) = context.dataStore.edit { it[K.handsFree] = on }.let { }
 
     suspend fun setAiMode(mode: String) = context.dataStore.edit { it[K.aiMode] = mode }.let { }

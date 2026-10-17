@@ -56,19 +56,30 @@ object AppModule {
      */
     @Provides
     @Singleton
-    fun llmSource(settings: SettingsStore, connectivity: Connectivity, @ApplicationContext context: Context): LlmSource = LlmSource(settings, connectivity, AiDiagnostics(context))
+    fun llmSource(settings: SettingsStore, connectivity: Connectivity, @ApplicationContext context: Context, server: com.aistock.assistant.server.ServerApi): LlmSource =
+        LlmSource(settings, connectivity, AiDiagnostics(context), server)
+
+    @Provides
+    fun reminderSink(impl: com.aistock.assistant.business.AlarmReminders): com.aistock.assistant.business.ReminderSink = impl
 }
 
 /** Gives the conversation a model client when one is configured and the phone is online; otherwise null. */
-class LlmSource(private val settings: SettingsStore, private val connectivity: Connectivity, private val diagnostics: AiDiagnostics) {
+class LlmSource(private val settings: SettingsStore, private val connectivity: Connectivity, private val diagnostics: AiDiagnostics, private val server: com.aistock.assistant.server.ServerApi) {
+    /** The model name the server uses, learnt from the account call; used to pick the right "thinking" setting. */
+    @Volatile var serverModel: String = "gemini-flash-latest"
+
     /** The step-by-step connection check shown in Settings. */
     suspend fun diagnose(): List<Check> {
         val p = settings.current.value
+        if (p.aiSource == "server") return diagnostics.runServer(server, p.serverUrl, p.tamil) { serverModel = it }
         return diagnostics.run(settings.cloudKey(), p.cloudModel, p.tamil)
     }
 
     suspend fun client(): LlmClient? {
         val p = settings.current.value
+        // Signed in to the owner's AIStock server: the key stays on the server.
+        if (p.aiSource == "server" && server.signedIn) return com.aistock.assistant.ai.llm.ServerLlmClient(server, serverModel)
+        if (p.aiSource == "server") return null
         if (p.aiMode != "cloud" || !p.cloudReady) return null
         val key = settings.cloudKey()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
         // Google's own address gets Google's own API; anything else is treated as a chat-completions service.

@@ -772,6 +772,7 @@ class AssistantEngine(
             is Plan.AddColumn -> p.doneAddColumn(plan.sheet, plan.column)
             is Plan.AddRow -> p.doneAddRow(plan.sheet)
             is Plan.RememberAlias -> p.doneAlias(plan.phrase, plan.productName)
+            is Plan.Business -> plan.doneText + (r.reference?.takeIf { it.isNotBlank() && it !in plan.doneText }?.let { " ($it)" } ?: "")
         }
         // "Undo that" always means the latest change; one that cannot be undone ends the chain.
         lastUndo = if (plan is Plan.UndoLast) null else r.undoToken?.let { it to text }

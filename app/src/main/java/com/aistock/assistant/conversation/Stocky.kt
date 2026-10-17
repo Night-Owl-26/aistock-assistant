@@ -49,7 +49,13 @@ class Stocky(
     private val now: () -> Instant = { Instant.now() },
     private val online: () -> Boolean = { true },
     private val tamil: () -> Boolean = { false },
+    private val business: com.aistock.assistant.business.BusinessBackend? = null,
 ) {
+    private val businessTools = business?.let { BusinessTools(it, backend, engine, symbol, zone, now) }
+
+    /** Every tool the model may use: stock and money, plus the business platform when it is available. */
+    val tools: List<ToolSpec> get() = TOOLS + (if (businessTools != null) BusinessTools.SPECS else emptyList())
+
     private val turns = ArrayList<ChatTurn>()
     private var summary = ""
     private var currentParty: String? = null
@@ -127,6 +133,42 @@ class Stocky(
         return reply
     }
 
+    // ------------------------------------------------------------------ real-time voice
+
+    private var liveTurn = TurnState()
+
+    /** The instructions for a real-time voice session: the same persona and live business context. */
+    suspend fun voiceInstructions(): String = systemPrompt() + "\n\n" + VOICE_STYLE
+
+    /** Called when the owner starts speaking a new turn in a voice session. */
+    fun newVoiceTurn(userText: String?) {
+        liveTurn = TurnState(cardWasShown = engine.awaitingConfirmation)
+        if (!userText.isNullOrBlank()) { engine.commandText = userText; remember(userText, "") }
+    }
+
+    /** What a voice-session tool call did, so the screen can show cards and buttons. */
+    class VoiceToolResult(val text: String, val card: AssistantReply?, val executed: AssistantReply?, val actions: List<com.aistock.assistant.ai.ReplyAction>)
+
+    /** Runs one tool call from a voice session with exactly the same checks as typed conversation. */
+    suspend fun runVoiceTool(call: ToolCall): VoiceToolResult {
+        val before = liveTurn.executed
+        val actionsBefore = liveTurn.fx.actions.size
+        val text = try {
+            runTool(call, liveTurn)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            "ERROR: that could not be done. Nothing was changed."
+        }
+        val executed = liveTurn.executed?.takeIf { it !== before }
+        executed?.let { remember(null, it.text) }
+        val card = if (liveTurn.proposed && executed == null) engine.pendingReply else null
+        return VoiceToolResult(text.take(6000), card, executed, liveTurn.fx.actions.drop(actionsBefore))
+    }
+
+    /** The voice session finished speaking a turn: keep it in the conversation history. */
+    fun voiceTurnDone(assistantText: String) { if (assistantText.isNotBlank()) remember(null, assistantText) }
+
     suspend fun confirm(): AssistantReply = engine.confirm().also { remember(null, it.text) }
     suspend fun cancel(): AssistantReply = engine.cancel().also { remember(null, it.text) }
     suspend fun undo(token: String): AssistantReply = engine.undo(token).also { remember(null, it.text) }
@@ -151,7 +193,7 @@ class Stocky(
 
         var finalText = ""
         for (round in 0 until MAX_ROUNDS) {
-            val reply = client.chat(messages, TOOLS)
+            val reply = client.chat(messages, tools)
             if (reply.toolCalls.isEmpty()) { finalText = reply.text.trim(); break }
             // Every call the model made must get an answer, so only the ones that will be run are kept.
             val calls = reply.toolCalls.take(6)
@@ -176,11 +218,12 @@ class Stocky(
             return AssistantReply(finalText.ifBlank { card.text }, ReplyKind.CONFIRM, card.intent, lines = card.lines, dangerous = card.dangerous, spoken = finalText.ifBlank { card.text })
         }
         if (finalText.isBlank()) throw IllegalStateException("empty model reply")
-        return AssistantReply(finalText, if (turn.choices.isNotEmpty()) ReplyKind.CLARIFY else ReplyKind.ANSWER, Intent.UNKNOWN, choices = turn.choices)
+        return AssistantReply(finalText, if (turn.choices.isNotEmpty()) ReplyKind.CLARIFY else ReplyKind.ANSWER, Intent.UNKNOWN, choices = turn.choices, actions = turn.fx.actions.toList())
     }
 
     /** @param cardWasShown a confirmation card was already on screen when the owner sent this message */
     private class TurnState(val cardWasShown: Boolean = false) {
+        val fx = ToolEffects()
         var proposed = false
         var executed: AssistantReply? = null
         var choices: List<String> = emptyList()
@@ -194,6 +237,21 @@ class Stocky(
         val name = try { businessName() } catch (e: Exception) { "" }
         if (name.isNotBlank()) sb.append("\nBUSINESS: ").append(name)
         if (tamil()) sb.append("\nThe owner uses the app in Tamil: when their message is not clearly English, reply in Tamil script.")
+        business?.let { b ->
+            try {
+                val cfg = b.config()
+                sb.append("\nBUSINESS SETUP: ").append(if (b.configured()) cfg.businessType else "not chosen yet (shop default)")
+                    .append("; modules ").append(cfg.modules.joinToString(", ") { it.key })
+                for (m in cfg.workModules) {
+                    val w = cfg.workflow(m)
+                    sb.append("\n- ${m.key} is called \"${cfg.term(m.key, m.key)}\"; statuses ${w.statuses.joinToString("/")}")
+                    if (w.stages.isNotEmpty()) sb.append("; steps ${w.stages.joinToString(" > ")}")
+                    val fl = cfg.fields(m); if (fl.isNotEmpty()) sb.append("; details ${fl.joinToString(", ") { it.key }}")
+                }
+                if (cfg.terminology.isNotEmpty()) sb.append("\nOWNER'S WORDS: ").append(cfg.terminology.entries.joinToString("; ") { "${it.key} = ${it.value}" })
+                if (!b.configured()) sb.append("\nThe business type has not been chosen. If the owner describes their business, ask one or two short questions about how their work flows (steps, what they track), then call propose_business_setup.")
+            } catch (e: Exception) { }
+        }
         val ctx = ArrayList<String>()
         engine.contextProduct?.let { ctx.add("product being discussed = $it") }
         currentParty?.let { ctx.add("customer/supplier being discussed = $it") }
@@ -268,6 +326,11 @@ class Stocky(
     }
 
     private suspend fun runTool(call: ToolCall, turn: TurnState): String {
+        businessTools?.takeIf { it.handles(call.name) }?.let { bt ->
+            val r = bt.run(call, turn.fx)
+            if (turn.fx.proposed) turn.proposed = true
+            return r
+        }
         when (call.name) {
             // ---------------------------------------------------------- reading
             "find_products" -> {
@@ -567,6 +630,10 @@ CHANGES: You cannot change anything yourself. To add or remove stock, record a s
 QUESTIONS: Ask only what is needed, one question at a time. Do not ask for confirmation on questions that only read data. Do not invent prices or other financial details for new items: ask.
 
 STYLE: Short, natural and warm, like a helpful person at the shop, not a program. Simple answers in one or two sentences. Use short lines or "• " bullets for lists. No markdown, no JSON, and never mention tools, functions or databases. Greet naturally and differently each time, using the time of day or what is going on in the business if useful.
+""".trim()
+
+        val VOICE_STYLE = """
+VOICE: This is a spoken conversation. Answer in one or two short spoken sentences, like a person at the counter. No lists read out longer than three items; offer the rest. Say amounts the way people say them ("ஆயிரத்து இருநூறு ரூபாய்" or "twelve hundred rupees"). If you are interrupted, stop and listen. For any change, call the propose_ tool, then ask "seri-ya?" / "shall I save it?" and wait for the owner's yes before calling confirm_pending. Money and big corrections must be confirmed by the owner tapping Confirm on screen; tell them so.
 """.trim()
 
         val TOOLS: List<ToolSpec> = listOf(

@@ -65,6 +65,7 @@
     <string name="barcode">Barcode</string>
     <string name="before">Before</string>
     <string name="bill">Bill</string>
+    <string name="briefing_title">Today\'s business summary</string>
     <string name="business_name">Business name</string>
     <string name="business_position">Your business</string>
     <string name="business_settings">Business</string>
@@ -371,6 +372,8 @@
     <string name="record_payment_made">Record payment made</string>
     <string name="record_payment_received">Record payment received</string>
     <string name="reference_optional">Reference number (optional)</string>
+    <string name="reminder_title">Reminder from Stocky</string>
+    <string name="reminders">Reminders</string>
     <string name="remove_item">Remove item</string>
     <string name="remove_key">Remove key</string>
     <string name="remove_short">Remove</string>

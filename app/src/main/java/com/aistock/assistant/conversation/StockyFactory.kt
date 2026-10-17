@@ -16,6 +16,7 @@ class StockyFactory @Inject constructor(
     private val llmSource: LlmSource,
     private val settings: SettingsStore,
     private val business: BusinessRepository,
+    val platform: com.aistock.assistant.business.RoomBusinessBackend,
 ) {
     fun create(): Stocky {
         val engine = AssistantEngine(
@@ -32,6 +33,7 @@ class StockyFactory @Inject constructor(
             symbol = { settings.current.value.currencySymbol },
             online = { llmSource.online() },
             tamil = { settings.current.value.tamil },
+            business = platform,
         )
     }
 }

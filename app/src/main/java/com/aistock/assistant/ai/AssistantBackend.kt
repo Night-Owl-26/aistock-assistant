@@ -39,6 +39,8 @@ sealed class Plan {
     data class AddRow(val sheet: String, val values: Map<String, String>) : Plan()
     /** Teaches Stocky that the owner's own word for something means a product. */
     data class RememberAlias(val phrase: String, val productName: String) : Plan()
+    /** A change to the business platform (work items, follow-ups, staff, setup ...). [doneText] is said after it is saved. */
+    data class Business(val action: com.aistock.assistant.business.BusinessAction, val doneText: String) : Plan()
 }
 
 /** The owner's own name for a product, e.g. "blue cotton" -> "BC-40-COTTON-BLUE". */
@@ -104,4 +106,9 @@ data class AssistantReply(
     val dangerous: Boolean = false,
     /** Short sentence suitable for reading aloud. */
     val spoken: String = text,
+    /** Buttons that hand over to another app (dialler, WhatsApp, SMS). Nothing is sent or called by Stocky itself. */
+    val actions: List<ReplyAction> = emptyList(),
 )
+
+/** kind: CALL, WHATSAPP, SMS, SHARE */
+data class ReplyAction(val kind: String, val label: String, val phone: String = "", val text: String = "", val person: String = "", val customerId: String? = null)

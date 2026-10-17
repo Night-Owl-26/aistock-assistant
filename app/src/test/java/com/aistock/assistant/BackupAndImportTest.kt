@@ -244,6 +244,11 @@ class BackupAndImportTest {
             db.stockyDao().saveAlias(com.aistock.assistant.database.BusinessAliasEntity("a1", "blue cotton", "blue cotton", "Blue Cotton", 1))
             assertEquals(1, db.stockyDao().aliases().size)
             assertEquals(0, db.stockyDao().sheets().size)
+            // Version 3 tables exist and work after the upgrade.
+            assertEquals(null, db.workDao().profile())
+            db.workDao().insertStaff(com.aistock.assistant.business.StaffEntity("s1", "Ravi", createdAt = 1))
+            db.workDao().insertWork(com.aistock.assistant.business.WorkItemEntity("w1", "production", "PO-0001", "Polo", status = "Open", createdAt = 1, updatedAt = 1, staffId = "s1"))
+            assertEquals("Ravi", db.workDao().rows("production", 10).single().staffName)
         } finally {
             db.close(); file.delete()
         }
