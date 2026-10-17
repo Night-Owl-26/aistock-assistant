@@ -68,6 +68,9 @@ class HandsFreeService : Service() {
     @Inject lateinit var factory: StockyFactory
     @Inject lateinit var settings: SettingsStore
     @Inject lateinit var business: BusinessRepository
+    @Inject lateinit var server: com.aistock.assistant.server.ServerApi
+    @Inject lateinit var connectivity: com.aistock.assistant.di.Connectivity
+    private var live: com.aistock.assistant.voice.live.LiveSession? = null
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private lateinit var engine: WakeWordEngine
@@ -98,7 +101,7 @@ class HandsFreeService : Service() {
         }
         HandsFree.setRunning(true)
         scope.launch {
-            HandsFree.paused.collect { p -> if (p > 0) engine.stop() else if (!busy) waitForWake() }
+            HandsFree.paused.collect { p -> if (p > 0) { engine.stop(); live?.stop("user") } else if (!busy) waitForWake() }
         }
     }
 
@@ -130,6 +133,9 @@ class HandsFreeService : Service() {
         override fun onHeard(wake: Boolean, command: String) {
             engine.stop()
             if (WakePhrase.isStop(command)) { say(getString(R.string.handsfree_bye)) { waitForWake() }; return }
+            // Signed in with real-time voice: the whole conversation is spoken naturally until it goes quiet.
+            val p = settings.current.value
+            if (p.liveVoice && p.aiSource == "server" && server.signedIn && connectivity.isOnline()) { startLive(command); return }
             if (command.isBlank()) {
                 // Only the name was said: answer and listen for the request.
                 say(getString(R.string.handsfree_yes)) { listenForReply() }
@@ -144,6 +150,28 @@ class HandsFreeService : Service() {
             update(getString(R.string.handsfree_problem))
             scope.launch { kotlinx.coroutines.delay(15_000); waitForWake() }
         }
+    }
+
+    private fun startLive(firstText: String) {
+        busy = true
+        update(getString(R.string.handsfree_conversation))
+        val s = com.aistock.assistant.voice.live.LiveSession(this, server, stocky, scope, idleSeconds = 20, firstText = firstText.ifBlank { null })
+        live = s
+        scope.launch {
+            launch {
+                s.updates.collect { u ->
+                    if (u is com.aistock.assistant.voice.live.LiveUpdate.Card && u.reply.kind == ReplyKind.CONFIRM && stocky.needsOwnerCheck) openAppToConfirm()
+                    if (u is com.aistock.assistant.voice.live.LiveUpdate.StockySpeech && u.final) save("", u.text)
+                }
+            }
+            s.state.collect { st ->
+                if (st == com.aistock.assistant.voice.live.LiveState.ENDED || st == com.aistock.assistant.voice.live.LiveState.ERROR) {
+                    if (live === s) { live = null; busy = false; kotlinx.coroutines.delay(800); waitForWake() }
+                    return@collect
+                }
+            }
+        }
+        if (firstText.isBlank()) say(getString(R.string.handsfree_yes)) { s.start() } else s.start()
     }
 
     private fun handle(command: String) {
@@ -182,7 +210,7 @@ class HandsFreeService : Service() {
     private suspend fun save(user: String, assistant: String) {
         try {
             val id = conversationId ?: business.newConversation(getString(R.string.handsfree_conversation_title)).also { conversationId = it }
-            business.addMessage(id, "user", user, "", "", null)
+            if (user.isNotBlank()) business.addMessage(id, "user", user, "", "", null)
             business.addMessage(id, "assistant", assistant, "", "", null)
         } catch (e: Exception) { /* history is best effort */ }
     }
@@ -230,6 +258,7 @@ class HandsFreeService : Service() {
     }
 
     override fun onDestroy() {
+        live?.stop("user"); live = null
         HandsFree.setRunning(false)
         BeepMuter.unmuteNow(this)
         if (::engine.isInitialized) engine.release()

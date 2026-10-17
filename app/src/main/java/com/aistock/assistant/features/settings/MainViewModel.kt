@@ -26,7 +26,12 @@ class MainViewModel @Inject constructor(
     private val settings: SettingsStore,
     private val business: BusinessRepository,
     private val llm: com.aistock.assistant.di.LlmSource,
+    private val alarms: com.aistock.assistant.business.AlarmReminders,
+    platform: com.aistock.assistant.business.RoomBusinessBackend,
 ) : ViewModel() {
+    val businessConfig: StateFlow<com.aistock.assistant.business.BusinessConfig> =
+        platform.observeConfig().stateIn(viewModelScope, SharingStarted.Eagerly, com.aistock.assistant.business.Templates.DEFAULT)
+    val businessConfigured: StateFlow<Boolean?> = platform.observeConfigured().stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val prefs: StateFlow<Prefs> = settings.flow.stateIn(viewModelScope, SharingStarted.Eagerly, Prefs())
     val businessProfile: StateFlow<BusinessEntity?> = business.observeBusiness().stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
@@ -70,6 +75,9 @@ class MainViewModel @Inject constructor(
     suspend fun setTts(on: Boolean) = settings.setTts(on)
     suspend fun setAllowNegative(on: Boolean) = settings.setAllowNegative(on)
     suspend fun setLowStockAlerts(on: Boolean) = settings.setLowStockAlerts(on)
+    suspend fun setAiSource(s: String) = settings.setAiSource(s)
+    suspend fun setLiveVoice(on: Boolean) = settings.setLiveVoice(on)
+    suspend fun setBriefingHour(h: Int) { settings.setBriefingHour(h); alarms.scheduleBriefing(h) }
     suspend fun setOwnerCheck(on: Boolean) = settings.setOwnerCheck(on)
     suspend fun setHandsFree(on: Boolean) = settings.setHandsFree(on)
     suspend fun setAiMode(mode: String) = settings.setAiMode(mode)

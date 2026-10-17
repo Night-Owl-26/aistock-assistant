@@ -97,6 +97,7 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
     val partial by vm.partial.collectAsStateWithLifecycle()
     val busy by vm.busy.collectAsStateWithLifecycle()
     val source by vm.source.collectAsStateWithLifecycle()
+    val liveState by vm.liveState.collectAsStateWithLifecycle()
     var input by rememberSaveable { mutableStateOf("") }
     var autoStarted by rememberSaveable { mutableStateOf(false) }
     val listState = rememberLazyListState()
@@ -161,7 +162,7 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
     }
 
     val permission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) startVoice() else vm.onVoiceError(msgNoPermission)
+        if (!granted) vm.onVoiceError(msgNoPermission) else if (vm.liveAvailable()) vm.startLive() else startVoice()
     }
     // While the chat has the microphone, background "Hey Stocky" listening steps aside.
     val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
@@ -183,6 +184,14 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
     fun micPressed() {
         autoListening = false
         manualMic = true
+        // Real-time conversation: one tap starts it, the next tap ends it.
+        if (vm.liveState.value != null) { vm.stopLive(); return }
+        if (vm.liveAvailable()) {
+            speaker.stop(); recognizer.stop()
+            if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) vm.startLive()
+            else permission.launch(Manifest.permission.RECORD_AUDIO)
+            return
+        }
         if (voice == VoiceState.LISTENING) { recognizer.stop(); vm.onVoiceStopped(); return }
         if (busy) return
         if (ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) startVoice()
@@ -247,7 +256,14 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
         bottomBar = {
             Surface(color = MaterialTheme.colorScheme.background, shadowElevation = 8.dp, modifier = Modifier.imePadding()) {
                 Column(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    val status = when (voice) {
+                    val status = if (liveState != null) when (liveState) {
+                        com.aistock.assistant.voice.live.LiveState.CONNECTING -> stringResource(R.string.live_connecting)
+                        com.aistock.assistant.voice.live.LiveState.RECONNECTING -> stringResource(R.string.live_reconnecting)
+                        com.aistock.assistant.voice.live.LiveState.LISTENING -> stringResource(R.string.live_listening)
+                        com.aistock.assistant.voice.live.LiveState.THINKING -> stringResource(R.string.understanding)
+                        com.aistock.assistant.voice.live.LiveState.SPEAKING -> stringResource(R.string.live_speaking)
+                        else -> stringResource(R.string.try_again)
+                    } else when (voice) {
                         VoiceState.LISTENING -> partial.ifBlank { stringResource(R.string.listening) }
                         VoiceState.PROCESSING -> stringResource(R.string.understanding)
                         VoiceState.SPEAKING -> stringResource(R.string.speaking)
@@ -277,7 +293,7 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
                                 modifier = Modifier.size(60.dp).clickable(enabled = !busy, role = Role.Button) { vm.send(input); input = "" },
                             ) { Box(contentAlignment = Alignment.Center) { Icon(Icons.AutoMirrored.Filled.Send, contentDescription = stringResource(R.string.send)) } }
                         } else {
-                            val listening = voice == VoiceState.LISTENING
+                            val listening = voice == VoiceState.LISTENING || liveState != null
                             Surface(
                                 color = if (listening) MaterialTheme.colorScheme.error else Color(0xFFFFC857),
                                 contentColor = if (listening) MaterialTheme.colorScheme.onError else Color(0xFF2C1A00),
@@ -346,7 +362,17 @@ private fun Bubble(item: ChatItem, busy: Boolean, vm: AssistantViewModel) {
         ) {
             Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
                 if (item.kind == ReplyKind.DONE) { Tag(stringResource(R.string.done)); Spacer(Modifier.height(6.dp)) }
-                Text(item.text, style = MaterialTheme.typography.bodyLarge)
+                if (item.text.isNotBlank()) Text(item.text, style = MaterialTheme.typography.bodyLarge, fontStyle = if (item.partial) androidx.compose.ui.text.font.FontStyle.Italic else null)
+                if (item.actions.isNotEmpty()) {
+                    val c = LocalContext.current
+                    Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
+                        for (a in item.actions) {
+                            if (a.text.isNotBlank() && a.kind != "CALL" && a === item.actions.first()) Text(a.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = 4.dp))
+                            Button(onClick = { com.aistock.assistant.features.work.handOff(c, a.kind, a.phone, a.text); vm.handedOff(a) }, modifier = Modifier.fillMaxWidth()) { Text(a.label) }
+                        }
+                        Text(stringResource(R.string.not_sent_note), style = MaterialTheme.typography.labelSmall)
+                    }
+                }
                 Text(
                     java.text.DateFormat.getTimeInstance(java.text.DateFormat.SHORT).format(java.util.Date(item.time)),
                     style = MaterialTheme.typography.labelSmall, color = LocalContentColor.current.copy(alpha = 0.6f),

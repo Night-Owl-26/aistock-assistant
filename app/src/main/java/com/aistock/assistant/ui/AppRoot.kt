@@ -64,16 +64,25 @@ import com.aistock.assistant.ui.components.LocalCurrency
 import com.aistock.assistant.ui.components.LocalToast
 import com.aistock.assistant.ui.theme.AIStockTheme
 import kotlinx.coroutines.launch
+import com.aistock.assistant.business.BusinessConfig
+import com.aistock.assistant.business.Module
+import com.aistock.assistant.features.work.*
 
-private data class TopLevel(val route: String, val base: String, val label: Int, val icon: Int)
+private data class TopLevel(val route: String, val base: String, val label: Int, val icon: Int, val module: Module? = null)
 
-private val TOP_LEVEL = listOf(
-    TopLevel("home", "home", R.string.nav_home, R.drawable.ic_home),
-    TopLevel("ai", "ai", R.string.nav_ai, R.drawable.ic_ai),
-    TopLevel("inventory", "inventory", R.string.nav_inventory, R.drawable.ic_inventory),
-    TopLevel("transactions", "transactions", R.string.nav_transactions, R.drawable.ic_receipt),
-    TopLevel("more", "more", R.string.nav_more, R.drawable.ic_more),
-)
+/**
+ * The bottom bar follows the business: Home and Chat always, then the two things this business uses most
+ * (a garment unit sees Production, a repair shop Jobs, a shop Inventory and Transactions), then More.
+ */
+private fun topLevel(cfg: BusinessConfig): List<TopLevel> {
+    val candidates = ArrayList<TopLevel>()
+    for (m in cfg.workModules.filter { it != Module.TASKS }) candidates.add(TopLevel("w_${m.key}", "w_${m.key}", R.string.m_tasks, R.drawable.ic_work, m))
+    if (cfg.has(Module.INVENTORY)) candidates.add(TopLevel("inventory", "inventory", R.string.nav_inventory, R.drawable.ic_inventory))
+    if (cfg.has(Module.SALES) || cfg.has(Module.PURCHASES) || cfg.has(Module.EXPENSES)) candidates.add(TopLevel("transactions", "transactions", R.string.nav_transactions, R.drawable.ic_receipt))
+    if (cfg.has(Module.TASKS)) candidates.add(TopLevel("w_tasks", "w_tasks", R.string.m_tasks, R.drawable.ic_work, Module.TASKS))
+    return listOf(TopLevel("home", "home", R.string.nav_home, R.drawable.ic_home), TopLevel("ai", "ai", R.string.nav_ai, R.drawable.ic_ai)) +
+        candidates.take(2) + TopLevel("more", "more", R.string.nav_more, R.drawable.ic_more)
+}
 
 @Composable
 fun AppRoot(startTalking: Boolean = false, openChat: Boolean = false, vm: MainViewModel = hiltViewModel()) {
@@ -100,7 +109,9 @@ private fun MainScaffold(vm: MainViewModel, startTalking: Boolean, openChat: Boo
     val scope = rememberCoroutineScope()
     val entry by navController.currentBackStackEntryAsState()
     val currentRoute = entry?.destination?.route.orEmpty()
-    val showBar = TOP_LEVEL.any { it.base == currentRoute.substringBefore('?') }
+    val cfg by vm.businessConfig.collectAsStateWithLifecycle()
+    val tabs = remember(cfg) { topLevel(cfg) }
+    val showBar = tabs.any { it.base == currentRoute.substringBefore('?') }
 
     val nav = remember(navController) {
         AppNav(
@@ -141,7 +152,7 @@ private fun MainScaffold(vm: MainViewModel, startTalking: Boolean, openChat: Boo
             snackbarHost = { SnackbarHost(snackbar) },
             bottomBar = {
                 if (showBar) NavigationBar {
-                    for (item in TOP_LEVEL) {
+                    for (item in tabs) {
                         NavigationBarItem(
                             selected = currentRoute.substringBefore('?') == item.base,
                             onClick = {
@@ -157,7 +168,7 @@ private fun MainScaffold(vm: MainViewModel, startTalking: Boolean, openChat: Boo
                                 }
                             },
                             icon = { Icon(painterResource(item.icon), contentDescription = null) },
-                            label = { Text(stringResource(item.label), maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                            label = { Text(item.module?.let { moduleTitle(cfg, it) } ?: stringResource(item.label), maxLines = 1, overflow = TextOverflow.Ellipsis) },
                         )
                     }
                 }
@@ -178,7 +189,16 @@ private fun MainScaffold(vm: MainViewModel, startTalking: Boolean, openChat: Boo
                         navArgument("listen") { type = NavType.BoolType; defaultValue = false },
                     ),
                 ) { AssistantScreen(nav, prefs, it.arguments?.getString("conv"), it.arguments?.getBoolean("listen") ?: false) }
-                composable("more") { MoreScreen(nav, vm) }
+                composable("more") { MoreScreen(nav, vm, cfg, tabs.mapNotNull { it.module }.toSet()) }
+                for (m in Module.WORK) composable("w_${m.key}") { WorkListScreen(nav, m.key, showBack = false) }
+                composable("worklist/{module}", arguments = listOf(navArgument("module") { type = NavType.StringType })) { WorkListScreen(nav, it.arguments?.getString("module") ?: "tasks", showBack = true) }
+                composable("work/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { WorkDetailScreen(nav, it.arguments?.getString("id").orEmpty()) }
+                composable("workform/{module}", arguments = listOf(navArgument("module") { type = NavType.StringType })) { WorkFormScreen(nav, it.arguments?.getString("module") ?: "tasks") }
+                composable("followups") { FollowupsScreen(nav) }
+                composable("staff") { StaffScreen(nav) }
+                composable("reminders") { RemindersScreen(nav) }
+                composable("setup") { BusinessSetupScreen(nav) }
+                composable("account") { com.aistock.assistant.features.account.AccountScreen(nav) }
 
                 composable("product?id={id}", arguments = listOf(navArgument("id") { type = NavType.StringType; nullable = true; defaultValue = null })) {
                     ProductFormScreen(nav, it.arguments?.getString("id"))

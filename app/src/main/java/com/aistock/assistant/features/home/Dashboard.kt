@@ -26,6 +26,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -91,7 +94,7 @@ class DashboardViewModel @Inject constructor(
 }
 
 @Composable
-fun DashboardScreen(nav: AppNav, vm: DashboardViewModel = hiltViewModel()) {
+fun DashboardScreen(nav: AppNav, vm: DashboardViewModel = hiltViewModel(), work: com.aistock.assistant.features.work.WorkViewModel = hiltViewModel()) {
     val st by vm.state.collectAsState()
     LaunchedEffect(Unit) { vm.refreshDay() }
     Column(
@@ -106,6 +109,25 @@ fun DashboardScreen(nav: AppNav, vm: DashboardViewModel = hiltViewModel()) {
             )
             Text(st.businessName.ifBlank { stringResource(R.string.app_name) }, style = MaterialTheme.typography.headlineSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(fmtDate(System.currentTimeMillis()), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        // The business type is chosen once; until then the shop default is used.
+        val configured by work.configured.collectAsState()
+        if (configured == false) {
+            AppCard(Modifier.fillMaxWidth(), onClick = { nav.go("setup") }) {
+                Text(stringResource(R.string.setup_card_title), style = MaterialTheme.typography.titleMedium)
+                Text(stringResource(R.string.setup_card_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        // What needs attention, worked out from the records (no AI involved).
+        var insights by remember { mutableStateOf<List<com.aistock.assistant.business.Insight>>(emptyList()) }
+        LaunchedEffect(st) { insights = try { work.briefing(1) } catch (e: Exception) { emptyList() } }
+        val important = insights.filter { it.kind in setOf("overdue_work", "due_today", "followups", "expiry", "low_stock", "missing") }.take(3)
+        if (important.isNotEmpty()) {
+            AppCard(Modifier.fillMaxWidth(), onClick = { nav.go("ai") }) {
+                Text(stringResource(R.string.needs_attention), style = MaterialTheme.typography.titleMedium)
+                for (i in important) Text("• " + i.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(top = 4.dp))
+            }
         }
 
         // Ask AI

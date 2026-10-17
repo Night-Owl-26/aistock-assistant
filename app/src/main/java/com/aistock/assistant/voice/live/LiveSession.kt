@@ -68,7 +68,10 @@ class LiveSession(
     /** End by itself after this long with nobody speaking, so minutes are not wasted. */
     private val idleSeconds: Int = 40,
     private val voiceName: String? = null,
+    /** Words already said with the wake phrase ("Hey Stocky, add 10 metres fabric"), sent as the first turn. */
+    private val firstText: String? = null,
 ) {
+    private var firstSent = false
     private val _state = MutableStateFlow(LiveState.CONNECTING)
     val state: StateFlow<LiveState> = _state
     private val _updates = MutableSharedFlow<LiveUpdate>(extraBufferCapacity = 128)
@@ -176,7 +179,15 @@ class LiveSession(
 
     private fun handle(frame: String) {
         for (e in LiveProtocol.parse(frame)) when (e) {
-            LiveEvent.SetupComplete -> { ready = true; reconnects = 0; lastActivity = System.currentTimeMillis(); startAudio(); set(LiveState.LISTENING) }
+            LiveEvent.SetupComplete -> {
+                ready = true; reconnects = 0; lastActivity = System.currentTimeMillis(); startAudio(); set(LiveState.LISTENING)
+                if (!firstSent && !firstText.isNullOrBlank()) {
+                    firstSent = true
+                    turns.onUser(firstText); stocky.newVoiceTurn(null)
+                    ws?.send(LiveProtocol.note(firstText))
+                    set(LiveState.THINKING)
+                }
+            }
             is LiveEvent.UserText -> {
                 lastActivity = System.currentTimeMillis()
                 if (turns.onUser(e.text)) { stocky.newVoiceTurn(null); userText.clear() }

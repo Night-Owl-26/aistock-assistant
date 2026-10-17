@@ -64,7 +64,7 @@ import kotlinx.coroutines.launch
 
 /** The "More" tab: everything that is not day-to-day stock and money entry. */
 @Composable
-fun MoreScreen(nav: AppNav, vm: MainViewModel) {
+fun MoreScreen(nav: AppNav, vm: MainViewModel, cfg: com.aistock.assistant.business.BusinessConfig, inNav: Set<com.aistock.assistant.business.Module>) {
     val business by vm.businessProfile.collectAsStateWithLifecycle()
     Column(
         Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
@@ -73,11 +73,20 @@ fun MoreScreen(nav: AppNav, vm: MainViewModel) {
         Text(stringResource(R.string.nav_more), style = MaterialTheme.typography.headlineSmall)
         business?.let { Text(it.name + " · " + it.ownerName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
         Spacer(Modifier.height(4.dp))
+        // Work modules that are not in the bottom bar, and the people side of the business.
+        for (m in cfg.workModules.filter { it !in inNav }) MenuRow(R.drawable.ic_work, com.aistock.assistant.features.work.moduleTitle(cfg, m), stringResource(R.string.work_sub)) { nav.go("worklist/${m.key}") }
+        if (cfg.has(com.aistock.assistant.business.Module.FOLLOWUPS)) MenuRow(R.drawable.ic_people, stringResource(R.string.followups), stringResource(R.string.followups_sub)) { nav.go("followups") }
+        MenuRow(R.drawable.ic_settings, stringResource(R.string.reminders), stringResource(R.string.reminders_sub)) { nav.go("reminders") }
+        if (cfg.has(com.aistock.assistant.business.Module.STAFF) || cfg.has(com.aistock.assistant.business.Module.TASKS)) MenuRow(R.drawable.ic_people, stringResource(R.string.staff), stringResource(R.string.staff_sub)) { nav.go("staff") }
+        if (!inNav.contains(com.aistock.assistant.business.Module.INVENTORY) && cfg.has(com.aistock.assistant.business.Module.INVENTORY)) MenuRow(R.drawable.ic_inventory, stringResource(R.string.nav_inventory), stringResource(R.string.inventory_sub)) { nav.go("inventory") }
+        MenuRow(R.drawable.ic_receipt, stringResource(R.string.nav_transactions), stringResource(R.string.transactions_sub)) { nav.go("transactions") }
         MenuRow(R.drawable.ic_people, stringResource(R.string.customers), stringResource(R.string.customers_sub)) { nav.go("parties/customer") }
         MenuRow(R.drawable.ic_people, stringResource(R.string.suppliers), stringResource(R.string.suppliers_sub)) { nav.go("parties/supplier") }
         MenuRow(R.drawable.ic_report, stringResource(R.string.reports), stringResource(R.string.reports_sub)) { nav.go("reports") }
         MenuRow(R.drawable.ic_stock_in, stringResource(R.string.import_export), stringResource(R.string.import_export_sub)) { nav.go("data") }
         MenuRow(R.drawable.ic_backup, stringResource(R.string.backup_restore), stringResource(R.string.backup_restore_sub)) { nav.go("backup") }
+        MenuRow(R.drawable.ic_work, stringResource(R.string.business_setup), stringResource(R.string.business_setup_sub)) { nav.go("setup") }
+        MenuRow(R.drawable.ic_lock, stringResource(R.string.aistock_account), stringResource(R.string.account_sub)) { nav.go("account") }
         MenuRow(R.drawable.ic_settings, stringResource(R.string.settings), stringResource(R.string.settings_sub)) { nav.go("settings") }
     }
 }
@@ -196,6 +205,18 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
 
         SectionTitle(stringResource(R.string.ai_provider))
         AppCard(Modifier.fillMaxWidth()) {
+            DropdownField(
+                stringResource(R.string.ai_source), listOf("server" to stringResource(R.string.ai_source_server), "key" to stringResource(R.string.ai_source_key)),
+                prefs.aiSource, { scope.launch { vm.setAiSource(it) } },
+            )
+            Spacer(Modifier.height(8.dp))
+            if (prefs.aiSource == "server") {
+                Text(stringResource(if (prefs.serverBusinessId.isNotBlank()) R.string.ai_server_signed_in else R.string.ai_server_help, prefs.serverEmail), style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(8.dp))
+                Button(onClick = { nav.go("account") }) { Text(stringResource(R.string.aistock_account)) }
+                SwitchRow(stringResource(R.string.live_voice), stringResource(R.string.live_voice_sub), prefs.liveVoice) { scope.launch { vm.setLiveVoice(it) } }
+            }
+            if (prefs.aiSource == "key") {
             Text(
                 stringResource(
                     when {
@@ -239,6 +260,7 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
                     }) { Text(stringResource(R.string.save)) }
                     if (prefs.cloudKeySaved) OutlinedButton(onClick = { ownerCheck(ctx.getString(R.string.owner_check_key)) { scope.launch { vm.clearCloudKey(); toast(ctx.getString(R.string.ai_key_removed)) } } }) { Text(stringResource(R.string.remove_key)) }
                 }
+            }
                 run {
                     Spacer(Modifier.height(8.dp))
                     OutlinedButton(enabled = !testing, onClick = {
@@ -278,6 +300,11 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
                 if (on && Build.VERSION.SDK_INT >= 33) notifyPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
                 else scope.launch { vm.setLowStockAlerts(on) }
             }
+            DropdownField(
+                stringResource(R.string.daily_briefing),
+                listOf("-1" to stringResource(R.string.off)) + listOf(7, 8, 9, 10, 20, 21).map { it.toString() to (if (it < 12) "$it AM" else "${it - 12} PM") },
+                prefs.briefingHour.toString(), { h -> scope.launch { vm.setBriefingHour(h.toInt()) } },
+            )
         }
 
         SectionTitle(stringResource(R.string.security))

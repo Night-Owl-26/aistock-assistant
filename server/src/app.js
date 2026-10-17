@@ -301,7 +301,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false })
     return entitlement(req.params.id)
   })
 
-  // ---------------------------------------------------------------- backups (opaque, encrypted by the app)
+  // ---------------------------------------------------------------- backups (the app's backup file, kept on the owner's own server)
 
   app.post('/v1/businesses/:id/backups', async (req) => {
     const { user } = await member(req, req.params.id, 'owner')
