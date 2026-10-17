@@ -1,0 +1,207 @@
+import { test, before, after } from 'node:test'
+import assert from 'node:assert/strict'
+import { createPool } from '../src/db.js'
+import { migrate } from '../src/migrate.js'
+import { buildApp } from '../src/app.js'
+import { loadConfig } from '../src/config.js'
+
+// Runs against a real PostgreSQL (TEST_DATABASE_URL) and a fake Google.
+const url = process.env.TEST_DATABASE_URL ?? 'postgres://postgres@localhost:55432/aistock_test?host=/srv/pgtest'
+let pool, app
+const google = { calls: [], tokenFails: false }
+
+function fakeFetch(u, init) {
+  google.calls.push({ url: String(u), body: init?.body ? JSON.parse(init.body) : null, headers: init?.headers })
+  const json = (status, body) => Promise.resolve(new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } }))
+  if (String(u).endsWith('/auth_tokens')) {
+    if (google.tokenFails) return json(403, { error: { message: 'API key not valid' } })
+    return json(200, { name: 'auth_tokens/abc123', expireTime: new Date(Date.now() + 600000).toISOString() })
+  }
+  if (String(u).includes(':generateContent')) {
+    return json(200, { candidates: [{ content: { role: 'model', parts: [{ text: 'Innikku 3 sales.' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 120, candidatesTokenCount: 8 } })
+  }
+  return json(404, { error: { message: 'unknown' } })
+}
+
+before(async () => {
+  pool = createPool(url)
+  await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
+  await migrate(pool)
+  const cfg = loadConfig({ DATABASE_URL: url, JWT_SECRET: 'x'.repeat(40), GEMINI_API_KEY: 'server-key', ADMIN_TOKEN: 'admin-secret-token', GEMINI_BASE_URL: 'https://google.test', REGISTER_PER_HOUR: '1000' })
+  app = await buildApp({ cfg, pool, fetchImpl: fakeFetch })
+})
+after(async () => { await app?.close(); await pool?.end() })
+
+const call = async (method, path, { token, body, headers = {} } = {}) => {
+  const r = await app.inject({ method, url: path, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}), ...headers }, ...(body !== undefined ? (Buffer.isBuffer(body) ? { payload: body } : { payload: body }) : {}) })
+  let json = null; try { json = r.json() } catch {}
+  return { status: r.statusCode, json, raw: r.rawPayload, headers: r.headers }
+}
+async function register(email, businessName = 'Kumar Fancy Store') {
+  const r = await call('POST', '/v1/auth/register', { body: { email, password: 'correct horse 1', name: 'Kumar', businessName } })
+  assert.equal(r.status, 200, JSON.stringify(r.json))
+  return r.json
+}
+
+test('register, sign in, refresh rotates, me shows trial', async () => {
+  const a = await register('owner1@shop.in')
+  assert.ok(a.accessToken && a.refreshToken && a.businessId)
+  assert.equal((await call('POST', '/v1/auth/register', { body: { email: 'owner1@shop.in', password: 'another pass', businessName: 'X' } })).status, 409)
+  assert.equal((await call('POST', '/v1/auth/login', { body: { email: 'owner1@shop.in', password: 'wrong password' } })).status, 401)
+  const l = await call('POST', '/v1/auth/login', { body: { email: 'OWNER1@shop.in', password: 'correct horse 1' } })
+  assert.equal(l.status, 200)
+  const r1 = await call('POST', '/v1/auth/refresh', { body: { refreshToken: l.json.refreshToken } })
+  assert.equal(r1.status, 200)
+  assert.equal((await call('POST', '/v1/auth/refresh', { body: { refreshToken: l.json.refreshToken } })).status, 401, 'a used refresh token must not work twice')
+  const me = await call('GET', '/v1/me', { token: r1.json.accessToken })
+  assert.equal(me.status, 200)
+  assert.equal(me.json.businesses[0].entitlement.status, 'trial')
+  assert.equal(me.json.businesses[0].role, 'owner')
+  assert.equal((await call('GET', '/v1/me')).status, 401)
+  assert.equal((await call('GET', '/v1/me', { token: 'garbage' })).status, 401)
+})
+
+test('one business can never see another business', async () => {
+  const a = await register('a@iso.in', 'Shop A')
+  const b = await register('b@iso.in', 'Shop B')
+  const cfg = { schemaVersion: 1, businessType: 'retail', modules: ['inventory', 'sales'] }
+  assert.equal((await call('PUT', `/v1/businesses/${a.businessId}/profile`, { token: a.accessToken, body: { config: cfg } })).status, 200)
+  await call('POST', `/v1/businesses/${a.businessId}/backups`, { token: a.accessToken, body: Buffer.from('secret-a'), headers: { 'content-type': 'application/octet-stream' } })
+  for (const [m, p] of [['GET', 'profile'], ['GET', 'backups'], ['GET', 'usage'], ['GET', 'members'], ['POST', 'ai/generate'], ['POST', 'ai/live-session']]) {
+    const r = await call(m, `/v1/businesses/${a.businessId}/${p}`, { token: b.accessToken, body: m === 'POST' ? {} : undefined })
+    assert.equal(r.status, 404, `${m} ${p} must look like it does not exist`)
+  }
+  assert.equal((await call('PUT', `/v1/businesses/${a.businessId}/profile`, { token: b.accessToken, body: { config: cfg } })).status, 404)
+  assert.equal((await call('GET', '/v1/businesses/not-a-uuid/profile', { token: b.accessToken })).status, 404)
+})
+
+test('business configuration is validated and versioned', async () => {
+  const a = await register('cfg@shop.in')
+  const put = (config, baseVersion) => call('PUT', `/v1/businesses/${a.businessId}/profile`, { token: a.accessToken, body: { config, baseVersion } })
+  assert.equal((await put({ schemaVersion: 1, businessType: 'retail', modules: ['inventory', 'drop_tables'] })).status, 400)
+  assert.equal((await put({ schemaVersion: 1, businessType: 'spaceship', modules: ['inventory'] })).status, 400)
+  assert.equal((await put({ schemaVersion: 1, businessType: 'garment_manufacturing', modules: ['production'], customFields: [{ module: 'production', key: 'Bad Key', label: 'x', type: 'text' }] })).status, 400)
+  const good = { schemaVersion: 1, businessType: 'garment_manufacturing', modules: ['inventory', 'production', 'tasks'],
+    workflows: { production: { stages: ['Cutting', 'Stitching', 'Finishing', 'Quality check', 'Packed'] } },
+    customFields: [{ module: 'production', key: 'buyer_po', label: 'Buyer PO', type: 'text' }], terminology: { work_item: 'Production order' } }
+  const r1 = await put(good, 0)
+  assert.equal(r1.json.version, 1)
+  assert.equal((await put(good, 0)).status, 409, 'stale edit must be refused')
+  assert.equal((await put(good, 1)).json.version, 2)
+  const g = await call('GET', `/v1/businesses/${a.businessId}/profile`, { token: a.accessToken })
+  assert.equal(g.json.version, 2)
+  assert.deepEqual(g.json.config.workflows.production.stages[0], 'Cutting')
+})
+
+test('roles: staff cannot change settings or see backups', async () => {
+  const owner = await register('boss@shop.in')
+  const staff = await register('ravi@shop.in', 'Ravi own shop')
+  assert.equal((await call('POST', `/v1/businesses/${owner.businessId}/members`, { token: owner.accessToken, body: { email: 'ravi@shop.in', role: 'staff' } })).status, 402, 'trial allows 1 person')
+  await call('POST', '/admin/subscriptions', { headers: { authorization: 'Bearer admin-secret-token' }, body: { businessId: owner.businessId, planId: 'basic', days: 30 } })
+  assert.equal((await call('POST', `/v1/businesses/${owner.businessId}/members`, { token: owner.accessToken, body: { email: 'ravi@shop.in', role: 'staff' } })).status, 200)
+  assert.equal((await call('PUT', `/v1/businesses/${owner.businessId}/profile`, { token: staff.accessToken, body: { config: { schemaVersion: 1, businessType: 'retail', modules: ['sales'] } } })).status, 403)
+  assert.equal((await call('GET', `/v1/businesses/${owner.businessId}/backups`, { token: staff.accessToken })).status, 403)
+  assert.equal((await call('GET', `/v1/businesses/${owner.businessId}/usage`, { token: staff.accessToken })).status, 200)
+})
+
+test('AI proxy: key stays on the server, tools only, usage metered, limits enforced', async () => {
+  const a = await register('ai@shop.in')
+  google.calls.length = 0
+  const request = {
+    systemInstruction: { parts: [{ text: 'You are Stocky' }] },
+    contents: [{ role: 'user', parts: [{ text: 'innikku sales evlo?' }] }],
+    tools: [{ functionDeclarations: [{ name: 'get_sales', description: 'x' }] }, { googleSearch: {} }, { codeExecution: {} }],
+    generationConfig: { temperature: 0.4, thinkingConfig: { thinkingBudget: 0 }, maxOutputTokens: 999999 },
+    cachedContent: 'cachedContents/x',
+  }
+  const r = await call('POST', `/v1/businesses/${a.businessId}/ai/generate`, { token: a.accessToken, body: { request } })
+  assert.equal(r.status, 200)
+  assert.equal(r.json.candidates[0].content.parts[0].text, 'Innikku 3 sales.')
+  const sent = google.calls.at(-1)
+  assert.match(sent.url, /models\/gemini-flash-latest:generateContent$/)
+  assert.equal(sent.headers['x-goog-api-key'], 'server-key')
+  assert.deepEqual(sent.body.tools, [{ functionDeclarations: [{ name: 'get_sales', description: 'x' }] }], 'search/code tools are stripped')
+  assert.equal(sent.body.cachedContent, undefined)
+  assert.equal(sent.body.generationConfig.maxOutputTokens, 4096)
+  const u = await call('GET', `/v1/businesses/${a.businessId}/usage`, { token: a.accessToken })
+  assert.equal(u.json.aiRequests.used, 1)
+  // Use up the month.
+  await pool.query("INSERT INTO usage_events (business_id, kind, quantity) VALUES ($1,'ai_request',299)", [a.businessId])
+  assert.equal((await call('POST', `/v1/businesses/${a.businessId}/ai/generate`, { token: a.accessToken, body: { request } })).json.error, 'quota_exceeded')
+  // An expired plan stops AI, not the account.
+  await pool.query("UPDATE subscriptions SET current_period_end = now() - interval '1 day' WHERE business_id = $1", [a.businessId])
+  assert.equal((await call('POST', `/v1/businesses/${a.businessId}/ai/generate`, { token: a.accessToken, body: { request } })).status, 402)
+  assert.equal((await call('GET', '/v1/me', { token: a.accessToken })).status, 200)
+  assert.equal((await call('POST', `/v1/businesses/${a.businessId}/ai/generate`, { token: a.accessToken, body: { request: { contents: [] } } })).status, 402)
+})
+
+test('live voice: short-lived token, usage capped by the clock, never counted twice', async () => {
+  const a = await register('live@shop.in')
+  google.calls.length = 0
+  const r = await call('POST', `/v1/businesses/${a.businessId}/ai/live-session`, { token: a.accessToken })
+  assert.equal(r.status, 200, JSON.stringify(r.json))
+  assert.equal(r.json.token, 'auth_tokens/abc123')
+  assert.match(r.json.wsUrl, /^wss:\/\//)
+  assert.equal(r.json.model, 'gemini-3.8-live')
+  const tokReq = google.calls.at(-1).body
+  assert.equal(tokReq.uses, 1)
+  assert.equal(tokReq.liveConnectConstraints.model, 'models/gemini-3.8-live')
+  assert.ok(new Date(tokReq.newSessionExpireTime) - Date.now() < 120_000)
+  // The app claims 5000 seconds right away: only the real elapsed time (+5 s) counts.
+  const rep = await call('POST', `/v1/businesses/${a.businessId}/ai/live-usage`, { token: a.accessToken, body: { sessionId: r.json.sessionId, seconds: 5000 } })
+  assert.ok(rep.json.recordedSeconds <= 6)
+  await pool.query("UPDATE live_sessions SET started_at = now() - interval '200 seconds' WHERE id = $1", [r.json.sessionId])
+  await call('POST', `/v1/businesses/${a.businessId}/ai/live-usage`, { token: a.accessToken, body: { sessionId: r.json.sessionId, seconds: 90, final: true } })
+  await call('POST', `/v1/businesses/${a.businessId}/ai/live-usage`, { token: a.accessToken, body: { sessionId: r.json.sessionId, seconds: 90, final: true } })
+  const u = await call('GET', `/v1/businesses/${a.businessId}/usage`, { token: a.accessToken })
+  assert.equal(u.json.liveSeconds.used, 90)
+  // A session that never reports is charged for the time it could have run.
+  const r2 = await call('POST', `/v1/businesses/${a.businessId}/ai/live-session`, { token: a.accessToken })
+  await pool.query("UPDATE live_sessions SET started_at = now() - interval '100 seconds' WHERE id = $1", [r2.json.sessionId])
+  const u2 = await call('GET', `/v1/businesses/${a.businessId}/usage`, { token: a.accessToken })
+  assert.ok(u2.json.liveSeconds.used >= 189 && u2.json.liveSeconds.used <= 192, String(u2.json.liveSeconds.used))
+  // Out of minutes.
+  await pool.query("UPDATE live_sessions SET reported_seconds = 1800, closed = true WHERE id = $1", [r2.json.sessionId])
+  assert.equal((await call('POST', `/v1/businesses/${a.businessId}/ai/live-session`, { token: a.accessToken })).json.error, 'quota_exceeded')
+})
+
+test('live voice: Google refusing the token is reported, not hidden', async () => {
+  const a = await register('livefail@shop.in')
+  google.tokenFails = true
+  const r = await call('POST', `/v1/businesses/${a.businessId}/ai/live-session`, { token: a.accessToken })
+  google.tokenFails = false
+  assert.equal(r.status, 502)
+  assert.match(r.json.message, /API key not valid/)
+})
+
+test('backups round-trip, only 10 kept, owner only', async () => {
+  const a = await register('bk@shop.in')
+  for (let i = 0; i < 12; i++) {
+    const r = await call('POST', `/v1/businesses/${a.businessId}/backups`, { token: a.accessToken, body: Buffer.from(`backup-${i}`), headers: { 'content-type': 'application/octet-stream', 'x-backup-note': `n${i}` } })
+    assert.equal(r.status, 200)
+  }
+  const list = await call('GET', `/v1/businesses/${a.businessId}/backups`, { token: a.accessToken })
+  assert.equal(list.json.backups.length, 10)
+  const newest = list.json.backups[0]
+  const d = await call('GET', `/v1/businesses/${a.businessId}/backups/${newest.id}`, { token: a.accessToken })
+  assert.equal(d.raw.toString(), 'backup-11')
+})
+
+test('admin activation needs the admin token; account deletion removes owned data', async () => {
+  const a = await register('del@shop.in')
+  assert.equal((await call('POST', '/admin/subscriptions', { headers: { authorization: 'Bearer nope' }, body: { businessId: a.businessId, planId: 'pro' } })).status, 401)
+  const ok = await call('POST', '/admin/subscriptions', { headers: { authorization: 'Bearer admin-secret-token' }, body: { businessId: a.businessId, planId: 'pro', days: 30, reference: 'UPI 123' } })
+  assert.equal(ok.status, 200)
+  const exp = await call('GET', '/v1/me/export', { token: a.accessToken })
+  assert.equal(exp.json.user.email, 'del@shop.in')
+  assert.equal((await call('DELETE', '/v1/me', { token: a.accessToken, body: { password: 'wrong' } })).status, 401)
+  assert.equal((await call('DELETE', '/v1/me', { token: a.accessToken, body: { password: 'correct horse 1' } })).status, 200)
+  assert.equal(Number((await pool.query('SELECT COUNT(*) FROM businesses WHERE id = $1', [a.businessId])).rows[0].count), 0)
+  assert.equal((await call('GET', '/v1/me', { token: a.accessToken })).status, 401)
+})
+
+test('health and plans are public', async () => {
+  assert.equal((await call('GET', '/healthz')).json.ok, true)
+  const p = await call('GET', '/v1/plans')
+  assert.equal(p.json.plans.find(x => x.id === 'basic').price_minor, 19900)
+})

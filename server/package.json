@@ -1,0 +1,23 @@
+{
+  "name": "aistock-server",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AIStock Assistant backend: accounts, businesses, AI proxy, live voice tokens, usage and plans",
+  "main": "src/server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "migrate": "node src/migrate.js",
+    "test": "node --test --test-concurrency=1 test/*.test.js"
+  },
+  "dependencies": {
+    "@fastify/rate-limit": "^10.3.0",
+    "bcryptjs": "^2.4.3",
+    "fastify": "^5.12.7",
+    "jose": "^5.10.0",
+    "pg": "^8.23.1"
+  }
+}

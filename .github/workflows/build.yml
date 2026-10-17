@@ -130,3 +130,56 @@ jobs:
           git add -A
           git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "device results for $GITHUB_SHA"
           git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci-device
+
+  server:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: aistock_test
+        ports: ["5432:5432"]
+        options: --health-cmd pg_isready --health-interval 5s --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Server unit and API tests
+        working-directory: server
+        env:
+          TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/aistock_test
+        run: |
+          npm ci
+          npm test 2>&1 | tee server-test.log
+      - name: Full stack in Docker (db + api + caddy), smoke test over HTTPS
+        working-directory: server
+        run: |
+          cat > .env <<ENV
+          DOMAIN=localhost
+          POSTGRES_PASSWORD=ci-$(openssl rand -hex 12)
+          JWT_SECRET=$(openssl rand -hex 32)
+          ADMIN_TOKEN=$(openssl rand -hex 16)
+          GEMINI_API_KEY=
+          ENV
+          docker compose up -d --build
+          for i in $(seq 1 40); do curl -skf https://localhost/healthz && break; sleep 3; done
+          curl -skf https://localhost/healthz | tee stack.log
+          curl -sk -X POST https://localhost/v1/auth/register -H 'content-type: application/json' \
+            -d '{"email":"ci@shop.in","password":"ci password 1","businessName":"CI Shop"}' | tee -a stack.log | grep -q accessToken
+          test "$(curl -sk -o /dev/null -w '%{http_code}' -X POST https://localhost/admin/subscriptions)" = "404"
+          echo "stack OK" | tee -a stack.log
+          docker compose logs api | tail -20
+      - name: Publish server results
+        if: always()
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          mkdir -p out && cp server/server-test.log server/stack.log out/ 2>/dev/null || true
+          echo "$GITHUB_SHA" > out/sha.txt
+          echo "${{ job.status }}" > out/status.txt
+          cd out && git init -q -b ci-server && git add -A
+          git -c user.name=ci -c user.email=ci@users.noreply.github.com commit -qm "server results for $GITHUB_SHA"
+          git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci-server

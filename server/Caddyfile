@@ -1,0 +1,12 @@
+{$DOMAIN} {
+	encode gzip
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		-Server
+	}
+	# The admin endpoint is only reachable from the server itself (use: curl http://127.0.0.1 ... via docker compose exec).
+	@admin path /admin/*
+	respond @admin 404
+	reverse_proxy api:8080
+}
