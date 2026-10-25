@@ -282,8 +282,7 @@ expect("Polo XL", "size joined to the name in the preview")
 tap("Import and remember this workbook"); expect("Import finished", "workbook imported", 30)
 if expect("Keep this Excel file updated", "offer to keep the file updated", 10):
     tap("Turn on", exact=True); expect("current stock", "first update of the file", 30); shot("excel-linked")
-back()
-tap("Chat", exact=True); tap("New conversation", required=False)
+tap("Ask Stocky", exact=True); time.sleep(2); tap("New conversation", required=False)
 tap_field("Type what happened"); type_text("Sold 2 Polo XL"); tap("Send", exact=True)
 hide_keyboard(); expect("Confirm", "size sale confirmation", 25); tap("Confirm", exact=True); expect("Sale saved", "size sale done")
 value = None
