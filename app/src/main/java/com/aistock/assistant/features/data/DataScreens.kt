@@ -109,26 +109,6 @@ private fun importKindRes(kind: ImportKind): Int = when (kind) {
     ImportKind.OPENING_STOCK -> R.string.opening_stock
 }
 
-private fun fieldRes(key: String): Int = when (key) {
-    "name" -> R.string.name
-    "code" -> R.string.product_code
-    "category" -> R.string.category
-    "unit" -> R.string.unit
-    "barcode" -> R.string.barcode
-    "purchasePrice" -> R.string.purchase_price
-    "sellingPrice" -> R.string.selling_price
-    "minStock" -> R.string.minimum_stock
-    "openingStock" -> R.string.opening_stock
-    "description" -> R.string.description
-    "phone" -> R.string.phone
-    "email" -> R.string.email
-    "address" -> R.string.address
-    "openingBalance" -> R.string.opening_balance
-    "notes" -> R.string.notes
-    "quantity" -> R.string.quantity
-    "unitCost" -> R.string.unit_cost
-    else -> R.string.name
-}
 
 @Composable
 fun ImportExportScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
