@@ -56,6 +56,7 @@ business's id answers "not found". This is covered by `test/api.test.js`.
    - `DOMAIN`: your domain, or with no domain `<your-ip>.sslip.io` (e.g. `140.238.1.2.sslip.io`), which points at your IP and gets a real HTTPS certificate.
    - `POSTGRES_PASSWORD`, `JWT_SECRET`, `ADMIN_TOKEN`: long random values — make each with `openssl rand -hex 32`.
    - `GEMINI_API_KEY`: your key from https://aistudio.google.com/apikey. Use a new key, not one that was ever shared in a chat.
+   - `GOOGLE_CLOUD_API_KEY` (optional): a Google Cloud API key for **Cloud Speech-to-Text** and **Cloud Text-to-Speech**. In console.cloud.google.com: pick or create a project with billing, enable both APIs, create an API key under *APIs & Services > Credentials*, and restrict it to those two APIs. Without it the app uses the phone's own speech and Gemini Live. Speech time counts against the plan's voice minutes.
 5. **Start it.**
    ```
    docker compose up -d --build

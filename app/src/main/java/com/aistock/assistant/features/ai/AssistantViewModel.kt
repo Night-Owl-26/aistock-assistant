@@ -194,8 +194,25 @@ class AssistantViewModel @Inject constructor(
     /** Real-time voice is used when the owner is signed in to their AIStock server and has it switched on. */
     fun liveAvailable(): Boolean {
         val p = settings.current.value
-        return p.liveVoice && p.aiSource == "server" && server.signedIn && connectivity.isOnline()
+        return p.liveVoice && !p.cloudSpeech && p.aiSource == "server" && server.signedIn && connectivity.isOnline()
     }
+
+    // ------------------------------------------------------------ Google Cloud speech (turn by turn)
+
+    /** Google Cloud Speech-to-Text and Text-to-Speech go through the owner's server, so they need a sign-in. */
+    fun cloudSpeechReady(): Boolean {
+        val p = settings.current.value
+        return p.cloudSpeech && p.aiSource == "server" && server.signedIn
+    }
+
+    fun cloudRecognizer(): com.aistock.assistant.voice.SpeechInput = com.aistock.assistant.voice.cloud.CloudRecognizer(server) { speechHints() }
+
+    fun cloudSpeaker(fallback: com.aistock.assistant.voice.SpeechOutput): com.aistock.assistant.voice.SpeechOutput = com.aistock.assistant.voice.cloud.CloudSpeaker(server, fallback)
+
+    /** Names the recogniser should expect: products (with sizes), customers and suppliers. */
+    private suspend fun speechHints(): List<String> =
+        (backend.products().map { it.name } + backend.parties(com.aistock.assistant.ai.PartyKind.CUSTOMER).map { it.name } + backend.parties(com.aistock.assistant.ai.PartyKind.SUPPLIER).map { it.name })
+            .distinct().take(500)
 
     fun startLive() {
         if (live != null) return

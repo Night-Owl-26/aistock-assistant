@@ -9,10 +9,17 @@ data class ColumnProfile(val name: String, val type: String, val example: String
  * One sheet as Stocky understands it.
  * @param confidence 0..100: how sure the guess about [purpose] is
  * @param table the header row followed by the data rows (anything above the header is dropped)
+ * @param fields columns chosen by the AI, a saved mapping or the owner, by [HeaderMapper] field name (-1 = owner said "not used");
+ *   fields not listed fall back to the header rules in [ImportSpec.autoMap]
+ * @param fieldSource who chose each entry of [fields]: "ai", "saved" or "you"
+ * @param purposeSource who chose [purpose]: "rules", "ai", "saved" or "you"
+ * @param headerRow the 0-based row of the sheet that holds the column titles
  */
 data class SheetProfile(
     val name: String, val hidden: Boolean, val purpose: SheetPurpose, val confidence: Int,
     val columns: List<ColumnProfile>, val table: List<List<String>>, val links: List<String> = emptyList(),
+    val fields: Map<String, Int> = emptyMap(), val fieldSource: Map<String, String> = emptyMap(),
+    val purposeSource: String = "rules", val headerRow: Int = 0,
 ) {
     val rowCount: Int get() = (table.size - 1).coerceAtLeast(0)
     val headers: List<String> get() = table.firstOrNull().orEmpty()
@@ -100,7 +107,7 @@ object WorkbookAnalyzer {
                 }
                 ColumnProfile(title.ifBlank { "Column ${c + 1}" }, type, values.firstOrNull().orEmpty().take(40))
             }
-            SheetProfile(sheet.name, sheet.hidden, bestPurpose, bestScore.coerceIn(0, 100), columns, table)
+            SheetProfile(sheet.name, sheet.hidden, bestPurpose, bestScore.coerceIn(0, 100), columns, table, headerRow = h)
         }
         // Columns with the same title in two sheets usually link them (e.g. Product Code in ITEM MASTER and STOCK).
         return profiles.map { p ->
@@ -128,7 +135,8 @@ object WorkbookAnalyzer {
         val order = listOf(SheetPurpose.PRODUCTS, SheetPurpose.STOCK, SheetPurpose.CUSTOMERS, SheetPurpose.SUPPLIERS)
         val direct = order.flatMap { purpose -> profiles.filter { it.purpose == purpose } }.mapNotNull { p -> importKind(p.purpose, haveProducts)?.let { p to it } }
         // A sales or purchase register also tells us which products exist: they are added with their price and no stock.
-        val fromLogs = profiles.filter { it.purpose == SheetPurpose.SALES || it.purpose == SheetPurpose.PURCHASES }.mapNotNull { p -> productsFromLog(p)?.let { p.copy(table = it) to ImportKind.PRODUCTS } }
+        val fromLogs = profiles.filter { it.purpose == SheetPurpose.SALES || it.purpose == SheetPurpose.PURCHASES }
+            .mapNotNull { p -> productsFromLog(p)?.let { p.copy(table = it, fields = emptyMap(), fieldSource = emptyMap()) to ImportKind.PRODUCTS } }
         return direct + fromLogs
     }
 
@@ -136,15 +144,20 @@ object WorkbookAnalyzer {
     fun productsFromLog(p: SheetProfile): List<List<String>>? {
         val h = p.headers.map { norm(it) }
         fun col(vararg words: String) = words.firstNotNullOfOrNull { w -> h.indices.firstOrNull { h[it] == w } } ?: words.firstNotNullOfOrNull { w -> h.indices.firstOrNull { has(h[it], w) } }
-        val nameCol = col("product name", "item name", "product", "item", "description", "particulars") ?: return null
-        val priceCol = col("unit price", "selling price", "sale price", "rate", "price", "mrp")
-        val unitCol = col("unit", "uom")?.takeIf { it != priceCol }
-        val catCol = col("category", "group")
+        // Columns the AI or the owner picked win over the header rules; -1 means "not in this sheet".
+        fun chosen(field: String, rule: () -> Int?): Int? = when (val c = p.fields[field]) { null -> rule(); -1 -> null; else -> c }
+        val nameCol = chosen("name") { col("product name", "item name", "product", "item", "description", "particulars") } ?: return null
+        val priceField = if (p.purpose == SheetPurpose.PURCHASES) "purchasePrice" else "sellingPrice"
+        val priceCol = chosen(priceField) { col("unit price", "selling price", "sale price", "rate", "price", "mrp") }
+        val unitCol = chosen("unit") { col("unit", "uom") }?.takeIf { it != priceCol }
+        val catCol = chosen("category") { col("category", "group") }
+        val sizeCol = chosen("size") { col("size", "variant") }?.takeIf { it != nameCol }
         val priceTitle = if (p.purpose == SheetPurpose.PURCHASES) "Purchase price" else "Selling price"
         val seen = LinkedHashMap<String, List<String>>()
         for (row in p.table.drop(1)) {
-            val name = row.getOrNull(nameCol).orEmpty().trim()
-            if (name.isEmpty() || isNumber(name)) continue
+            val baseName = row.getOrNull(nameCol).orEmpty().trim()
+            if (baseName.isEmpty() || isNumber(baseName)) continue
+            val name = ImportSpec.nameWithSize(baseName, sizeCol?.let { row.getOrNull(it) })
             val key = name.lowercase()
             val price = priceCol?.let { row.getOrNull(it) }.orEmpty().trim()
             val old = seen[key]

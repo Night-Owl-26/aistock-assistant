@@ -9,7 +9,7 @@ import { sha256 as sha } from '../src/auth.js'
 // Runs against a real PostgreSQL (TEST_DATABASE_URL) and a fake Google.
 const url = process.env.TEST_DATABASE_URL ?? 'postgres://postgres@localhost:55432/aistock_test?host=/srv/pgtest'
 let pool, app
-const google = { calls: [], tokenFails: false }
+const google = { calls: [], tokenFails: false, altRejected: false, ttsVoiceMissing: false, sttDown: false }
 
 function fakeFetch(u, init) {
   google.calls.push({ url: String(u), body: init?.body ? JSON.parse(init.body) : null, headers: init?.headers })
@@ -17,6 +17,17 @@ function fakeFetch(u, init) {
   if (String(u).endsWith('/auth_tokens')) {
     if (google.tokenFails) return json(403, { error: { message: 'API key not valid' } })
     return json(200, { name: 'auth_tokens/abc123', expireTime: new Date(Date.now() + 600000).toISOString() })
+  }
+  if (String(u).includes('speech:recognize')) {
+    const b = JSON.parse(init.body)
+    if (google.sttDown) return json(500, { error: { message: 'backend error' } })
+    if (google.altRejected && b.config.alternativeLanguageCodes) return json(400, { error: { message: 'alternative_language_codes not supported for this model' } })
+    return json(200, { results: [{ alternatives: [{ transcript: 'Raju-ku rendu XL shirt', confidence: 0.9 }], languageCode: 'ta-in' }, { alternatives: [{ transcript: 'cash', confidence: 0.7 }] }] })
+  }
+  if (String(u).includes('text:synthesize')) {
+    const b = JSON.parse(init.body)
+    if (google.ttsVoiceMissing && b.voice.name) return json(400, { error: { message: 'voice does not exist' } })
+    return json(200, { audioContent: Buffer.from('RIFF....WAVEfmt ').toString('base64') })
   }
   if (String(u).includes(':generateContent')) {
     return json(200, { candidates: [{ content: { role: 'model', parts: [{ text: 'Innikku 3 sales.' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 120, candidatesTokenCount: 8 } })
@@ -28,7 +39,7 @@ before(async () => {
   pool = createPool(url)
   await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
   await migrate(pool)
-  const cfg = loadConfig({ DATABASE_URL: url, JWT_SECRET: 'x'.repeat(40), GEMINI_API_KEY: 'server-key', ADMIN_TOKEN: 'admin-secret-token', GEMINI_BASE_URL: 'https://google.test', REGISTER_PER_HOUR: '1000', LIVE_MODE: 'token' })
+  const cfg = loadConfig({ DATABASE_URL: url, JWT_SECRET: 'x'.repeat(40), GEMINI_API_KEY: 'server-key', ADMIN_TOKEN: 'admin-secret-token', GEMINI_BASE_URL: 'https://google.test', GOOGLE_CLOUD_API_KEY: 'cloud-key', GOOGLE_STT_BASE_URL: 'https://stt.test', GOOGLE_TTS_BASE_URL: 'https://tts.test', REGISTER_PER_HOUR: '1000', LIVE_MODE: 'token' })
   app = await buildApp({ cfg, pool, fetchImpl: fakeFetch })
 })
 after(async () => { await app?.close(); await pool?.end() })
@@ -233,4 +244,55 @@ test('owners cannot be demoted by mistake; bad admin input is refused', async ()
   assert.equal((await call('POST', `/v1/businesses/${o.businessId}/members`, { token: o.accessToken, body: { email: 'own@shop.in', role: 'staff' } })).status, 400)
   assert.equal((await call('POST', '/admin/subscriptions', { headers: { authorization: 'Bearer admin-secret-token' }, body: { businessId: 'x', planId: 'pro' } })).status, 400)
   assert.equal((await call('POST', '/admin/subscriptions', { headers: { authorization: 'Bearer admin-secret-token' }, body: { businessId: o.businessId, planId: 'pro', days: -5 } })).status, 400)
+})
+
+test('Google Cloud speech: key stays on the server, phrases passed, minutes metered and refunded on failure', async () => {
+  const a = await register('speech@shop.in', 'Speech Shop')
+  const pcm = Buffer.alloc(32000 * 3) // three seconds of silence
+  google.calls.length = 0
+  google.altRejected = true
+  let r = await call('POST', `/v1/businesses/${a.businessId}/ai/stt`, { token: a.accessToken, body: { audio: pcm.toString('base64'), language: 'ta-IN', phrases: ['Shirt XL', 'Raju', 42, 'Shirt XL'] } })
+  assert.equal(r.status, 200, JSON.stringify(r.json))
+  assert.equal(r.json.text, 'Raju-ku rendu XL shirt cash')
+  assert.equal(r.json.seconds, 3)
+  const stt = google.calls.filter(c => c.url.includes('speech:recognize'))
+  assert.equal(stt.length, 2, 'retried without the second language')
+  assert.equal(stt[0].headers['x-goog-api-key'], 'cloud-key')
+  assert.equal(stt[0].body.config.languageCode, 'ta-IN')
+  assert.deepEqual(stt[0].body.config.speechContexts[0].phrases, ['Shirt XL', 'Raju'])
+  assert.equal(stt[1].body.config.alternativeLanguageCodes, undefined)
+  google.altRejected = false
+
+  google.ttsVoiceMissing = true
+  r = await call('POST', `/v1/businesses/${a.businessId}/ai/tts`, { token: a.accessToken, body: { text: 'Raju-க்கு 2 XL shirt bill போட்டாச்சு.' } })
+  assert.equal(r.status, 200, JSON.stringify(r.json))
+  assert.equal(r.json.language, 'ta-IN')
+  assert.ok(Buffer.from(r.json.audio, 'base64').toString().startsWith('RIFF'))
+  const tts = google.calls.filter(c => c.url.includes('text:synthesize'))
+  assert.equal(tts[0].body.voice.name, 'ta-IN-Chirp3-HD-Aoede')
+  assert.equal(tts[1].body.voice.name, undefined, 'falls back to the default voice')
+  google.ttsVoiceMissing = false
+  r = await call('POST', `/v1/businesses/${a.businessId}/ai/tts`, { token: a.accessToken, body: { text: 'Shirt XL stock 10 irukku' } })
+  assert.equal(r.json.language, 'en-IN')
+
+  const used = Number((await pool.query("SELECT COALESCE(SUM(quantity),0) AS n FROM usage_events WHERE business_id = $1 AND kind IN ('stt_seconds','tts_seconds')", [a.businessId])).rows[0].n)
+  assert.ok(used >= 5)
+  const usage = await call('GET', `/v1/businesses/${a.businessId}/usage`, { token: a.accessToken })
+  assert.ok(JSON.stringify(usage.json).includes(`"used":${used}`), 'speech counts against the voice minutes')
+
+  // Google failing gives the time back.
+  google.sttDown = true
+  r = await call('POST', `/v1/businesses/${a.businessId}/ai/stt`, { token: a.accessToken, body: { audio: pcm.toString('base64') } })
+  assert.equal(r.status, 502)
+  google.sttDown = false
+  const after = Number((await pool.query("SELECT COALESCE(SUM(quantity),0) AS n FROM usage_events WHERE business_id = $1 AND kind IN ('stt_seconds','tts_seconds')", [a.businessId])).rows[0].n)
+  assert.equal(after, used)
+
+  // Bad input, too long, other business, no minutes left.
+  assert.equal((await call('POST', `/v1/businesses/${a.businessId}/ai/stt`, { token: a.accessToken, body: { audio: 'not base64!' } })).status, 400)
+  assert.equal((await call('POST', `/v1/businesses/${a.businessId}/ai/tts`, { token: a.accessToken, body: { text: 'x'.repeat(2001) } })).status, 413)
+  const b = await register('other-speech@shop.in', 'Other')
+  assert.equal((await call('POST', `/v1/businesses/${a.businessId}/ai/stt`, { token: b.accessToken, body: { audio: pcm.toString('base64') } })).status, 404)
+  await pool.query("INSERT INTO usage_events (business_id, kind, quantity) VALUES ($1, 'stt_seconds', 1000000)", [a.businessId])
+  assert.equal((await call('POST', `/v1/businesses/${a.businessId}/ai/stt`, { token: a.accessToken, body: { audio: pcm.toString('base64') } })).status, 429)
 })

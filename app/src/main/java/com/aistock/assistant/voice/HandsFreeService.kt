@@ -70,11 +70,13 @@ class HandsFreeService : Service() {
     @Inject lateinit var business: BusinessRepository
     @Inject lateinit var server: com.aistock.assistant.server.ServerApi
     @Inject lateinit var connectivity: com.aistock.assistant.di.Connectivity
+    @Inject lateinit var backend: com.aistock.assistant.data.RoomAssistantBackend
     private var live: com.aistock.assistant.voice.live.LiveSession? = null
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private lateinit var engine: WakeWordEngine
-    private lateinit var speaker: Speaker
+    private lateinit var speaker: SpeechOutput
+    private var cloudInput: SpeechInput? = null
     private lateinit var stocky: Stocky
     private var conversationId: String? = null
     private var busy = false
@@ -88,7 +90,13 @@ class HandsFreeService : Service() {
         val speech = SpeechWakeWordEngine(this)
         engine = if (KeywordWakeEngine.available(this)) KeywordWakeEngine(this, speech) else speech
         BeepMuter.restoreLeftovers(this)
-        speaker = Speaker(this)
+        val p0 = settings.current.value
+        val cloud = p0.cloudSpeech && p0.aiSource == "server" && server.signedIn
+        // With Google Cloud voice chosen, replies are read by Google's voice and follow-up requests are heard by Google.
+        speaker = if (cloud) com.aistock.assistant.voice.cloud.CloudSpeaker(server, Speaker(this)) else Speaker(this)
+        if (cloud) cloudInput = com.aistock.assistant.voice.cloud.CloudRecognizer(server) {
+            (backend.products().map { it.name } + backend.parties(com.aistock.assistant.ai.PartyKind.CUSTOMER).map { it.name }).distinct().take(500)
+        }
         stocky = factory.create()
         channel()
         try {
@@ -101,7 +109,7 @@ class HandsFreeService : Service() {
         }
         HandsFree.setRunning(true)
         scope.launch {
-            HandsFree.paused.collect { p -> if (p > 0) { engine.stop(); live?.stop("user") } else if (!busy) waitForWake() }
+            HandsFree.paused.collect { p -> if (p > 0) { engine.stop(); cloudInput?.stop(); live?.stop("user") } else if (!busy) waitForWake() }
         }
     }
 
@@ -126,7 +134,14 @@ class HandsFreeService : Service() {
     private fun listenForReply() {
         if (HandsFree.paused.value > 0) return
         update(getString(R.string.handsfree_conversation))
-        engine.listen(language, needWake = false, listener)
+        val cloud = cloudInput
+        if (cloud == null) { engine.listen(language, needWake = false, listener); return }
+        cloud.start(language, object : VoiceRecognizer.Callback {
+            override fun onListening() {}
+            override fun onPartial(text: String) {}
+            override fun onResult(text: String) = listener.onHeard(false, text)
+            override fun onError(code: Int) = listener.onSilence()
+        })
     }
 
     private val listener = object : WakeWordEngine.Listener {
@@ -135,7 +150,7 @@ class HandsFreeService : Service() {
             if (WakePhrase.isStop(command)) { say(getString(R.string.handsfree_bye)) { waitForWake() }; return }
             // Signed in with real-time voice: the whole conversation is spoken naturally until it goes quiet.
             val p = settings.current.value
-            if (p.liveVoice && p.aiSource == "server" && server.signedIn && connectivity.isOnline()) { startLive(command); return }
+            if (p.liveVoice && !p.cloudSpeech && p.aiSource == "server" && server.signedIn && connectivity.isOnline()) { startLive(command); return }
             if (command.isBlank()) {
                 // Only the name was said: answer and listen for the request.
                 say(getString(R.string.handsfree_yes)) { listenForReply() }
@@ -199,6 +214,7 @@ class HandsFreeService : Service() {
 
     private fun say(text: String, then: () -> Unit) {
         engine.stop()
+        cloudInput?.stop()
         // The reply is read out on the media channel, which may still be silenced for the recogniser's tone.
         BeepMuter.unmuteNow(this)
         if (!settings.current.value.ttsEnabled || text.isBlank()) { then(); return }
@@ -262,6 +278,7 @@ class HandsFreeService : Service() {
         HandsFree.setRunning(false)
         BeepMuter.unmuteNow(this)
         if (::engine.isInitialized) engine.release()
+        cloudInput?.stop()
         if (::speaker.isInitialized) speaker.shutdown()
         scope.cancel()
         super.onDestroy()

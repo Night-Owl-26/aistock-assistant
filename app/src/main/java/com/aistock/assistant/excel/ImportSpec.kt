@@ -15,9 +15,23 @@ data class ImportPreview(val ready: List<ImportRow>, val skipped: List<ImportIss
 
 /** Which columns each import understands, how headers are guessed, and how rows are checked before anything is saved. */
 object ImportSpec {
+    private val SIZE_WORDS = listOf("size", "sizes", "variant", "item size", "product size", "சைஸ்")
+
+    /** "Shirt" + "XL" -> "Shirt XL": each size becomes its own product, so its stock is counted separately. */
+    fun nameWithSize(name: String, size: String?): String {
+        val sz = size?.trim().orEmpty()
+        if (sz.isEmpty()) return name.trim()
+        val nameKey = NameMatcher.tokens(name)
+        val sizeKey = NameMatcher.tokens(sz)
+        // The name already ends with the size ("Shirt XL" with size XL): don't repeat it.
+        if (sizeKey.isNotEmpty() && nameKey.size > sizeKey.size && nameKey.takeLast(sizeKey.size) == sizeKey) return name.trim()
+        return name.trim() + " " + sz
+    }
+
     fun fields(kind: ImportKind): List<ImportField> = when (kind) {
         ImportKind.PRODUCTS -> listOf(
             ImportField("name", true, listOf("name", "product", "product name", "item", "item name", "description of goods", "particulars", "பொருள்", "பெயர்")),
+            ImportField("size", false, SIZE_WORDS),
             ImportField("code", false, listOf("code", "product code", "item code", "sku", "id")),
             ImportField("category", false, listOf("category", "group", "type", "வகை")),
             ImportField("unit", false, listOf("unit", "uom", "units", "யூனிட்")),
@@ -38,6 +52,7 @@ object ImportSpec {
         )
         ImportKind.OPENING_STOCK -> listOf(
             ImportField("name", true, listOf("name", "product", "product name", "item", "item name", "code", "product code", "பொருள்")),
+            ImportField("size", false, SIZE_WORDS),
             ImportField("quantity", true, listOf("quantity", "qty", "stock", "opening stock", "count", "closing stock", "இருப்பு")),
             ImportField("unitCost", false, listOf("unit cost", "cost", "purchase price", "rate", "cost price")),
         )
@@ -98,8 +113,10 @@ object ImportSpec {
                 if (v.isNotEmpty()) values[f.key] = v
             }
             if (values.isEmpty()) continue
-            val name = values["name"]
-            if (name.isNullOrBlank()) { errors.add(ImportIssue(rowNo, "Name is missing")); continue }
+            val baseName = values["name"]
+            if (baseName.isNullOrBlank()) { errors.add(ImportIssue(rowNo, "Name is missing")); continue }
+            val name = nameWithSize(baseName, values["size"])
+            values["name"] = name
             if (name.length > 120) { errors.add(ImportIssue(rowNo, "Name is too long")); continue }
             val key = NameMatcher.key(name)
             var bad: String? = null

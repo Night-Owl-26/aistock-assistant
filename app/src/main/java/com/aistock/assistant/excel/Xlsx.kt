@@ -114,7 +114,7 @@ object XlsxWriter {
         return sb.toString()
     }
 
-    private fun esc(s: String): String = buildString(s.length + 8) {
+    internal fun esc(s: String): String = buildString(s.length + 8) {
         for (ch in s) when {
             ch == '&' -> append("&amp;")
             ch == '<' -> append("&lt;")
@@ -201,7 +201,7 @@ object XlsxReader {
         return parts
     }
 
-    private fun parser() = SAXParserFactory.newInstance().apply {
+    internal fun parser() = SAXParserFactory.newInstance().apply {
         isNamespaceAware = false
         for (f in listOf("http://apache.org/xml/features/disallow-doctype-decl" to true,
             "http://xml.org/sax/features/external-general-entities" to false,
@@ -210,7 +210,7 @@ object XlsxReader {
         }
     }.newSAXParser()
 
-    private fun local(q: String) = q.substringAfter(':')
+    internal fun local(q: String) = q.substringAfter(':')
 
     private fun firstSheetPath(parts: Map<String, ByteArray>): String? {
         var firstRid: String? = null
@@ -240,7 +240,7 @@ object XlsxReader {
         return parts.keys.filter { it.startsWith("xl/worksheets/") && it.endsWith(".xml") }.minOrNull()
     }
 
-    private fun readSharedStrings(bytes: ByteArray): List<String> {
+    internal fun readSharedStrings(bytes: ByteArray): List<String> {
         val out = ArrayList<String>()
         parser().parse(InputSource(ByteArrayInputStream(bytes)), object : DefaultHandler() {
             val sb = StringBuilder()
@@ -313,7 +313,7 @@ object XlsxReader {
         return Tables.rectangular(rows)
     }
 
-    private fun colIndex(ref: String): Int {
+    internal fun colIndex(ref: String): Int {
         var n = 0
         for (ch in ref) {
             if (ch in 'A'..'Z') n = n * 26 + (ch - 'A' + 1)
@@ -324,7 +324,7 @@ object XlsxReader {
     }
 
     /** Excel stores 250 as "250" but sometimes "250.0" or "2.5E2": show it the way a person typed it. */
-    private fun cleanNumber(raw: String): String {
+    internal fun cleanNumber(raw: String): String {
         if (raw.isEmpty()) return ""
         return try {
             val bd = BigDecimal(raw).stripTrailingZeros()

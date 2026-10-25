@@ -5,6 +5,7 @@ import { registerLiveRelay } from './liveRelay.js'
 import { checkPassword, hashPassword, randomToken, sameSecret, sha256, tokens } from './auth.js'
 import { tx } from './db.js'
 import { geminiApi, sanitizeRequest } from './gemini.js'
+import { SPEECH_LANGS, speechApi, speechLanguage, ttsSeconds } from './speech.js'
 import { validateConfig } from './businessConfig.js'
 
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}$/
@@ -22,6 +23,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
   const app = Fastify({ logger, bodyLimit: 1024 * 1024, trustProxy: true })
   const jwt = tokens(cfg)
   const gemini = geminiApi(cfg, fetchImpl)
+  const speech = speechApi(cfg, fetchImpl)
 
   // Signed-in requests are limited per person (many shops can share one mobile-network address); others per address.
   await app.register(rateLimit, {
@@ -101,6 +103,9 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
                                 WHEN expires_at <= now() THEN GREATEST(reported_seconds, LEAST(max_seconds, EXTRACT(EPOCH FROM (expires_at - started_at))::int))
                                 ELSE max_seconds END),0) AS n
          FROM live_sessions WHERE business_id = $1 AND expires_at > $2`, [businessId, from])).rows[0].n)
+      // Google Cloud speech (recognised seconds and spoken seconds) shares the same voice minutes.
+      + Number((await db.query(
+        "SELECT COALESCE(SUM(quantity),0) AS n FROM usage_events WHERE business_id = $1 AND kind IN ('stt_seconds','tts_seconds') AND created_at >= $2", [businessId, from])).rows[0].n)
     return {
       active, status: s.status, planId: s.plan_id, planName: s.plan_name, priceMinor: s.price_minor, currency: s.currency,
       periodEnd: s.current_period_end, maxStaff: s.max_staff,
@@ -117,7 +122,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
 
   app.get('/healthz', async () => {
     await pool.query('SELECT 1')
-    return { ok: true, gemini: gemini.configured(), textModel: cfg.textModel, liveModel: cfg.liveModel }
+    return { ok: true, gemini: gemini.configured(), speech: speech.configured(), textModel: cfg.textModel, liveModel: cfg.liveModel }
   })
 
   app.get('/v1/plans', async () => ({
@@ -187,7 +192,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     for (const b of rows) businesses.push({ ...b, entitlement: await entitlement(b.id) })
     return {
       user: { id: u.id, email: u.email, name: u.name }, businesses,
-      ai: { configured: gemini.configured(), textModel: cfg.textModel, liveModel: cfg.liveModel, liveWsUrl: cfg.liveWsUrl },
+      ai: { configured: gemini.configured(), speech: speech.configured(), textModel: cfg.textModel, liveModel: cfg.liveModel, liveWsUrl: cfg.liveWsUrl },
     }
   })
 
@@ -300,6 +305,56 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     }
     // Google's answer (or its error) goes back as it is, so the app can read function calls and explain errors.
     return reply.code(r.status).send(r.body)
+  })
+
+  // ---------------------------------------------------------------- AI: Google Cloud speech (turn by turn)
+
+  /** Books [seconds] of voice time under the plan lock; refused when the month's minutes would be exceeded. */
+  async function reserveSpeech(businessId, userId, kind, seconds, model) {
+    return reserve(businessId, async (c, e) => {
+      if (e.liveSeconds.limit - e.liveSeconds.used < seconds) fail(429, 'quota_exceeded', 'This month\'s voice minutes are used up. Typing to Stocky still works.')
+      return (await c.query('INSERT INTO usage_events (business_id, user_id, kind, quantity, model) VALUES ($1,$2,$3,$4,$5) RETURNING id', [businessId, userId, kind, seconds, model])).rows[0].id
+    })
+  }
+
+  const B64 = /^[A-Za-z0-9+/]+={0,2}$/
+  const MAX_STT_BYTES = 16000 * 2 * 60 // one minute of 16 kHz 16-bit mono
+
+  app.post('/v1/businesses/:id/ai/stt', { bodyLimit: 3 * 1024 * 1024, config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req) => {
+    const { user } = await member(req, req.params.id)
+    if (!speech.configured()) fail(503, 'speech_not_configured', 'The server has no Google Cloud speech key yet.')
+    const { audio, language, phrases } = req.body ?? {}
+    if (typeof audio !== 'string' || audio.length < 8 || audio.length % 4 !== 0 || !B64.test(audio)) fail(400, 'bad_request', 'No audio was received.')
+    const bytes = audio.length / 4 * 3
+    if (bytes > MAX_STT_BYTES) fail(413, 'too_long', 'Please speak for less than a minute at a time.')
+    const lang = SPEECH_LANGS.includes(language) ? language : 'ta-IN'
+    const hints = Array.isArray(phrases) ? [...new Set(phrases.filter(p => typeof p === 'string').map(p => p.trim().slice(0, 100)).filter(Boolean))].slice(0, 500) : []
+    const seconds = Math.max(1, Math.ceil(bytes / 32000))
+    const usageId = await reserveSpeech(req.params.id, user.id, 'stt_seconds', seconds, cfg.sttModel)
+    let r
+    try { r = await speech.recognize({ audio, language: lang, phrases: hints }) } catch (err) { await pool.query('DELETE FROM usage_events WHERE id = $1', [usageId]); throw err }
+    if (r.status !== 200) {
+      await pool.query('DELETE FROM usage_events WHERE id = $1', [usageId])
+      fail(r.status === 429 ? 503 : 502, 'speech_failed', r.error)
+    }
+    return { text: r.text, language: r.language, confidence: r.confidence, seconds }
+  })
+
+  app.post('/v1/businesses/:id/ai/tts', { config: { rateLimit: { max: 40, timeWindow: '1 minute' } } }, async (req) => {
+    const { user } = await member(req, req.params.id)
+    if (!speech.configured()) fail(503, 'speech_not_configured', 'The server has no Google Cloud speech key yet.')
+    const text = typeof req.body?.text === 'string' ? req.body.text.trim() : ''
+    if (!text) fail(400, 'bad_request', 'Nothing to say.')
+    if ([...text].length > 2000) fail(413, 'too_long', 'The reply is too long to read out.')
+    const lang = speechLanguage(text, req.body?.language)
+    const usageId = await reserveSpeech(req.params.id, user.id, 'tts_seconds', ttsSeconds(text), lang === 'ta-IN' ? cfg.ttsVoiceTa : cfg.ttsVoiceEn)
+    let r
+    try { r = await speech.synthesize({ text, language: lang }) } catch (err) { await pool.query('DELETE FROM usage_events WHERE id = $1', [usageId]); throw err }
+    if (r.status !== 200) {
+      await pool.query('DELETE FROM usage_events WHERE id = $1', [usageId])
+      fail(r.status === 429 ? 503 : 502, 'speech_failed', r.error)
+    }
+    return { audio: r.audio, encoding: 'wav', sampleRate: 24000, language: lang }
   })
 
   // ---------------------------------------------------------------- AI: real-time voice

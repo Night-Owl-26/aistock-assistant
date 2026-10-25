@@ -11,8 +11,29 @@ import java.util.Locale
 
 enum class VoiceState { IDLE, LISTENING, PROCESSING, SPEAKING, CONFIRMATION, EXECUTING, SUCCESS, ERROR }
 
+/** Turns one spoken request into text: the phone's recogniser or Google Cloud Speech-to-Text through the server. */
+interface SpeechInput {
+    fun isAvailable(): Boolean
+    /** @param quiet true when the microphone reopens by itself: its start tone is silenced */
+    fun start(languageTag: String, callback: VoiceRecognizer.Callback, quiet: Boolean = false)
+    fun stop()
+}
+
+/** Reads replies aloud: the phone's text-to-speech or Google Cloud Text-to-Speech through the server. */
+interface SpeechOutput {
+    fun speak(text: String, tamil: Boolean)
+    fun isSpeaking(): Boolean
+    suspend fun awaitDone(limitMs: Long = 60_000) {
+        kotlinx.coroutines.delay(250)
+        var waited = 250L
+        while (isSpeaking() && waited < limitMs) { kotlinx.coroutines.delay(120); waited += 120 }
+    }
+    fun stop()
+    fun shutdown()
+}
+
 /** Thin wrapper over Android's SpeechRecognizer. Must be created and used on the main thread. */
-class VoiceRecognizer(private val context: Context) {
+class VoiceRecognizer(private val context: Context) : SpeechInput {
     interface Callback {
         fun onListening()
         fun onPartial(text: String)
@@ -23,7 +44,7 @@ class VoiceRecognizer(private val context: Context) {
 
     private var recognizer: SpeechRecognizer? = null
 
-    fun isAvailable(): Boolean = try {
+    override fun isAvailable(): Boolean = try {
         SpeechRecognizer.isRecognitionAvailable(context)
     } catch (e: Exception) {
         false
@@ -31,8 +52,7 @@ class VoiceRecognizer(private val context: Context) {
 
     private val beep = BeepMuter(context)
 
-    /** @param quiet true when the microphone reopens by itself: its start tone is silenced */
-    fun start(languageTag: String, callback: Callback, quiet: Boolean = false) {
+    override fun start(languageTag: String, callback: Callback, quiet: Boolean) {
         stop()
         val r = SpeechRecognizer.createSpeechRecognizer(context)
         recognizer = r
@@ -69,7 +89,7 @@ class VoiceRecognizer(private val context: Context) {
         }
     }
 
-    fun stop() {
+    override fun stop() {
         recognizer?.let {
             try { it.cancel(); it.destroy() } catch (e: Exception) { /* already released */ }
         }
@@ -78,7 +98,7 @@ class VoiceRecognizer(private val context: Context) {
 }
 
 /** Reads replies aloud with Android Text-to-Speech. Silently does nothing when no speech engine is installed. */
-class Speaker(context: Context) {
+class Speaker(context: Context) : SpeechOutput {
     @Volatile private var ready = false
     private var tts: TextToSpeech? = null
     /** True from the moment a reply is handed over until the speech engine says it finished. */
@@ -101,7 +121,7 @@ class Speaker(context: Context) {
         }
     }
 
-    fun speak(text: String, tamil: Boolean) {
+    override fun speak(text: String, tamil: Boolean) {
         val engine = tts ?: return
         if (!ready || text.isBlank()) return
         try {
@@ -117,21 +137,14 @@ class Speaker(context: Context) {
         }
     }
 
-    fun isSpeaking(): Boolean = talking || try { ready && tts?.isSpeaking == true } catch (e: Exception) { false }
+    override fun isSpeaking(): Boolean = talking || try { ready && tts?.isSpeaking == true } catch (e: Exception) { false }
 
-    /** Waits until the speech engine reports that the reply has been read out (or a safety limit passes). */
-    suspend fun awaitDone(limitMs: Long = 60_000) {
-        kotlinx.coroutines.delay(250)
-        var waited = 250L
-        while (isSpeaking() && waited < limitMs) { kotlinx.coroutines.delay(120); waited += 120 }
-    }
-
-    fun stop() {
+    override fun stop() {
         talking = false
         try { tts?.stop() } catch (e: Exception) { /* ignore */ }
     }
 
-    fun shutdown() {
+    override fun shutdown() {
         talking = false
         try { tts?.stop(); tts?.shutdown() } catch (e: Exception) { /* ignore */ }
         tts = null

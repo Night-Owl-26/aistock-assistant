@@ -59,6 +59,20 @@ object AppModule {
     fun llmSource(settings: SettingsStore, connectivity: Connectivity, @ApplicationContext context: Context, server: com.aistock.assistant.server.ServerApi): LlmSource =
         LlmSource(settings, connectivity, AiDiagnostics(context), server)
 
+    /**
+     * The model that reads workbook column titles. Same model and key as Stocky (on the server or the owner's own key);
+     * only titles and a few masked example values are sent, see [com.aistock.assistant.excel.HeaderMapper.prompt].
+     */
+    @Provides
+    @Singleton
+    fun columnAi(llm: LlmSource): com.aistock.assistant.excel.ColumnAi = object : com.aistock.assistant.excel.ColumnAi {
+        override suspend fun ask(prompt: String): String? {
+            if (!llm.online()) return null
+            val client = llm.client() ?: return null
+            return client.chat(listOf(com.aistock.assistant.ai.llm.LlmMessage.User(prompt)), emptyList()).text
+        }
+    }
+
     @Provides
     fun reminderSink(impl: com.aistock.assistant.business.AlarmReminders): com.aistock.assistant.business.ReminderSink = impl
 }

@@ -17,7 +17,9 @@ import javax.inject.Singleton
 class ServerException(val status: Int, val code: String, message: String) : Exception(message)
 
 data class Usage(val active: Boolean, val status: String, val planName: String, val periodEnd: String, val aiUsed: Int, val aiLimit: Int, val liveUsedSec: Int, val liveLimitSec: Int, val priceMinor: Int)
-data class Account(val email: String, val businessId: String, val businessName: String, val role: String, val usage: Usage?, val aiConfigured: Boolean, val textModel: String, val liveModel: String)
+data class Account(val email: String, val businessId: String, val businessName: String, val role: String, val usage: Usage?, val aiConfigured: Boolean, val textModel: String, val liveModel: String, val speechConfigured: Boolean = false)
+/** What Google Cloud Speech-to-Text heard. */
+data class Heard(val text: String, val language: String, val confidence: Double?)
 /** mode "relay": voice goes through the AIStock server (signed in with the bearer token); "token": straight to Google with a one-use token. */
 data class LiveTicket(val mode: String, val sessionId: String, val token: String, val wsUrl: String, val model: String, val maxSeconds: Int)
 
@@ -125,7 +127,7 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
         val b = chosen ?: list.optJSONObject(0) ?: throw ServerException(0, "no_business", "This account has no business.")
         val ai = me.optJSONObject("ai") ?: JSONObject()
         return Account(me.getJSONObject("user").optString("email"), b.getString("id"), b.optString("name"), b.optString("role"),
-            b.optJSONObject("entitlement")?.let { usage(it) }, ai.optBoolean("configured"), ai.optString("textModel"), ai.optString("liveModel"))
+            b.optJSONObject("entitlement")?.let { usage(it) }, ai.optBoolean("configured"), ai.optString("textModel"), ai.optString("liveModel"), ai.optBoolean("speech"))
     }
 
     private fun usage(e: JSONObject) = Usage(
@@ -149,6 +151,25 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
     suspend fun liveSession(): LiveTicket {
         val o = obj("POST", "/v1/businesses/$businessId/ai/live-session")
         return LiveTicket(o.optString("mode", "token"), o.optString("sessionId"), o.optString("token"), o.getString("wsUrl"), o.getString("model"), o.optInt("maxSeconds", 600))
+    }
+
+    /**
+     * Google Cloud Speech-to-Text through the server: [pcm] is 16 kHz mono 16-bit audio, [phrases] are product and
+     * customer names that help recognition.
+     */
+    suspend fun speechToText(pcm: ByteArray, language: String, phrases: List<String>): Heard {
+        val body = JSONObject().put("audio", android.util.Base64.encodeToString(pcm, android.util.Base64.NO_WRAP)).put("language", language)
+            .put("phrases", org.json.JSONArray(phrases.take(500)))
+        val o = obj("POST", "/v1/businesses/$businessId/ai/stt", body)
+        return Heard(o.optString("text"), o.optString("language", language), if (o.isNull("confidence")) null else o.optDouble("confidence"))
+    }
+
+    /** Google Cloud Text-to-Speech through the server: a WAV file (16-bit PCM, 24 kHz). */
+    suspend fun textToSpeech(text: String, language: String?): ByteArray {
+        val body = JSONObject().put("text", text)
+        language?.let { body.put("language", it) }
+        val o = obj("POST", "/v1/businesses/$businessId/ai/tts", body)
+        return android.util.Base64.decode(o.getString("audio"), android.util.Base64.DEFAULT)
     }
 
     /** A current access token, for the voice WebSocket through the server. */

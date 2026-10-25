@@ -214,7 +214,8 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
                 Text(stringResource(if (prefs.serverBusinessId.isNotBlank()) R.string.ai_server_signed_in else R.string.ai_server_help, prefs.serverEmail), style = MaterialTheme.typography.bodyMedium)
                 Spacer(Modifier.height(8.dp))
                 Button(onClick = { nav.go("account") }) { Text(stringResource(R.string.aistock_account)) }
-                SwitchRow(stringResource(R.string.live_voice), stringResource(R.string.live_voice_sub), prefs.liveVoice) { scope.launch { vm.setLiveVoice(it) } }
+                SwitchRow(stringResource(R.string.cloud_speech), stringResource(R.string.cloud_speech_sub), prefs.cloudSpeech) { scope.launch { vm.setCloudSpeech(it) } }
+                if (!prefs.cloudSpeech) SwitchRow(stringResource(R.string.live_voice), stringResource(R.string.live_voice_sub), prefs.liveVoice) { scope.launch { vm.setLiveVoice(it) } }
             }
             if (prefs.aiSource == "key") {
             Text(

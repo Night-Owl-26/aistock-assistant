@@ -226,6 +226,7 @@ private fun MainScaffold(vm: MainViewModel, startTalking: Boolean, openChat: Boo
                 composable("data") { ImportExportScreen(nav) }
                 composable("backup") { BackupScreen(nav) }
                 composable("workbook") { WorkbookScreen(nav) }
+                composable("excel_links") { com.aistock.assistant.features.data.ExcelLinksScreen(nav) }
                 composable("settings") { SettingsScreen(nav, vm) }
                 composable("conversations") { ConversationsScreen(nav) }
             }

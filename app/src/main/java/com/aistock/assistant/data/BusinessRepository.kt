@@ -117,7 +117,7 @@ class BusinessRepository @Inject constructor(
     suspend fun resetAll() {
         db.op {
             val sdb = db.openHelper.writableDatabase
-            for (t in AppDatabase.TABLES.reversed()) sdb.execSQL("DELETE FROM `$t`")
+            for (t in AppDatabase.TABLES.reversed() + AppDatabase.LOCAL_TABLES) sdb.execSQL("DELETE FROM `$t`")
         }
         settings.reset()
     }

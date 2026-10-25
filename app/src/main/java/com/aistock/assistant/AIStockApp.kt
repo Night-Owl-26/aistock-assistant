@@ -27,12 +27,14 @@ class AIStockApp : Application() {
     @Inject lateinit var inventory: InventoryRepository
     @Inject lateinit var settings: SettingsStore
     @Inject lateinit var profileSync: com.aistock.assistant.server.ProfileSync
+    @Inject lateinit var excelSync: com.aistock.assistant.excel.ExcelSync
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
     override fun onCreate() {
         super.onCreate()
         profileSync.start()
+        excelSync.start()
         val manager = getSystemService(NotificationManager::class.java)
         manager?.createNotificationChannel(NotificationChannel(CHANNEL_LOW_STOCK, "Low stock", NotificationManager.IMPORTANCE_DEFAULT))
         scope.launch {

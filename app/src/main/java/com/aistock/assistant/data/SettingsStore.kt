@@ -69,6 +69,8 @@ data class Prefs(
     val aiSource: String = "server",
     /** Real-time spoken conversation (Gemini Live) when signed in. */
     val liveVoice: Boolean = true,
+    /** Google Cloud Speech-to-Text and Text-to-Speech through the server, turn by turn (instead of Gemini Live). */
+    val cloudSpeech: Boolean = false,
 ) {
     val tamil: Boolean get() = language == "ta"
     val cloudReady: Boolean get() = cloudEndpoint.startsWith("https://") && cloudModel.isNotBlank() && cloudKeySaved
@@ -99,6 +101,7 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
         val serverBusiness = stringPreferencesKey("server_business")
         val aiSource = stringPreferencesKey("ai_source")
         val liveVoice = booleanPreferencesKey("live_voice")
+        val cloudSpeech = booleanPreferencesKey("cloud_speech")
         val session = stringPreferencesKey("server_session_enc")
     }
 
@@ -129,6 +132,7 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
             // Phones that already used their own key keep doing so until they sign in.
             aiSource = p[K.aiSource] ?: (if (!p[K.key].isNullOrEmpty()) "key" else "server"),
             liveVoice = p[K.liveVoice] ?: true,
+            cloudSpeech = p[K.cloudSpeech] ?: false,
         )
     }
 
@@ -159,6 +163,7 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
     suspend fun setBriefingHour(h: Int) = context.dataStore.edit { it[K.briefing] = h }.let { }
     suspend fun setAiSource(s: String) = context.dataStore.edit { it[K.aiSource] = s }.let { }
     suspend fun setLiveVoice(on: Boolean) = context.dataStore.edit { it[K.liveVoice] = on }.let { }
+    suspend fun setCloudSpeech(on: Boolean) = context.dataStore.edit { it[K.cloudSpeech] = on }.let { }
 
     /** Saves the signed-in session. The refresh token is encrypted with the Android Keystore. */
     suspend fun setServerSession(url: String, email: String, businessId: String, refreshToken: String): Boolean {

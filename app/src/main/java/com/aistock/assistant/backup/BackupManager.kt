@@ -135,6 +135,8 @@ class BackupManager @Inject constructor(
                     sdb.insert(table, SQLiteDatabase.CONFLICT_ABORT, cv)
                 }
             }
+            // The stock in a linked Excel file belongs to the data before the restore: stop updating it until the owner turns it on again.
+            sdb.execSQL("UPDATE excel_links SET enabled = 0")
         }
         db.invalidationTracker.refreshVersionsAsync()
         parsed.info

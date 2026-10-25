@@ -21,8 +21,11 @@ import com.aistock.assistant.utils.NameMatcher
 import com.aistock.assistant.utils.Qty
 import com.aistock.assistant.utils.TimeWindow
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import java.io.InputStream
 import java.io.OutputStream
 import java.math.BigDecimal
@@ -37,10 +40,32 @@ data class ImportResult(val imported: Int, val skipped: List<ImportIssue>, val e
 enum class ReportType { SALES, PURCHASES, STOCK, STOCK_MOVEMENT, EXPENSES, CUSTOMER_OUTSTANDING, SUPPLIER_OUTSTANDING }
 enum class ExportKind { PRODUCTS, STOCK, STOCK_MOVEMENT, SALES, PURCHASES, EXPENSES, CUSTOMERS, SUPPLIERS, WORKBOOK, EVERYTHING }
 
-/** What importing one sheet of a workbook would do. */
-data class WorkbookPlanItem(val sheet: String, val kind: ImportKind, val preview: ImportPreview)
+/**
+ * What importing one sheet of a workbook would do.
+ * @param choice the columns used and who chose each one
+ * @param editable false for product lists worked out from a sales or purchase register, whose columns are fixed
+ */
+data class WorkbookPlanItem(
+    val sheet: String, val kind: ImportKind, val preview: ImportPreview,
+    val choice: ColumnChoice = ColumnChoice(emptyMap(), emptyMap()), val headers: List<String> = emptyList(), val editable: Boolean = false,
+)
 
-data class WorkbookResult(val imported: Map<ImportKind, Int>, val issues: List<String>, val sheetsRemembered: Int)
+/** A sheet whose stock column AIStock could keep up to date in the owner's file, if the owner turns that on. */
+data class LinkCandidate(val sheet: String, val headers: List<String>, val nameCol: Int, val sizeCol: Int, val stockCol: Int, val priceCol: Int)
+
+data class WorkbookResult(val imported: Map<ImportKind, Int>, val issues: List<String>, val sheetsRemembered: Int, val linkable: List<LinkCandidate> = emptyList())
+
+/** Whether the AI looked at the columns this time. */
+enum class ColumnAiStatus { USED, SAVED, OFF, FAILED, NOT_NEEDED }
+
+/** Asks the configured language model one question; null when no model is set up. Kept tiny so tests can fake it. */
+interface ColumnAi {
+    suspend fun ask(prompt: String): String?
+
+    companion object {
+        val NONE: ColumnAi = object : ColumnAi { override suspend fun ask(prompt: String): String? = null }
+    }
+}
 
 /** A report or export: a header row, data rows (String, BigDecimal or null) and a few headline totals. */
 data class ReportData(val title: String, val headers: List<String>, val rows: List<List<Any?>>, val summary: List<Pair<String, String>>) {
@@ -54,6 +79,7 @@ class DataExchange @Inject constructor(
     private val db: AppDatabase,
     private val inventory: InventoryRepository,
     private val parties: PartyRepository,
+    private val columnAi: ColumnAi = ColumnAi.NONE,
 ) {
     private fun s(id: Int): String = LocaleHelper.wrap(appContext).getString(id)
     private fun date(ms: Long): String = SimpleDateFormat("dd-MM-yyyy", Locale.US).format(Date(ms))
@@ -100,14 +126,66 @@ class DataExchange @Inject constructor(
         WorkbookAnalyzer.analyze(raw).filter { it.table.isNotEmpty() }
     }
 
+    /**
+     * Lets the AI read every sheet's column titles and a few example values and suggest what each column is.
+     * A layout the owner imported before is taken from the saved mapping instead, without asking the AI.
+     * The suggestion is checked by [HeaderMapper]; when there is no AI or it fails, the header rules stay in charge.
+     */
+    suspend fun smartColumns(profiles: List<SheetProfile>): Pair<List<SheetProfile>, ColumnAiStatus> {
+        val withSaved = withContext(Dispatchers.IO) { profiles.map { applySaved(it) } }
+        val ask = withSaved.filter { p -> p.fieldSource.values.none { it == "saved" } && p.headers.count { it.isNotBlank() } >= 2 && p.table.size >= 2 }
+        val anySaved = withSaved.any { p -> p.fieldSource.values.any { it == "saved" } }
+        if (ask.isEmpty()) return withSaved to (if (anySaved) ColumnAiStatus.SAVED else ColumnAiStatus.NOT_NEEDED)
+        val reply = try {
+            withTimeout(AI_TIMEOUT_MS) { columnAi.ask(HeaderMapper.prompt(ask)) }
+        } catch (e: TimeoutCancellationException) {
+            return withSaved to ColumnAiStatus.FAILED
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            return withSaved to ColumnAiStatus.FAILED
+        } ?: return withSaved to (if (anySaved) ColumnAiStatus.SAVED else ColumnAiStatus.OFF)
+        val guesses = HeaderMapper.parse(reply, ask)
+        if (guesses.isEmpty()) return withSaved to ColumnAiStatus.FAILED
+        return HeaderMapper.apply(withSaved, guesses) to ColumnAiStatus.USED
+    }
+
+    private suspend fun applySaved(p: SheetProfile): SheetProfile {
+        if (p.headers.count { it.isNotBlank() } < 2) return p
+        val saved = db.excelDao().columnMap(HeaderMapper.signature(p.headers)) ?: return p
+        val o = try { org.json.JSONObject(saved.fields) } catch (e: Exception) { return p }
+        val fields = LinkedHashMap(p.fields)
+        val source = LinkedHashMap(p.fieldSource)
+        for (f in o.keys()) {
+            if (f !in HeaderMapper.FIELDS || source[f] == "you") continue
+            val title = o.optString(f)
+            val idx = if (title.isEmpty()) -1 else HeaderMapper.columnOf(p.headers, title) ?: continue
+            fields[f] = idx; source[f] = "saved"
+        }
+        val purpose = SheetPurpose.entries.firstOrNull { it.name == saved.purpose }
+        val q = if (purpose != null && p.purposeSource == "rules") p.copy(purpose = purpose, confidence = 100, purposeSource = "saved") else p
+        return q.copy(fields = fields, fieldSource = source)
+    }
+
+    /** Remembers the columns an import used, so the next file with the same titles is read the same way. */
+    private suspend fun saveMapping(p: SheetProfile, kind: ImportKind, choice: ColumnChoice) = withContext(Dispatchers.IO) {
+        if (p.headers.count { it.isNotBlank() } < 2) return@withContext
+        val o = org.json.JSONObject()
+        for ((key, c) in choice.mapping) o.put(HeaderMapper.sharedField(kind, key), HeaderMapper.title(p.headers, c))
+        for ((f, c) in p.fields) if (c < 0) o.put(f, "")
+        db.excelDao().saveColumnMap(ColumnMapEntity(HeaderMapper.signature(p.headers), p.purpose.name, o.toString(), System.currentTimeMillis()))
+    }
+
     /** What an import of these sheets would do, without saving anything. */
     suspend fun workbookPlan(profiles: List<SheetProfile>): List<WorkbookPlanItem> {
         val out = ArrayList<WorkbookPlanItem>()
         val comingProducts = ArrayList<String>()
         for ((p, kind) in WorkbookAnalyzer.importOrder(profiles)) {
-            val pre = preview(kind, p.table, ImportSpec.autoMap(p.headers, kind), if (kind == ImportKind.OPENING_STOCK) comingProducts else emptyList())
+            val choice = HeaderMapper.choose(p, kind)
+            val pre = preview(kind, p.table, choice.mapping, if (kind == ImportKind.OPENING_STOCK) comingProducts else emptyList())
             if (kind == ImportKind.PRODUCTS) for (r in pre.ready) { r.values["name"]?.let { comingProducts.add(it) }; r.values["code"]?.let { comingProducts.add(it) } }
-            out.add(WorkbookPlanItem(p.name, kind, pre))
+            val original = profiles.any { it.name == p.name && it.table === p.table }
+            out.add(WorkbookPlanItem(p.name, kind, pre, choice, p.headers, editable = original))
         }
         return out
     }
@@ -116,13 +194,25 @@ class DataExchange @Inject constructor(
     suspend fun importWorkbook(profiles: List<SheetProfile>): WorkbookResult {
         val counts = LinkedHashMap<ImportKind, Int>()
         val issues = ArrayList<String>()
+        val linkable = ArrayList<LinkCandidate>()
         for ((p, kind) in WorkbookAnalyzer.importOrder(profiles)) {
-            val pre = preview(kind, p.table, ImportSpec.autoMap(p.headers, kind))
+            val choice = HeaderMapper.choose(p, kind)
+            val pre = preview(kind, p.table, choice.mapping)
             val r = import(kind, pre)
             counts[kind] = (counts[kind] ?: 0) + r.imported
             for (i in (r.errors + r.skipped).take(40)) issues.add("${p.name}, row ${i.rowNumber}: ${i.message}")
+            val original = profiles.any { it.name == p.name && it.table === p.table }
+            if (original) {
+                saveMapping(p, kind, choice)
+                val m = choice.mapping
+                val stock = m["openingStock"] ?: m["quantity"]
+                val name = m["name"]
+                if (stock != null && name != null) linkable.add(LinkCandidate(p.name, p.headers, name, m["size"] ?: -1, stock, m["sellingPrice"] ?: -1))
+            }
         }
-        return WorkbookResult(counts, issues, rememberSheets(profiles))
+        // A sheet that only carries quantities next to an item master is the one that should be updated.
+        val ordered = linkable.sortedBy { c -> if (profiles.firstOrNull { it.name == c.sheet }?.purpose == SheetPurpose.STOCK) 0 else 1 }
+        return WorkbookResult(counts, issues, rememberSheets(profiles), ordered)
     }
 
     /** What changed compared with the workbook remembered from an earlier upload: sheet name -> short note. */
@@ -383,6 +473,7 @@ class DataExchange @Inject constructor(
 
     companion object {
         const val MAX_SHEET_ROWS = 20_000
+        const val AI_TIMEOUT_MS = 30_000L
     }
 
     fun fileName(base: String): String =

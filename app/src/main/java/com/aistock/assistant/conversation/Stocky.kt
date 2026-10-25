@@ -23,6 +23,7 @@ import com.aistock.assistant.utils.DateRanges
 import com.aistock.assistant.utils.Match
 import com.aistock.assistant.utils.Money
 import com.aistock.assistant.utils.NameMatcher
+import com.aistock.assistant.utils.Sizes
 import com.aistock.assistant.utils.Qty
 import com.aistock.assistant.utils.Units
 import java.time.Instant
@@ -299,9 +300,26 @@ class Stocky(
     }
 
     /** "", "same", "it", "that" all mean the product the conversation is already about. */
-    private fun productArg(call: ToolCall): Pair<String?, Boolean> {
+    private suspend fun productArg(call: ToolCall): Pair<String?, Boolean> {
         val v = a(call, "product")
-        return if (v == null || v.lowercase() in SAME_WORDS) null to true else v to false
+        if (v == null || v.lowercase() in SAME_WORDS) return null to true
+        val size = a(call, "size") ?: return v to false
+        return sizedName(v, size) to false
+    }
+
+    /**
+     * "Shirt" + "XL" -> the saved product "Shirt XL". Spoken sizes are tried as said and in short form
+     * ("medium" -> "M", "double XL" -> "XXL"), and the saved product with that size wins.
+     */
+    private suspend fun sizedName(product: String, size: String): String {
+        val candidates = listOf(size, Sizes.short(size)).distinct().map { com.aistock.assistant.excel.ImportSpec.nameWithSize(product, it) }
+        val all = try { backend.products() } catch (e: Exception) { emptyList() }
+        for (c in candidates) if (all.any { NameMatcher.key(it.name) == NameMatcher.key(c) }) return c
+        for (c in candidates) when (val m = NameMatcher.match(c, all) { it.name }) {
+            is Match.Exact -> return m.item.name
+            else -> {}
+        }
+        return candidates.first()
     }
 
     private suspend fun findParty(name: String, kinds: List<PartyKind>): List<PartyRef> {
@@ -543,7 +561,7 @@ class Stocky(
             }
             "propose_new_product" -> {
                 val e = Entities(
-                    productName = a(call, "name")?.let { NameMatcher.titleCase(it) }, unit = a(call, "unit")?.let { Units.custom(it) },
+                    productName = a(call, "name")?.let { n -> NameMatcher.titleCase(com.aistock.assistant.excel.ImportSpec.nameWithSize(n, a(call, "size")?.let { Sizes.short(it) })) }, unit = a(call, "unit")?.let { Units.custom(it) },
                     quantityMilli = a(call, "opening_stock")?.let { Qty.parse(it) }, sellPaise = a(call, "selling_price")?.let { Money.parse(it) },
                     buyPaise = a(call, "purchase_price")?.let { Money.parse(it) }, minMilli = a(call, "minimum_stock")?.let { Qty.parse(it) },
                 )
@@ -624,7 +642,8 @@ class Stocky(
         private const val PERIOD = "TODAY, YESTERDAY, THIS_WEEK, LAST_WEEK, THIS_MONTH, LAST_MONTH or ALL. Leave empty to keep the period already being discussed."
         private fun s(n: String, d: String, req: Boolean = false) = ToolParam(n, "string", d, req)
         private fun n(n: String, d: String, req: Boolean = false) = ToolParam(n, "number", d, req)
-        private const val PRODUCT = "Product name as the owner said it. Leave empty to mean the product already being discussed."
+        private const val PRODUCT = "Product name as the owner said it, without the size. Leave empty to mean the product already being discussed."
+        private const val SIZE = "Size or variant if the owner said one: S, M, L, XL, XXL, 28, 32, 500ml, 1kg. Leave empty if not said."
 
         val PERSONA = """
 You are Stocky, an intelligent, friendly business assistant inside the AIStock app. You help the owner of a small Indian business understand and run it by simply talking.
@@ -640,6 +659,10 @@ WORKBOOK: For "how many", "total", "which is highest", "by region/product/month"
 CONTEXT: Remember the conversation. Resolve "it", "that", "same one", "that customer", "adhu", "idhu", "avanga", "அது", "இது", "அந்த customer" from what was just discussed. A short follow-up like "Kumar Traders?" or "yesterday?" continues the previous question with that change.
 
 CHANGES: You cannot change anything yourself. To add or remove stock, record a sale, purchase, expense or payment, create a product, customer or supplier, undo something, remember the owner's own word for a product, or edit the workbook, call the matching propose_ tool. The app then shows the owner a confirmation. Ask them to confirm in one short sentence. When they agree ("yes", "seri", "pannidu", "ok", "ஆமா"), call confirm_pending. When they decline, call cancel_pending. If they correct you ("actually 30", "5 illa 8"), call the propose_ tool again with the corrected values: it replaces the earlier proposal, so nothing is added twice. Never say something was saved, added, sold or updated unless a tool result says DONE. If a tool says it is not possible or failed, say so plainly and that nothing was changed.
+
+SIZES: Many products come in sizes (shirt S/M/L/XL, pant 28/30/32, oil 500ml/1L) and each size is its own product with its own stock, e.g. "Shirt XL". When the owner names a size ("XL size shirt 3 sold", "32 size pant", "medium shirt rendu"), put the product in product and the size in size. If a product has several sizes and the owner did not say which, ask which size before proposing. Never guess a size.
+
+EXTRACTING DETAILS: From one sentence take the product, size, quantity, unit, price per unit or total, customer or supplier, and paid or credit. "Raju-ku 2 XL shirt kuduthen, oru shirt 450, cash" is a sale: product shirt, size XL, quantity 2, unit_price 450, customer Raju, paid true. If it is unclear whether an amount is per piece or the total, ask. Only pass what was said.
 
 QUESTIONS: Ask only what is needed, one question at a time. Do not ask for confirmation on questions that only read data. Do not invent prices or other financial details for new items: ask.
 
@@ -667,14 +690,14 @@ VOICE: This is a spoken conversation. Answer in one or two short spoken sentence
                 s("group_by", "Optional column to break the result down by, e.g. Region or Product."),
                 s("sum", "Optional numeric column to add up, e.g. Quantity."),
                 s("times", "Optional second numeric column to multiply by before adding, e.g. sum=Quantity, times=UnitPrice gives revenue."))),
-            ToolSpec("propose_stock_in", "Propose adding stock that arrived. If the product does not exist the app offers to create it.", listOf(s("product", PRODUCT), n("quantity", "How many.", true), s("unit", "Unit if the owner said one (pieces, kg, meter, box ...)."), s("supplier", "Supplier, if said."), n("unit_price", "Price per unit in rupees, if said."), n("total", "Total amount in rupees, if said instead of a unit price."), ToolParam("paid", "boolean", "true if already paid, false if on credit, if said."))),
-            ToolSpec("propose_stock_out", "Propose removing stock that was damaged, lost, used or returned to a supplier (not a sale).", listOf(s("product", PRODUCT), n("quantity", "How many.", true), s("unit", "Unit if said."), ToolParam("reason", "string", "Why.", options = listOf("DAMAGE", "RETURN_OUT", "OTHER")), s("note", "Short note in the owner's words."))),
-            ToolSpec("propose_stock_set", "Propose setting the stock to a counted quantity (stock taking / correction).", listOf(s("product", PRODUCT), n("counted_quantity", "The actual quantity now.", true), s("unit", "Unit if said."))),
-            ToolSpec("propose_sale", "Propose recording a sale. Uses the product's selling price unless a price is given.", listOf(s("product", PRODUCT), n("quantity", "How many.", true), s("unit", "Unit if said."), s("customer", "Customer, if said."), n("unit_price", "Price per unit in rupees, if said."), n("total", "Total in rupees, if said."), ToolParam("paid", "boolean", "true for cash/paid, false for credit, if said."))),
+            ToolSpec("propose_stock_in", "Propose adding stock that arrived. If the product does not exist the app offers to create it.", listOf(s("product", PRODUCT), s("size", SIZE), n("quantity", "How many.", true), s("unit", "Unit if the owner said one (pieces, kg, meter, box ...)."), s("supplier", "Supplier, if said."), n("unit_price", "Price per unit in rupees, if said."), n("total", "Total amount in rupees, if said instead of a unit price."), ToolParam("paid", "boolean", "true if already paid, false if on credit, if said."))),
+            ToolSpec("propose_stock_out", "Propose removing stock that was damaged, lost, used or returned to a supplier (not a sale).", listOf(s("product", PRODUCT), s("size", SIZE), n("quantity", "How many.", true), s("unit", "Unit if said."), ToolParam("reason", "string", "Why.", options = listOf("DAMAGE", "RETURN_OUT", "OTHER")), s("note", "Short note in the owner's words."))),
+            ToolSpec("propose_stock_set", "Propose setting the stock to a counted quantity (stock taking / correction).", listOf(s("product", PRODUCT), s("size", SIZE), n("counted_quantity", "The actual quantity now.", true), s("unit", "Unit if said."))),
+            ToolSpec("propose_sale", "Propose recording a sale. Uses the product's selling price unless a price is given.", listOf(s("product", PRODUCT), s("size", SIZE), n("quantity", "How many.", true), s("unit", "Unit if said."), s("customer", "Customer, if said."), n("unit_price", "Price per unit in rupees, if said."), n("total", "Total in rupees, if said."), ToolParam("paid", "boolean", "true for cash/paid, false for credit, if said."))),
             ToolSpec("propose_expense", "Propose recording a business expense.", listOf(s("category", "What it was for, e.g. Transport, Rent, Salary.", true), n("amount", "Amount in rupees.", true), s("note", "Short note."))),
             ToolSpec("propose_payment", "Propose recording money received from a customer or paid to a supplier.", listOf(s("party", "Customer or supplier name, or 'same'.", true), n("amount", "Amount in rupees.", true), ToolParam("direction", "string", "received = from a customer, paid = to a supplier. Leave empty if unclear.", options = listOf("received", "paid")))),
-            ToolSpec("propose_new_product", "Propose creating a new product. Only include prices and minimum stock the owner actually gave.", listOf(s("name", "Product name.", true), s("unit", "Unit."), n("opening_stock", "Opening quantity."), n("selling_price", "Rupees."), n("purchase_price", "Rupees."), n("minimum_stock", "Reorder level."))),
-            ToolSpec("propose_update_product", "Propose changing a product's selling price, purchase price or minimum stock.", listOf(s("product", PRODUCT), n("selling_price", "Rupees."), n("purchase_price", "Rupees."), n("minimum_stock", "Reorder level."))),
+            ToolSpec("propose_new_product", "Propose creating a new product. Only include prices and minimum stock the owner actually gave.", listOf(s("name", "Product name.", true), s("size", SIZE), s("unit", "Unit."), n("opening_stock", "Opening quantity."), n("selling_price", "Rupees."), n("purchase_price", "Rupees."), n("minimum_stock", "Reorder level."))),
+            ToolSpec("propose_update_product", "Propose changing a product's selling price, purchase price or minimum stock.", listOf(s("product", PRODUCT), s("size", SIZE), n("selling_price", "Rupees."), n("purchase_price", "Rupees."), n("minimum_stock", "Reorder level."))),
             ToolSpec("propose_new_party", "Propose adding a customer or supplier.", listOf(ToolParam("kind", "string", "customer or supplier.", true, listOf("customer", "supplier")), s("name", "Name.", true), s("phone", "Phone number, if given."))),
             ToolSpec("propose_undo", "Propose reversing the most recent change made in this conversation."),
             ToolSpec("propose_remember_name", "Propose remembering that a word the owner uses means a particular product.", listOf(s("phrase", "The owner's word or short name.", true), s("product", "The product it means. Empty for the product being discussed."))),

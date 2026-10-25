@@ -77,6 +77,7 @@ class MainViewModel @Inject constructor(
     suspend fun setLowStockAlerts(on: Boolean) = settings.setLowStockAlerts(on)
     suspend fun setAiSource(s: String) = settings.setAiSource(s)
     suspend fun setLiveVoice(on: Boolean) = settings.setLiveVoice(on)
+    suspend fun setCloudSpeech(on: Boolean) = settings.setCloudSpeech(on)
     suspend fun setBriefingHour(h: Int) { settings.setBriefingHour(h); alarms.scheduleBriefing(h) }
     suspend fun setOwnerCheck(on: Boolean) = settings.setOwnerCheck(on)
     suspend fun setHandsFree(on: Boolean) = settings.setHandsFree(on)

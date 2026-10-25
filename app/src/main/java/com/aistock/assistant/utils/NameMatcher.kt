@@ -30,6 +30,10 @@ object NameMatcher {
         val exact = items.filter { key(nameOf(it)) == qKey }
         if (exact.size == 1) return Match.Exact(exact[0])
         if (exact.size > 1) return Match.Multiple(exact)
+        // The same words in another order: "XL shirt" is the product "Shirt XL".
+        val qSorted = q.sorted()
+        val reordered = items.filter { tokens(nameOf(it)).sorted() == qSorted }
+        if (reordered.size == 1) return Match.Exact(reordered[0])
 
         val qSet = q.toSet()
         val candidates = items.filter { item ->

@@ -16,6 +16,7 @@ import com.aistock.assistant.business.*
         BusinessAliasEntity::class, AiActionEntity::class, SheetEntity::class, SheetRowEntity::class,
         BusinessProfileEntity::class, StaffEntity::class, WorkItemEntity::class, WorkEventEntity::class,
         FollowupEntity::class, ContactLogEntity::class, ReminderEntity::class, ProductBatchEntity::class,
+        com.aistock.assistant.excel.ColumnMapEntity::class, com.aistock.assistant.excel.ExcelLinkEntity::class,
     ],
     version = AppDatabase.VERSION,
     exportSchema = true,
@@ -30,9 +31,10 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun metaDao(): MetaDao
     abstract fun stockyDao(): StockyDao
     abstract fun workDao(): WorkDao
+    abstract fun excelDao(): com.aistock.assistant.excel.ExcelDao
 
     companion object {
-        const val VERSION = 3
+        const val VERSION = 4
         const val NAME = "aistock.db"
 
         /**
@@ -79,7 +81,22 @@ abstract class AppDatabase : RoomDatabase() {
             "CREATE INDEX IF NOT EXISTS `index_product_batches_expiryDate` ON `product_batches` (`expiryDate`)",
         )
 
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+        /** V4 adds remembered column mappings and the owner's linked Excel files. Nothing existing changes. */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                for (sql in V4_SQL) db.execSQL(sql)
+            }
+        }
+
+        val V4_SQL = listOf(
+            "CREATE TABLE IF NOT EXISTS `column_maps` (`signature` TEXT NOT NULL, `purpose` TEXT NOT NULL, `fields` TEXT NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`signature`))",
+            "CREATE TABLE IF NOT EXISTS `excel_links` (`id` TEXT NOT NULL, `uri` TEXT NOT NULL, `fileName` TEXT NOT NULL, `sheetName` TEXT NOT NULL, `nameHeader` TEXT NOT NULL, `nameCol` INTEGER NOT NULL, `sizeHeader` TEXT NOT NULL, `sizeCol` INTEGER NOT NULL, `stockHeader` TEXT NOT NULL, `stockCol` INTEGER NOT NULL, `priceHeader` TEXT NOT NULL, `priceCol` INTEGER NOT NULL, `enabled` INTEGER NOT NULL, `addNewRows` INTEGER NOT NULL, `salesSheet` INTEGER NOT NULL, `lastSyncAt` INTEGER, `lastResult` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
+        )
+
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+
+        /** Tables tied to this phone (file permissions), cleared on reset but never put in a backup. */
+        val LOCAL_TABLES = listOf("excel_links")
 
         /** Every table, parents before children, used by backup and restore. */
         val TABLES = listOf(
@@ -88,6 +105,7 @@ abstract class AppDatabase : RoomDatabase() {
             "inventory_transactions", "conversations", "conversation_messages", "audit_logs",
             "business_aliases", "ai_actions", "workbook_sheets", "workbook_rows",
             "business_profiles", "staff", "work_items", "work_events", "followups", "contact_log", "reminders", "product_batches",
+            "column_maps",
         )
     }
 }

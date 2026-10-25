@@ -86,6 +86,8 @@ import com.aistock.assistant.ui.components.ListRow
 import com.aistock.assistant.ui.components.Tag
 import com.aistock.assistant.ui.fmtDateTime
 import com.aistock.assistant.voice.Speaker
+import com.aistock.assistant.voice.SpeechInput
+import com.aistock.assistant.voice.SpeechOutput
 import com.aistock.assistant.voice.VoiceRecognizer
 import com.aistock.assistant.voice.VoiceState
 
@@ -104,9 +106,11 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
     // True while the microphone was reopened automatically to continue a spoken conversation.
     var autoListening by remember { mutableStateOf(false) }
 
-    val recognizer = remember { VoiceRecognizer(ctx) }
-    val speaker = remember { Speaker(ctx) }
-    DisposableEffect(Unit) { onDispose { recognizer.stop(); speaker.shutdown() } }
+    // Google Cloud Speech-to-Text / Text-to-Speech through the owner's server when chosen in Settings; the phone's own otherwise.
+    val cloudVoice = prefs.cloudSpeech && vm.cloudSpeechReady()
+    val recognizer: SpeechInput = remember(cloudVoice) { if (cloudVoice) vm.cloudRecognizer() else VoiceRecognizer(ctx) }
+    val speaker: SpeechOutput = remember(cloudVoice) { if (cloudVoice) vm.cloudSpeaker(Speaker(ctx)) else Speaker(ctx) }
+    DisposableEffect(recognizer, speaker) { onDispose { recognizer.stop(); speaker.shutdown() } }
 
     val msgNoSpeech = stringResource(R.string.voice_not_heard)
     val msgNoService = stringResource(R.string.voice_unavailable)

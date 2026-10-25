@@ -67,6 +67,7 @@ class DataViewModel @Inject constructor(
     val exchange: DataExchange,
     val backups: BackupManager,
     private val business: BusinessRepository,
+    val excelSync: com.aistock.assistant.excel.ExcelSync,
 ) : ViewModel() {
     suspend fun exportFile(context: Context, kind: ExportKind, name: String): File = withContext(Dispatchers.IO) {
         val dir = File(context.cacheDir, "shared").apply { mkdirs() }
@@ -210,6 +211,10 @@ fun ImportExportScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
         AppCard(Modifier.fillMaxWidth(), onClick = { nav.go("workbook") }) {
             Text(stringResource(R.string.workbook_card_title), style = MaterialTheme.typography.titleMedium)
             Text(stringResource(R.string.workbook_intro), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        AppCard(Modifier.fillMaxWidth(), onClick = { nav.go("excel_links") }) {
+            Text(stringResource(R.string.links_title), style = MaterialTheme.typography.titleMedium)
+            Text(stringResource(R.string.links_card_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         SectionTitle(stringResource(R.string.import_from_excel))
