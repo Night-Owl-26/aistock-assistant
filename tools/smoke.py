@@ -93,7 +93,12 @@ def tap(label, secs=20, exact=False, last=False, required=True):
 
 def scroll_to(label, tries=8):
     for _ in range(tries):
-        if find(label): return True
+        n = find(label)
+        # Something found right at the bottom edge would be tapped through the navigation bar: bring it up first.
+        if n and n["y"] > 1950:
+            adb("shell", "input", "swipe", "540", "1500", "540", "900", "400"); time.sleep(1.2)
+            n = find(label)
+        if n: return True
         adb("shell", "input", "swipe", "540", "1700", "540", "700", "400"); time.sleep(1.2)
     return False
 
