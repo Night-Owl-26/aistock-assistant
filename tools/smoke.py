@@ -149,6 +149,32 @@ def expect(label, step, secs=15):
         return False
     return True
 
+def make_xlsx(path, rows):
+    """A small real .xlsx with one sheet "Stock", written the plain way (inline strings)."""
+    import zipfile
+    def col(i): return chr(ord("A") + i)
+    def cell(r, c, v):
+        ref = f"{col(c)}{r}"
+        if isinstance(v, (int, float)): return f'<c r="{ref}"><v>{v}</v></c>'
+        return f'<c r="{ref}" t="inlineStr"><is><t>{v}</t></is></c>'
+    data = "".join(f'<row r="{r}">' + "".join(cell(r, c, v) for c, v in enumerate(row)) + "</row>" for r, row in enumerate(rows, 1))
+    with zipfile.ZipFile(path, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("[Content_Types].xml", '<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>')
+        z.writestr("_rels/.rels", '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>')
+        z.writestr("xl/workbook.xml", '<?xml version="1.0"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Stock" sheetId="1" r:id="rId1"/></sheets></workbook>')
+        z.writestr("xl/_rels/workbook.xml.rels", '<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/></Relationships>')
+        z.writestr("xl/worksheets/sheet1.xml", '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>' + data + "</sheetData></worksheet>")
+
+def xlsx_cell(raw, ref):
+    """Value of one cell of sheet1 in an .xlsx given as bytes, or None."""
+    import io, zipfile
+    try:
+        xml = zipfile.ZipFile(io.BytesIO(raw)).read("xl/worksheets/sheet1.xml").decode("utf-8")
+    except Exception:
+        return None
+    m = re.search(r'<c r="' + ref + r'"[^>]*>(?:<v>([^<]*)</v>|<is><t[^>]*>([^<]*)</t></is>)', xml)
+    return (m.group(1) or m.group(2)) if m else None
+
 def step(name):
     say("==", name)
 
@@ -238,6 +264,34 @@ tap("Backup / Restore"); expect("Create backup", "backup"); tap("Create backup")
 tap("Import / Export"); expect("Export to Excel", "import export"); shot("import-export"); back()
 check("more")
 
+step("excel workbook: import with sizes, keep the owner's file updated, a sale changes it")
+make_xlsx(os.path.join(OUT, "shop.xlsx"), [["Item", "Size", "Stock", "Price"], ["Polo", "XL", 10, 300], ["Polo", "L", 6, 280]])
+adb("push", os.path.join(OUT, "shop.xlsx"), "/sdcard/Download/shop.xlsx")
+tap("More", exact=True); tap("Import / Export"); tap("Let Stocky read my whole workbook"); tap("Choose file", exact=True); time.sleep(3)
+if not wait_for("shop.xlsx", 8):
+    tap("Show roots", required=False); tap("Downloads", required=False); time.sleep(2)
+shot("picker"); tap("shop.xlsx")
+expect("Import and remember this workbook", "workbook read", 40); shot("workbook-columns")
+expect("Polo XL", "size joined to the name in the preview")
+tap("Import and remember this workbook"); expect("Import finished", "workbook imported", 30)
+if expect("Keep this Excel file updated", "offer to keep the file updated", 10):
+    tap("Turn on", exact=True); expect("current stock", "first update of the file", 30); shot("excel-linked")
+back()
+tap("Chat", exact=True); tap("New conversation", required=False)
+tap_field("Type what happened"); type_text("Sold 2 Polo XL"); tap("Send", exact=True)
+hide_keyboard(); expect("Confirm", "size sale confirmation", 25); tap("Confirm", exact=True); expect("Sale saved", "size sale done")
+value = None
+for _ in range(15):
+    time.sleep(2)
+    value = xlsx_cell(adb("exec-out", "cat", "/sdcard/Download/shop.xlsx", binary=True), "C2")
+    if value == "8": break
+say("  excel C2 (Polo XL stock) =", value)
+if value != "8": problems.append(f"excel write-back: Polo XL stock in the file is {value}, expected 8")
+if xlsx_cell(adb("exec-out", "cat", "/sdcard/Download/shop.xlsx", binary=True), "C3") != "6": problems.append("excel write-back changed a row it should not")
+tap("More", exact=True); tap("Import / Export"); tap("Linked Excel files"); expect("shop.xlsx", "linked files screen"); expect("rows changed", "update result shown"); shot("excel-links")
+back(); back()
+check("excel")
+
 step("business setup: garment manufacturing")
 tap("More", exact=True); scroll_to("Business setup"); tap("Business setup"); expect("Type of business", "setup screen")
 tap("Garments / textile manufacturing"); time.sleep(1); shot("setup-garment"); tap("Save", exact=True, last=True); time.sleep(2)
@@ -270,6 +324,8 @@ tap_field("Password"); type_text("shopowner1"); hide_keyboard()
 tap_field("Business name"); type_text("Test Shop"); hide_keyboard()
 tap("Create account", exact=True, last=True); expect("Plan", "signed in", 30); shot("account-signed-in")
 expect("Free trial", "trial plan")
+back(); tap("Settings"); scroll_to("Google Cloud voice"); expect("Google Cloud voice", "Google Cloud voice option when signed in"); shot("settings-cloud-voice"); back()
+tap("More", exact=True); scroll_to("AIStock account"); tap("AIStock account"); expect("Plan", "account again")
 back(); tap("Chat", exact=True); tap("New conversation", required=False)
 tap_field("Type what happened"); type_text("hello Stocky"); tap("Send", exact=True)
 expect("Vanakkam from the test server", "AI reply through the server", 40); hide_keyboard(); shot("assistant-through-server")
