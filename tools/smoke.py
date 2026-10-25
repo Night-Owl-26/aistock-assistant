@@ -270,7 +270,13 @@ adb("push", os.path.join(OUT, "shop.xlsx"), "/sdcard/Download/shop.xlsx")
 tap("More", exact=True); tap("Import / Export"); tap("Let Stocky read my whole workbook"); tap("Choose file", exact=True); time.sleep(3)
 if not wait_for("shop.xlsx", 8):
     tap("Show roots", required=False); tap("Downloads", required=False); time.sleep(2)
-shot("picker"); tap("shop.xlsx")
+shot("picker")
+# The file picker sometimes uses the first touch to settle its layout: tap the file until the picker closes.
+for _ in range(4):
+    n = find("shop.xlsx")
+    if not n: break
+    adb("shell", "input", "tap", str(n["x"]), str(n["y"])); time.sleep(4)
+    if not find("Files in Downloads") and not find("shop.xlsx"): break
 expect("Import and remember this workbook", "workbook read", 40); shot("workbook-columns")
 expect("Polo XL", "size joined to the name in the preview")
 tap("Import and remember this workbook"); expect("Import finished", "workbook imported", 30)

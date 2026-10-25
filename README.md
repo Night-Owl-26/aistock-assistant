@@ -97,7 +97,36 @@ Echo cancelling and noise suppression from the phone are switched on. Tool calls
 typed chat; a spoken "yes" only counts after Stocky has finished asking. Without a server the earlier speech-to-text →
 Gemini text → text-to-speech path (or the on-device rules) is used.
 
-**Database.** Room version 3; `MIGRATION_2_3` only adds tables, so V1/V2 data is kept (tested from a real version-1 file).
+**Database.** Room version 4; `MIGRATION_2_3` and `MIGRATION_3_4` only add tables, so earlier data is kept (tested from a real version-1 file, and 3 → 4 in `SmartWorkbookTest`).
+
+## Version 3.1: smart Excel columns, sizes, your own Excel file kept up to date, Google Cloud voice
+
+**AI column matching** (`excel/HeaderMapper.kt`). When a workbook is uploaded, the column titles and up to three example
+values per column (phone numbers and emails masked) are sent to Gemini, which says what each sheet holds and which column is
+the name, size, stock, price and so on — whatever language or short form the titles use ("Itm", "Sz", "Bal Qty", "Rt/pc").
+The answer is checked: unknown fields and titles that are not in the sheet are dropped, no column is used twice, price and
+quantity columns must hold numbers. Anything left out falls back to the header rules. Every choice is shown with who made
+it (AI, rules, last time, you) and can be changed before importing. The confirmed mapping is saved and reused for the same
+layout without asking the AI again.
+
+**Sizes.** A Size column makes each size its own product ("Shirt" + "XL" → "Shirt XL") with its own stock and price.
+Stocky's sale and stock tools take a `size` ("XL", "32", "medium" → "M", "double XL" → "XXL"), and "XL shirt" finds "Shirt XL".
+
+**Your Excel file kept up to date** (`excel/ExcelSync.kt`, `XlsxPatcher.kt`, `ExcelSyncPlan.kt`). After an import the owner
+can turn this on for the file they picked. A few seconds after any stock change (a sale, stock in, a correction), the file is
+read again, rows are found by product name (and size), and only the stock (and price) cells that differ are rewritten
+inside the .xlsx; formulas, formatting, other sheets and all other parts are copied unchanged, formula cells are never
+overwritten, and Excel recalculates on opening. Optional: new products added as rows, and an "AIStock Sales" sheet with every
+bill and the total revenue. A copy of the file is kept inside the app before every write (last 5), the written file is read
+back and the original put back if it does not check out. More > Import / Export > Linked Excel files shows the last result,
+updates now, pauses or stops.
+
+**Google Cloud Speech-to-Text and Text-to-Speech** (`voice/cloud/`, `server/src/speech.js`). Optional, in Settings when signed
+in. The phone records one request (it stops by itself after a pause), the server sends it to Google Cloud Speech-to-Text
+(Tamil, with Indian English as the second language; product and customer names as hints), Stocky handles the text with
+Gemini, and the reply is read by Google Cloud Text-to-Speech (a Tamil voice for Tamil text, Indian English otherwise). The
+Google key stays on the server (`GOOGLE_CLOUD_API_KEY`); speech time counts against the plan's voice minutes. If the speech
+service fails, the phone's own voice reads the reply.
 
 ## Project layout
 
