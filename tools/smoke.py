@@ -275,7 +275,8 @@ shot("picker")
 for _ in range(4):
     n = find("shop.xlsx")
     if not n or n["pkg"] == PKG: break  # back in the app
-    adb("shell", "input", "tap", str(n["x"]), str(n["y"])); time.sleep(4)
+    # In the grid view a tap on the name area selects the file; a tap on its picture opens it.
+    adb("shell", "input", "tap", str(n["x"]), str(max(300, n["y"] - 280))); time.sleep(4)
 expect("Import and remember this workbook", "workbook read", 40); shot("workbook-columns")
 expect("Polo XL", "size joined to the name in the preview")
 tap("Import and remember this workbook"); expect("Import finished", "workbook imported", 30)
