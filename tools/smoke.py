@@ -268,12 +268,12 @@ step("excel workbook: import with sizes, keep the owner's file updated, a sale c
 make_xlsx(os.path.join(OUT, "shop.xlsx"), [["Item", "Size", "Stock", "Price"], ["Polo", "XL", 10, 300], ["Polo", "L", 6, 280]])
 adb("push", os.path.join(OUT, "shop.xlsx"), "/sdcard/Download/shop.xlsx")
 tap("More", exact=True); tap("Import / Export"); tap("Let Stocky read my whole workbook"); tap("Choose file", exact=True); time.sleep(3)
-if not wait_for("shop.xlsx", 8):
+if not wait_for("shop.xlsx", 8, exact=True):
     tap("Show roots", required=False); tap("Downloads", required=False); time.sleep(2)
 shot("picker")
 # The file picker sometimes uses the first touch to settle its layout: tap the file until the picker closes.
 for _ in range(4):
-    n = find("shop.xlsx")
+    n = find("shop.xlsx", exact=True)  # the file name itself, not "Preview the file shop.xlsx"
     if not n or n["pkg"] == PKG: break  # back in the app
     # In the grid view a tap on the name area selects the file; a tap on its picture opens it.
     adb("shell", "input", "tap", str(n["x"]), str(max(300, n["y"] - 280))); time.sleep(4)
