@@ -128,6 +128,10 @@ Gemini, and the reply is read by Google Cloud Text-to-Speech (a Tamil voice for 
 Google key stays on the server (`GOOGLE_CLOUD_API_KEY`); speech time counts against the plan's voice minutes. If the speech
 service fails, the phone's own voice reads the reply.
 
+**Sarvam AI speech-to-text** (`server/src/speech.js`). With `SARVAM_API_KEY` set on the server, Sarvam AI (`saaras:v4`,
+`codemix` mode: Tamil words in Tamil script, English words in English) turns the owner's speech into text instead of Google,
+with up to 50 product and customer names as key terms. The app does not change: it sends the recording to the server either way.
+
 ## Project layout
 
 ```

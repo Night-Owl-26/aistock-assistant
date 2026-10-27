@@ -19,16 +19,55 @@ export function ttsSeconds(text) {
   return Math.max(1, Math.ceil([...text].length / 14))
 }
 
+/** 16 kHz mono 16-bit PCM wrapped in a WAV header, the format Sarvam reads best. */
+export function wavFromPcm(pcm, rate = 16000) {
+  const h = Buffer.alloc(44)
+  h.write('RIFF', 0); h.writeUInt32LE(36 + pcm.length, 4); h.write('WAVE', 8)
+  h.write('fmt ', 12); h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22)
+  h.writeUInt32LE(rate, 24); h.writeUInt32LE(rate * 2, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34)
+  h.write('data', 36); h.writeUInt32LE(pcm.length, 40)
+  return Buffer.concat([h, pcm])
+}
+
 export function speechApi(cfg, fetchImpl = fetch) {
   const headers = () => ({ 'content-type': 'application/json', 'x-goog-api-key': cfg.speechKey })
+  const sttProvider = () => {
+    if (cfg.sttProvider === 'google') return cfg.speechKey ? 'google' : null
+    if (cfg.sttProvider === 'sarvam') return cfg.sarvamKey ? 'sarvam' : null
+    return cfg.sarvamKey ? 'sarvam' : cfg.speechKey ? 'google' : null
+  }
+
+  /** Sarvam AI speech-to-text: one short clip (under about 30 seconds) per request. */
+  async function recognizeSarvam({ audio, language, phrases }) {
+    const form = new FormData()
+    form.append('file', new Blob([wavFromPcm(Buffer.from(audio, 'base64'))], { type: 'audio/wav' }), 'speech.wav')
+    form.append('model', cfg.sarvamModel)
+    form.append('language_code', language)
+    if (cfg.sarvamMode) form.append('mode', cfg.sarvamMode)
+    // Product and customer names help it spell them the way the shop does (at most 50, 64 characters each).
+    const terms = phrases.filter(p => [...p].length <= 64).slice(0, 50)
+    if (terms.length && cfg.sarvamModel.startsWith('saaras:v4')) form.append('keyterms', JSON.stringify(terms))
+    const r = await fetchImpl(`${cfg.sarvamBase}/speech-to-text`, {
+      method: 'POST', headers: { 'api-subscription-key': cfg.sarvamKey }, body: form, signal: AbortSignal.timeout(60_000),
+    })
+    const body = await parse(r)
+    if (!r.ok) return { status: r.status, error: body?.error?.message || body?.message || `speech-to-text failed (${r.status})` }
+    return { status: 200, text: String(body.transcript ?? '').replace(/\s+/g, ' ').trim(), language: body.language_code || language, confidence: null }
+  }
+
   return {
-    configured: () => cfg.speechKey.length > 0,
+    sttProvider,
+    sttModel: () => sttProvider() === 'sarvam' ? cfg.sarvamModel : cfg.sttModel,
+    sttConfigured: () => sttProvider() !== null,
+    ttsConfigured: () => cfg.speechKey.length > 0,
+    configured: () => sttProvider() !== null || cfg.speechKey.length > 0,
 
     /**
      * 16 kHz mono 16-bit PCM (base64) -> text. Product and customer names are passed as phrase hints so they are
      * recognised as the shop writes them. Returns { status, text, language, confidence, error }.
      */
     async recognize({ audio, language, phrases }) {
+      if (sttProvider() === 'sarvam') return recognizeSarvam({ audio, language, phrases })
       const other = SPEECH_LANGS.find(l => l !== language)
       const config = {
         encoding: 'LINEAR16', sampleRateHertz: 16000, audioChannelCount: 1, languageCode: language,

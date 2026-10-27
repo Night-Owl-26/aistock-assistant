@@ -29,6 +29,13 @@ export function loadConfig(env = process.env) {
     ttsVoiceTa: get('GOOGLE_TTS_VOICE_TA', 'ta-IN-Chirp3-HD-Aoede'),
     ttsVoiceEn: get('GOOGLE_TTS_VOICE_EN', 'en-IN-Chirp3-HD-Aoede'),
     ttsRate: Math.max(0.25, Math.min(2, Number(get('GOOGLE_TTS_RATE', 1)))),
+    // Sarvam AI speech-to-text (Indian languages). When its key is set it hears the owner instead of Google
+    // (STT_PROVIDER=google keeps Google even then).
+    sarvamKey: get('SARVAM_API_KEY', ''),
+    sarvamBase: get('SARVAM_BASE_URL', 'https://api.sarvam.ai'),
+    sarvamModel: get('SARVAM_STT_MODEL', 'saaras:v4'),
+    sarvamMode: get('SARVAM_STT_MODE', 'codemix'),
+    sttProvider: get('STT_PROVIDER', 'auto'),
     trialDays: Number(get('TRIAL_DAYS', 14)),
     accessTtlSeconds: Number(get('ACCESS_TTL_SECONDS', 3600)),
     refreshTtlDays: Number(get('REFRESH_TTL_DAYS', 60)),

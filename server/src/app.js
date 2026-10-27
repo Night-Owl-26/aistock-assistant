@@ -122,7 +122,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
 
   app.get('/healthz', async () => {
     await pool.query('SELECT 1')
-    return { ok: true, gemini: gemini.configured(), speech: speech.configured(), textModel: cfg.textModel, liveModel: cfg.liveModel }
+    return { ok: true, gemini: gemini.configured(), speech: speech.sttConfigured(), speechToText: speech.sttProvider(), textToSpeech: speech.ttsConfigured() ? 'google' : null, textModel: cfg.textModel, liveModel: cfg.liveModel }
   })
 
   app.get('/v1/plans', async () => ({
@@ -192,7 +192,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     for (const b of rows) businesses.push({ ...b, entitlement: await entitlement(b.id) })
     return {
       user: { id: u.id, email: u.email, name: u.name }, businesses,
-      ai: { configured: gemini.configured(), speech: speech.configured(), textModel: cfg.textModel, liveModel: cfg.liveModel, liveWsUrl: cfg.liveWsUrl },
+      ai: { configured: gemini.configured(), speech: speech.sttConfigured(), speechToText: speech.sttProvider(), textToSpeech: speech.ttsConfigured() ? 'google' : null, textModel: cfg.textModel, liveModel: cfg.liveModel, liveWsUrl: cfg.liveWsUrl },
     }
   })
 
@@ -307,7 +307,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     return reply.code(r.status).send(r.body)
   })
 
-  // ---------------------------------------------------------------- AI: Google Cloud speech (turn by turn)
+  // ---------------------------------------------------------------- AI: speech (Sarvam AI or Google Cloud), turn by turn
 
   /** Books [seconds] of voice time under the plan lock; refused when the month's minutes would be exceeded. */
   async function reserveSpeech(businessId, userId, kind, seconds, model) {
@@ -322,7 +322,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
 
   app.post('/v1/businesses/:id/ai/stt', { bodyLimit: 3 * 1024 * 1024, config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req) => {
     const { user } = await member(req, req.params.id)
-    if (!speech.configured()) fail(503, 'speech_not_configured', 'The server has no Google Cloud speech key yet.')
+    if (!speech.sttConfigured()) fail(503, 'speech_not_configured', 'The server has no speech-to-text key yet (Sarvam AI or Google Cloud).')
     const { audio, language, phrases } = req.body ?? {}
     if (typeof audio !== 'string' || audio.length < 8 || audio.length % 4 !== 0 || !B64.test(audio)) fail(400, 'bad_request', 'No audio was received.')
     const bytes = audio.length / 4 * 3
@@ -330,7 +330,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     const lang = SPEECH_LANGS.includes(language) ? language : 'ta-IN'
     const hints = Array.isArray(phrases) ? [...new Set(phrases.filter(p => typeof p === 'string').map(p => p.trim().slice(0, 100)).filter(Boolean))].slice(0, 500) : []
     const seconds = Math.max(1, Math.ceil(bytes / 32000))
-    const usageId = await reserveSpeech(req.params.id, user.id, 'stt_seconds', seconds, cfg.sttModel)
+    const usageId = await reserveSpeech(req.params.id, user.id, 'stt_seconds', seconds, speech.sttModel())
     let r
     try { r = await speech.recognize({ audio, language: lang, phrases: hints }) } catch (err) { await pool.query('DELETE FROM usage_events WHERE id = $1', [usageId]); throw err }
     if (r.status !== 200) {
@@ -342,7 +342,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
 
   app.post('/v1/businesses/:id/ai/tts', { config: { rateLimit: { max: 40, timeWindow: '1 minute' } } }, async (req) => {
     const { user } = await member(req, req.params.id)
-    if (!speech.configured()) fail(503, 'speech_not_configured', 'The server has no Google Cloud speech key yet.')
+    if (!speech.ttsConfigured()) fail(503, 'speech_not_configured', 'The server has no Google Cloud text-to-speech key yet.')
     const text = typeof req.body?.text === 'string' ? req.body.text.trim() : ''
     if (!text) fail(400, 'bad_request', 'Nothing to say.')
     if ([...text].length > 2000) fail(413, 'too_long', 'The reply is too long to read out.')

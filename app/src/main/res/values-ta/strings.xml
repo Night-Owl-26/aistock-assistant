@@ -122,8 +122,8 @@
     <string name="chosen">தேர்வு</string>
     <string name="clear">அழி</string>
     <string name="close">மூடு</string>
-    <string name="cloud_speech">Google Cloud குரல்</string>
-    <string name="cloud_speech_sub">உங்கள் AIStock server வழியாக Google Cloud Speech-to-Text, Text-to-Speech; ஒவ்வொரு கோரிக்கையாக. Plan-ன் voice நிமிடங்களைப் பயன்படுத்தும். Server-ல் Google Cloud key தேவை.</string>
+    <string name="cloud_speech">Server குரல் (Sarvam AI / Google Cloud)</string>
+    <string name="cloud_speech_sub">உங்கள் குரலை AIStock server வழியாக Sarvam AI (தமிழுக்காக உருவானது) அல்லது Google Cloud எழுத்தாக மாற்றும்; ஒவ்வொரு கோரிக்கையாக. பதில்களை Google Cloud படிக்கும், server-ல் Google key இல்லையென்றால் phone படிக்கும். Plan-ன் voice நிமிடங்களைப் பயன்படுத்தும்.</string>
     <string name="col_address">முகவரி</string>
     <string name="col_after">பின்</string>
     <string name="col_amount">தொகை</string>
