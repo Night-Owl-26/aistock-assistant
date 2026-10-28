@@ -16,7 +16,7 @@ sudo docker compose ps --services 2>/dev/null | grep -qx caddy || files="$files 
 if [ "${1:-}" = off ]; then
   setenv STT_PROVIDER auto; setenv WHISPER_URL ""; setenv COMPOSE_PROFILES ""
   sudo docker compose $files --profile whisper stop whisper >/dev/null 2>&1 || true
-  sudo docker compose $files up -d --force-recreate api >/dev/null
+  sudo docker compose $files up -d --build --force-recreate api >/dev/null
   echo "Whisper turned off."; exit 0
 fi
 
@@ -40,7 +40,7 @@ import base64, json, urllib.request, math, struct
 pcm = b''.join(struct.pack('<h', int(3000*math.sin(i/8))) for i in range(48000))
 req = urllib.request.Request('http://127.0.0.1:9000/transcribe', json.dumps({'audio': base64.b64encode(pcm).decode(), 'language': 'ta-IN', 'vad': False}).encode(), {'content-type': 'application/json'})
 print('  took', json.load(urllib.request.urlopen(req, timeout=120))['took'], 'seconds')"
-sudo docker compose $files up -d --force-recreate api >/dev/null
+sudo docker compose $files up -d --build --force-recreate api >/dev/null
 sleep 4
 curl -s "https://$(grep -E '^DOMAIN=' .env | cut -d= -f2)/healthz"; echo
 echo "Done: Server voice now hears with Whisper. Replies are still spoken by Sarvam/Gemini."
