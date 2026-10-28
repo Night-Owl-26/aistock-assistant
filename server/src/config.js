@@ -43,6 +43,11 @@ export function loadConfig(env = process.env) {
     sarvamSpeakerEn: get('SARVAM_TTS_SPEAKER_EN', ''),
     sarvamTtsPace: Math.max(0.5, Math.min(2, Number(get('SARVAM_TTS_PACE', 1.05)))),
     ttsProvider: get('TTS_PROVIDER', 'auto'),
+    // Gemini for speech, with the same Gemini key (no extra service): hearing uses the text model,
+    // speaking a Gemini TTS model (found automatically when empty) and one of its prebuilt voices.
+    geminiSttModel: get('GEMINI_STT_MODEL', ''),
+    geminiTtsModel: get('GEMINI_TTS_MODEL', ''),
+    geminiTtsVoice: get('GEMINI_TTS_VOICE', 'Kore'),
     // OpenRouter for Stocky's typed conversation (any model there, including free ones). When its key is set it is
     // used instead of Gemini for text (TEXT_PROVIDER=gemini keeps Gemini). Real-time voice always needs Gemini.
     openRouterKey: get('OPENROUTER_API_KEY', ''),

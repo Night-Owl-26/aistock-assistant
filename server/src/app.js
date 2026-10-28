@@ -355,7 +355,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     if (!text) fail(400, 'bad_request', 'Nothing to say.')
     if ([...text].length > 2000) fail(413, 'too_long', 'The reply is too long to read out.')
     const lang = speechLanguage(text, req.body?.language)
-    const usageId = await reserveSpeech(req.params.id, user.id, 'tts_seconds', ttsSeconds(text), speech.ttsProvider() === 'sarvam' ? cfg.sarvamTtsModel : (lang === 'ta-IN' ? cfg.ttsVoiceTa : cfg.ttsVoiceEn))
+    const usageId = await reserveSpeech(req.params.id, user.id, 'tts_seconds', ttsSeconds(text), ({ sarvam: cfg.sarvamTtsModel, gemini: cfg.geminiTtsModel || 'gemini-tts' })[speech.ttsProvider()] ?? (lang === 'ta-IN' ? cfg.ttsVoiceTa : cfg.ttsVoiceEn))
     let r
     try { r = await speech.synthesize({ text, language: lang }) } catch (err) { await pool.query('DELETE FROM usage_events WHERE id = $1', [usageId]); throw err }
     if (r.status !== 200) {

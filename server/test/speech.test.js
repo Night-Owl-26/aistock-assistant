@@ -138,3 +138,43 @@ test('Sarvam reads replies aloud in a Tamil voice, falling back to the default v
   const g = loadConfig({ ...base, SARVAM_API_KEY: 'sk', GOOGLE_CLOUD_API_KEY: 'g', TTS_PROVIDER: 'google' })
   assert.equal(speechApi(g).ttsProvider(), 'google')
 })
+
+test('Without Sarvam or Google Cloud, Gemini hears and speaks with the Gemini key', async () => {
+  const cfg = loadConfig({ ...base, GEMINI_API_KEY: 'gk', GEMINI_BASE_URL: 'https://gem.test', GEMINI_TEXT_MODEL: 'gemini-flash-lite-latest' })
+  const calls = []
+  const pcmOut = Buffer.alloc(4800, 2)
+  const f = async (url, init) => {
+    calls.push({ url: String(url), body: init?.body ? JSON.parse(init.body) : null, key: init?.headers?.['x-goog-api-key'] })
+    const json = (o) => new Response(JSON.stringify(o), { status: 200 })
+    if (String(url).includes('/models?')) return json({ models: [
+      { name: 'models/gemini-flash-lite-latest', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-pro-tts', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-flash-tts', supportedGenerationMethods: ['generateContent'] },
+    ] })
+    if (String(url).includes('gemini-flash-tts:generateContent')) return json({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/L16;codec=pcm;rate=24000', data: pcmOut.toString('base64') } }] } }] })
+    return json({ candidates: [{ content: { parts: [{ text: 'Raju-க்கு 2 XL shirt cash\n' }] } }] })
+  }
+  const api = speechApi(cfg, f)
+  assert.equal(api.sttProvider(), 'gemini')
+  assert.equal(api.ttsProvider(), 'gemini')
+  const heard = await api.recognize({ audio: Buffer.alloc(3200).toString('base64'), language: 'ta-IN', phrases: ['Shirt XL', 'Raju'] })
+  assert.equal(heard.status, 200)
+  assert.equal(heard.text, 'Raju-க்கு 2 XL shirt cash')
+  assert.match(calls[0].url, /gemini-flash-lite-latest:generateContent$/)
+  assert.equal(calls[0].key, 'gk')
+  assert.equal(calls[0].body.contents[0].parts[0].inlineData.mimeType, 'audio/wav')
+  assert.match(calls[0].body.contents[0].parts[1].text, /Shirt XL, Raju/)
+
+  const spoken = await api.synthesize({ text: 'Shirt XL இப்போ 10 பீஸ் இருக்கு.', language: 'ta-IN' })
+  assert.equal(spoken.status, 200)
+  const wav = Buffer.from(spoken.audio, 'base64')
+  assert.equal(wav.toString('ascii', 0, 4), 'RIFF')
+  assert.equal(wav.readUInt32LE(24), 24000)
+  assert.equal(wav.length, 44 + pcmOut.length)
+  const ttsCall = calls.find(c => c.url.includes('gemini-flash-tts'))
+  assert.deepEqual(ttsCall.body.generationConfig.responseModalities, ['AUDIO'])
+  assert.equal(ttsCall.body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, 'Kore')
+  // Sarvam still wins when its key is set; STT_PROVIDER=gemini keeps Gemini even then.
+  assert.equal(speechApi(loadConfig({ ...base, GEMINI_API_KEY: 'g', SARVAM_API_KEY: 's' })).sttProvider(), 'sarvam')
+  assert.equal(speechApi(loadConfig({ ...base, GEMINI_API_KEY: 'g', SARVAM_API_KEY: 's', STT_PROVIDER: 'gemini', TTS_PROVIDER: 'gemini' })).ttsProvider(), 'gemini')
+})

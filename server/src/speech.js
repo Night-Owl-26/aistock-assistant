@@ -1,4 +1,4 @@
-// Google Cloud Speech-to-Text and Text-to-Speech, called with the server's key only.
+// Speech for Stocky: Sarvam AI, Google Cloud, or Gemini itself, called with the server's keys only.
 // The app sends recorded audio or reply text here; the key never reaches the phone.
 
 export const SPEECH_LANGS = ['ta-IN', 'en-IN']
@@ -31,10 +31,73 @@ export function wavFromPcm(pcm, rate = 16000) {
 
 export function speechApi(cfg, fetchImpl = fetch) {
   const headers = () => ({ 'content-type': 'application/json', 'x-goog-api-key': cfg.speechKey })
-  const sttProvider = () => {
-    if (cfg.sttProvider === 'google') return cfg.speechKey ? 'google' : null
-    if (cfg.sttProvider === 'sarvam') return cfg.sarvamKey ? 'sarvam' : null
-    return cfg.sarvamKey ? 'sarvam' : cfg.speechKey ? 'google' : null
+  const has = { sarvam: () => !!cfg.sarvamKey, google: () => !!cfg.speechKey, gemini: () => !!cfg.geminiKey }
+  // auto: Sarvam if its key is set, else Google Cloud, else Gemini with the Gemini key.
+  const pick = (wanted) => {
+    if (has[wanted]) return has[wanted]() ? wanted : null
+    return ['sarvam', 'google', 'gemini'].find(p => has[p]()) ?? null
+  }
+  const sttProvider = () => pick(cfg.sttProvider)
+
+  const gHeaders = () => ({ 'content-type': 'application/json', 'x-goog-api-key': cfg.geminiKey })
+  const geminiText = (b) => (b?.candidates?.[0]?.content?.parts ?? []).filter(p => typeof p.text === 'string' && !p.thought).map(p => p.text).join('').trim()
+
+  /** Gemini hears the recording and writes it down: Tamil in Tamil script, English words in English. */
+  async function recognizeGemini({ audio, language, phrases }) {
+    const model = cfg.geminiSttModel || cfg.textModel
+    const wav = wavFromPcm(Buffer.from(audio, 'base64')).toString('base64')
+    const names = phrases.slice(0, 80).join(', ')
+    const prompt = `Transcribe this short recording of a shop owner in Tamil Nadu talking to their stock and billing app. ` +
+      `They speak ${language === 'ta-IN' ? 'Tamil, often mixed with English' : 'English, Tamil or Tanglish'}. ` +
+      `Write Tamil words in Tamil script and English words (product names, sizes, units, stock, bill, cash, credit) in English letters. ` +
+      `Write numbers as digits. ${names ? `Names they may say: ${names}. ` : ''}` +
+      `Output only what was said, nothing else. If nothing was said, output nothing.`
+    const r = await fetchImpl(`${cfg.geminiBase}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST', headers: gHeaders(), signal: AbortSignal.timeout(45_000),
+      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/wav', data: wav } }, { text: prompt }] }], generationConfig: { temperature: 0, maxOutputTokens: 400 } }),
+    })
+    const b = await parse(r)
+    if (!r.ok) return { status: r.status, error: b?.error?.message || `speech-to-text failed (${r.status})` }
+    const text = geminiText(b).replace(/^["'“]|["'”]$/g, '').replace(/\s+/g, ' ').trim()
+    return { status: 200, text, language, confidence: null }
+  }
+
+  let ttsModelFound = null
+  /** The Gemini TTS model to use: the configured one, or the first "tts" model this key may call (flash first). */
+  async function geminiTtsModel() {
+    if (cfg.geminiTtsModel) return cfg.geminiTtsModel
+    if (ttsModelFound) return ttsModelFound
+    const r = await fetchImpl(`${cfg.geminiBase}/v1beta/models?pageSize=200`, { headers: gHeaders(), signal: AbortSignal.timeout(15_000) })
+    const b = await parse(r)
+    const names = (b?.models ?? []).filter(m => (m.supportedGenerationMethods ?? []).includes('generateContent')).map(m => String(m.name).replace(/^models\//, '')).filter(n => /tts/i.test(n))
+    ttsModelFound = names.find(n => /flash/i.test(n)) ?? names[0] ?? null
+    return ttsModelFound
+  }
+
+  /** Gemini speaks the reply in a natural voice; returns a WAV (its audio comes as raw 16-bit PCM). */
+  async function synthesizeGemini({ text, language }) {
+    const model = await geminiTtsModel()
+    if (!model) return { status: 503, error: 'This Gemini key has no text-to-speech model.' }
+    const style = language === 'ta-IN' ? 'Read this aloud the way a friendly shop assistant in Tamil Nadu talks, warm and natural, at a normal pace:' : 'Read this aloud in a friendly Indian English voice, natural pace:'
+    const r = await fetchImpl(`${cfg.geminiBase}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
+      method: 'POST', headers: gHeaders(), signal: AbortSignal.timeout(45_000),
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: `${style}\n${text.slice(0, 2000)}` }] }],
+        generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: cfg.geminiTtsVoice } } } },
+      }),
+    })
+    const b = await parse(r)
+    if (!r.ok) {
+      if (r.status === 404) ttsModelFound = null // the model went away: look again next time
+      return { status: r.status, error: b?.error?.message || `text-to-speech failed (${r.status})` }
+    }
+    const part = (b?.candidates?.[0]?.content?.parts ?? []).find(p => p?.inlineData?.data)
+    if (!part) return { status: 502, error: 'Gemini returned no audio' }
+    const mime = String(part.inlineData.mimeType || '')
+    const pcm = Buffer.from(part.inlineData.data, 'base64')
+    if (pcm.subarray(0, 4).toString() === 'RIFF') return { status: 200, audio: part.inlineData.data }
+    const rate = Number(/rate=(\d+)/.exec(mime)?.[1]) || 24000
+    return { status: 200, audio: wavFromPcm(pcm, rate).toString('base64') }
   }
 
   /** Sarvam AI speech-to-text: one short clip (under about 30 seconds) per request. */
@@ -55,11 +118,7 @@ export function speechApi(cfg, fetchImpl = fetch) {
     return { status: 200, text: String(body.transcript ?? '').replace(/\s+/g, ' ').trim(), language: body.language_code || language, confidence: null }
   }
 
-  const ttsProvider = () => {
-    if (cfg.ttsProvider === 'google') return cfg.speechKey ? 'google' : null
-    if (cfg.ttsProvider === 'sarvam') return cfg.sarvamKey ? 'sarvam' : null
-    return cfg.sarvamKey ? 'sarvam' : cfg.speechKey ? 'google' : null
-  }
+  const ttsProvider = () => pick(cfg.ttsProvider)
 
   /** Sarvam AI Bulbul: one WAV for the reply. Tries the chosen voice, then the model's own default voice. */
   async function synthesizeSarvam({ text, language }) {
@@ -86,10 +145,10 @@ export function speechApi(cfg, fetchImpl = fetch) {
   return {
     ttsProvider,
     sttProvider,
-    sttModel: () => sttProvider() === 'sarvam' ? cfg.sarvamModel : cfg.sttModel,
+    sttModel: () => ({ sarvam: cfg.sarvamModel, google: cfg.sttModel, gemini: cfg.geminiSttModel || cfg.textModel })[sttProvider()] ?? '',
     sttConfigured: () => sttProvider() !== null,
     ttsConfigured: () => ttsProvider() !== null,
-    configured: () => sttProvider() !== null || cfg.speechKey.length > 0,
+    configured: () => sttProvider() !== null || ttsProvider() !== null,
 
     /**
      * 16 kHz mono 16-bit PCM (base64) -> text. Product and customer names are passed as phrase hints so they are
@@ -97,6 +156,7 @@ export function speechApi(cfg, fetchImpl = fetch) {
      */
     async recognize({ audio, language, phrases }) {
       if (sttProvider() === 'sarvam') return recognizeSarvam({ audio, language, phrases })
+      if (sttProvider() === 'gemini') return recognizeGemini({ audio, language, phrases })
       const other = SPEECH_LANGS.find(l => l !== language)
       const config = {
         encoding: 'LINEAR16', sampleRateHertz: 16000, audioChannelCount: 1, languageCode: language,
@@ -125,6 +185,7 @@ export function speechApi(cfg, fetchImpl = fetch) {
     /** Text -> spoken audio (WAV, 16-bit PCM, 24 kHz). Falls back to Google's default voice for the language. */
     async synthesize({ text, language }) {
       if (ttsProvider() === 'sarvam') return synthesizeSarvam({ text, language })
+      if (ttsProvider() === 'gemini') return synthesizeGemini({ text, language })
       const name = language === 'ta-IN' ? cfg.ttsVoiceTa : cfg.ttsVoiceEn
       const send = (voice) => fetchImpl(`${cfg.ttsBase}/v1/text:synthesize`, {
         method: 'POST', headers: headers(), signal: AbortSignal.timeout(30_000),
