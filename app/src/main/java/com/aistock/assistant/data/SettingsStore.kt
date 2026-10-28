@@ -20,6 +20,7 @@ import kotlinx.coroutines.flow.catch
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.withTimeoutOrNull
 import java.security.KeyStore
 import java.security.SecureRandom
 import java.util.Base64
@@ -171,6 +172,7 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
         context.dataStore.edit {
             it[K.serverUrl] = url.trimEnd('/'); it[K.serverEmail] = email; it[K.serverBusiness] = businessId; it[K.session] = enc; it[K.aiSource] = "server"
         }
+        settle { it.serverUrl == url.trimEnd('/') && it.serverBusinessId == businessId }
         return true
     }
 
@@ -179,12 +181,18 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
         context.dataStore.edit { it[K.session] = enc }
     }
 
-    suspend fun setServerBusiness(id: String) = context.dataStore.edit { it[K.serverBusiness] = id }.let { }
-    suspend fun setServerUrl(url: String) = context.dataStore.edit { it[K.serverUrl] = url.trim().trimEnd('/') }.let { }
+    suspend fun setServerBusiness(id: String) { context.dataStore.edit { it[K.serverBusiness] = id }; settle { it.serverBusinessId == id } }
+    suspend fun setServerUrl(url: String) { val u = url.trim().trimEnd('/'); context.dataStore.edit { it[K.serverUrl] = u }; settle { it.serverUrl == u } }
+
+    /**
+     * `current` follows the saved settings a moment after each write. Sign-in reads the address and business straight
+     * after saving them, so these writes wait (briefly) until `current` shows the new values.
+     */
+    private suspend fun settle(ok: (Prefs) -> Boolean) { withTimeoutOrNull(3_000) { current.first(ok) } }
 
     suspend fun refreshToken(): String? = context.dataStore.data.first()[K.session]?.let { SecretBox.decrypt(it) }
 
-    suspend fun clearServerSession() = context.dataStore.edit { it.remove(K.session); it.remove(K.serverBusiness); it.remove(K.serverEmail) }.let { }
+    suspend fun clearServerSession() { context.dataStore.edit { it.remove(K.session); it.remove(K.serverBusiness); it.remove(K.serverEmail) }; settle { it.serverBusinessId.isBlank() } }
 
     suspend fun setHandsFree(on: Boolean) = context.dataStore.edit { it[K.handsFree] = on }.let { }
 
