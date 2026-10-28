@@ -130,7 +130,8 @@ service fails, the phone's own voice reads the reply.
 
 **Sarvam AI speech-to-text** (`server/src/speech.js`). With `SARVAM_API_KEY` set on the server, Sarvam AI (`saaras:v4`,
 `codemix` mode: Tamil words in Tamil script, English words in English) turns the owner's speech into text instead of Google,
-with up to 50 product and customer names as key terms. The app does not change: it sends the recording to the server either way.
+with up to 50 product and customer names as key terms. The same key makes Sarvam's Bulbul voices read Stocky's replies
+aloud (`bulbul:v4-flash`, Tamil voice `gokul_ta_narration` by default), which sounds far more natural than the phone's voice. The app does not change: it sends the recording to the server either way.
 
 ## Project layout
 

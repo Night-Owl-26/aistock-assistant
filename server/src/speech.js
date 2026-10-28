@@ -55,11 +55,40 @@ export function speechApi(cfg, fetchImpl = fetch) {
     return { status: 200, text: String(body.transcript ?? '').replace(/\s+/g, ' ').trim(), language: body.language_code || language, confidence: null }
   }
 
+  const ttsProvider = () => {
+    if (cfg.ttsProvider === 'google') return cfg.speechKey ? 'google' : null
+    if (cfg.ttsProvider === 'sarvam') return cfg.sarvamKey ? 'sarvam' : null
+    return cfg.sarvamKey ? 'sarvam' : cfg.speechKey ? 'google' : null
+  }
+
+  /** Sarvam AI Bulbul: one WAV for the reply. Tries the chosen voice, then the model's own default voice. */
+  async function synthesizeSarvam({ text, language }) {
+    const speaker = language === 'ta-IN' ? cfg.sarvamSpeakerTa : cfg.sarvamSpeakerEn
+    const send = (body) => fetchImpl(`${cfg.sarvamBase}/text-to-speech`, {
+      method: 'POST', signal: AbortSignal.timeout(30_000),
+      headers: { 'content-type': 'application/json', 'api-subscription-key': cfg.sarvamKey },
+      body: JSON.stringify(body),
+    })
+    const base = { text: text.slice(0, 2500), language_code: language, model: cfg.sarvamTtsModel, pace: cfg.sarvamTtsPace, speech_sample_rate: 24000, output_audio_codec: 'wav' }
+    const tries = speaker ? [{ ...base, speaker }, base, { ...base, model: 'bulbul:v3' }] : [base, { ...base, model: 'bulbul:v3' }]
+    let last = { status: 502, error: 'text-to-speech failed' }
+    for (const body of tries) {
+      const r = await send(body)
+      const b = await parse(r)
+      const audio = Array.isArray(b?.audios) ? b.audios[0] : null
+      if (r.ok && typeof audio === 'string' && audio.length > 0) return { status: 200, audio }
+      last = { status: r.ok ? 502 : r.status, error: b?.error?.message || b?.message || `text-to-speech failed (${r.status})` }
+      if (r.status === 401 || r.status === 403 || r.status === 429) break // key or quota: another voice will not help
+    }
+    return last
+  }
+
   return {
+    ttsProvider,
     sttProvider,
     sttModel: () => sttProvider() === 'sarvam' ? cfg.sarvamModel : cfg.sttModel,
     sttConfigured: () => sttProvider() !== null,
-    ttsConfigured: () => cfg.speechKey.length > 0,
+    ttsConfigured: () => ttsProvider() !== null,
     configured: () => sttProvider() !== null || cfg.speechKey.length > 0,
 
     /**
@@ -95,6 +124,7 @@ export function speechApi(cfg, fetchImpl = fetch) {
 
     /** Text -> spoken audio (WAV, 16-bit PCM, 24 kHz). Falls back to Google's default voice for the language. */
     async synthesize({ text, language }) {
+      if (ttsProvider() === 'sarvam') return synthesizeSarvam({ text, language })
       const name = language === 'ta-IN' ? cfg.ttsVoiceTa : cfg.ttsVoiceEn
       const send = (voice) => fetchImpl(`${cfg.ttsBase}/v1/text:synthesize`, {
         method: 'POST', headers: headers(), signal: AbortSignal.timeout(30_000),

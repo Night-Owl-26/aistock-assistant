@@ -46,7 +46,7 @@ test('Sarvam errors are reported, and STT_PROVIDER=google keeps Google', async (
   const r = await speechApi(cfg, bad).recognize({ audio: 'AAAA', language: 'ta-IN', phrases: [] })
   assert.equal(r.status, 403)
   assert.equal(r.error, 'Invalid API key')
-  assert.equal(speechApi(cfg).ttsConfigured(), false, 'Sarvam key alone gives speech-to-text only')
+  assert.equal(speechApi(cfg).ttsProvider(), 'sarvam', 'a Sarvam key also reads replies aloud')
 
   const g = loadConfig({ ...base, SARVAM_API_KEY: 'k', GOOGLE_CLOUD_API_KEY: 'g', STT_PROVIDER: 'google' })
   assert.equal(speechApi(g).sttProvider(), 'google')
@@ -110,4 +110,31 @@ test('OpenRouter: key in the header only, errors passed on', async () => {
   assert.equal(e.body.error.message, 'No auth credentials found')
   const busy = async () => new Response(JSON.stringify({ error: { message: 'Provider returned error', code: 429 } }), { status: 200 })
   assert.equal((await openRouterApi(cfg, busy).generate('m', { contents: [] })).status, 429)
+})
+
+test('Sarvam reads replies aloud in a Tamil voice, falling back to the default voice', async () => {
+  const cfg = loadConfig({ ...base, SARVAM_API_KEY: 'sk', SARVAM_BASE_URL: 'https://sarvam.test', GOOGLE_CLOUD_API_KEY: 'g' })
+  const calls = []
+  const f = async (url, init) => {
+    const body = JSON.parse(init.body)
+    calls.push({ url, body, key: init.headers['api-subscription-key'] })
+    if (body.speaker === 'gokul_ta_narration') return new Response(JSON.stringify({ error: { message: 'speaker not found' } }), { status: 400 })
+    return new Response(JSON.stringify({ request_id: 'x', audios: [Buffer.from('RIFFdata').toString('base64')] }), { status: 200 })
+  }
+  const api = speechApi(cfg, f)
+  assert.equal(api.ttsProvider(), 'sarvam')
+  const r = await api.synthesize({ text: 'Shirt XL இப்போ 10 பீஸ் இருக்கு.', language: 'ta-IN' })
+  assert.equal(r.status, 200)
+  assert.equal(Buffer.from(r.audio, 'base64').toString(), 'RIFFdata')
+  assert.equal(calls[0].url, 'https://sarvam.test/text-to-speech')
+  assert.equal(calls[0].key, 'sk')
+  assert.equal(calls[0].body.language_code, 'ta-IN')
+  assert.equal(calls[0].body.model, 'bulbul:v4-flash')
+  assert.equal(calls[0].body.output_audio_codec, 'wav')
+  assert.equal(calls[1].body.speaker, undefined)
+  const denied = async () => new Response(JSON.stringify({ error: { message: 'Invalid API key' } }), { status: 403 })
+  const d = await speechApi(cfg, denied).synthesize({ text: 'x', language: 'ta-IN' })
+  assert.equal(d.status, 403)
+  const g = loadConfig({ ...base, SARVAM_API_KEY: 'sk', GOOGLE_CLOUD_API_KEY: 'g', TTS_PROVIDER: 'google' })
+  assert.equal(speechApi(g).ttsProvider(), 'google')
 })

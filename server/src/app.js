@@ -130,7 +130,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
 
   app.get('/healthz', async () => {
     await pool.query('SELECT 1')
-    return { ok: true, gemini: gemini.configured(), textProvider, textReady: textApi.configured(), speech: speech.sttConfigured(), speechToText: speech.sttProvider(), textToSpeech: speech.ttsConfigured() ? 'google' : null, textModel, liveModel: cfg.liveModel }
+    return { ok: true, gemini: gemini.configured(), textProvider, textReady: textApi.configured(), speech: speech.sttConfigured(), speechToText: speech.sttProvider(), textToSpeech: speech.ttsProvider(), textModel, liveModel: cfg.liveModel }
   })
 
   app.get('/v1/plans', async () => ({
@@ -200,7 +200,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     for (const b of rows) businesses.push({ ...b, entitlement: await entitlement(b.id) })
     return {
       user: { id: u.id, email: u.email, name: u.name }, businesses,
-      ai: { configured: textApi.configured(), textProvider, live: gemini.configured(), speech: speech.sttConfigured(), speechToText: speech.sttProvider(), textToSpeech: speech.ttsConfigured() ? 'google' : null, textModel, liveModel: cfg.liveModel, liveWsUrl: cfg.liveWsUrl },
+      ai: { configured: textApi.configured(), textProvider, live: gemini.configured(), speech: speech.sttConfigured(), speechToText: speech.sttProvider(), textToSpeech: speech.ttsProvider(), textModel, liveModel: cfg.liveModel, liveWsUrl: cfg.liveWsUrl },
     }
   })
 
@@ -350,12 +350,12 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
 
   app.post('/v1/businesses/:id/ai/tts', { config: { rateLimit: { max: 40, timeWindow: '1 minute' } } }, async (req) => {
     const { user } = await member(req, req.params.id)
-    if (!speech.ttsConfigured()) fail(503, 'speech_not_configured', 'The server has no Google Cloud text-to-speech key yet.')
+    if (!speech.ttsConfigured()) fail(503, 'speech_not_configured', 'The server has no text-to-speech key yet (Sarvam AI or Google Cloud).')
     const text = typeof req.body?.text === 'string' ? req.body.text.trim() : ''
     if (!text) fail(400, 'bad_request', 'Nothing to say.')
     if ([...text].length > 2000) fail(413, 'too_long', 'The reply is too long to read out.')
     const lang = speechLanguage(text, req.body?.language)
-    const usageId = await reserveSpeech(req.params.id, user.id, 'tts_seconds', ttsSeconds(text), lang === 'ta-IN' ? cfg.ttsVoiceTa : cfg.ttsVoiceEn)
+    const usageId = await reserveSpeech(req.params.id, user.id, 'tts_seconds', ttsSeconds(text), speech.ttsProvider() === 'sarvam' ? cfg.sarvamTtsModel : (lang === 'ta-IN' ? cfg.ttsVoiceTa : cfg.ttsVoiceEn))
     let r
     try { r = await speech.synthesize({ text, language: lang }) } catch (err) { await pool.query('DELETE FROM usage_events WHERE id = $1', [usageId]); throw err }
     if (r.status !== 200) {

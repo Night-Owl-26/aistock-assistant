@@ -133,7 +133,7 @@ test('AI proxy: key stays on the server, tools only, usage metered, limits enfor
   assert.equal(r.status, 200)
   assert.equal(r.json.candidates[0].content.parts[0].text, 'Innikku 3 sales.')
   const sent = google.calls.at(-1)
-  assert.match(sent.url, /models\/gemini-flash-latest:generateContent$/)
+  assert.match(sent.url, /models\/gemini-flash-lite-latest:generateContent$/)
   assert.equal(sent.headers['x-goog-api-key'], 'server-key')
   assert.deepEqual(sent.body.tools, [{ functionDeclarations: [{ name: 'get_sales', description: 'x' }] }], 'search/code tools are stripped')
   assert.equal(sent.body.cachedContent, undefined)

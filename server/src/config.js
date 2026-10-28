@@ -36,6 +36,13 @@ export function loadConfig(env = process.env) {
     sarvamModel: get('SARVAM_STT_MODEL', 'saaras:v4'),
     sarvamMode: get('SARVAM_STT_MODE', 'codemix'),
     sttProvider: get('STT_PROVIDER', 'auto'),
+    // Sarvam AI text-to-speech (Bulbul): natural Indian voices. Used for spoken replies when the Sarvam key is set
+    // (TTS_PROVIDER=google keeps Google Cloud).
+    sarvamTtsModel: get('SARVAM_TTS_MODEL', 'bulbul:v4-flash'),
+    sarvamSpeakerTa: get('SARVAM_TTS_SPEAKER_TA', 'gokul_ta_narration'),
+    sarvamSpeakerEn: get('SARVAM_TTS_SPEAKER_EN', ''),
+    sarvamTtsPace: Math.max(0.5, Math.min(2, Number(get('SARVAM_TTS_PACE', 1.05)))),
+    ttsProvider: get('TTS_PROVIDER', 'auto'),
     // OpenRouter for Stocky's typed conversation (any model there, including free ones). When its key is set it is
     // used instead of Gemini for text (TEXT_PROVIDER=gemini keeps Gemini). Real-time voice always needs Gemini.
     openRouterKey: get('OPENROUTER_API_KEY', ''),
