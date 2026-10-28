@@ -24,7 +24,7 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         enableEdgeToEdge()
         super.onCreate(savedInstanceState)
-        // The "Talk to AIStock" home-screen shortcut opens the assistant with the microphone already listening.
+        // The "Talk to Follower" home-screen shortcut opens the assistant with the microphone already listening.
         val talk = (intent?.getStringExtra("talk") == "true" || intent?.getBooleanExtra("talk", false) == true) && savedInstanceState == null
         val chat = intent?.getBooleanExtra("chat", false) == true && savedInstanceState == null
         setContent { AppRoot(startTalking = talk, openChat = chat) }

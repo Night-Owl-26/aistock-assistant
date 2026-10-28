@@ -70,7 +70,7 @@ class ExcelSync @Inject constructor(
         for (l in db.excelDao().links()) if (l.enabled) sync(l.id)
     }
 
-    /** Whether the app that holds this file lets AIStock change it. */
+    /** Whether the app that holds this file lets Follower change it. */
     fun canWrite(uri: Uri): Boolean = try {
         ctx.contentResolver.query(uri, arrayOf(DocumentsContract.Document.COLUMN_FLAGS), null, null, null)?.use { c ->
             c.moveToFirst() && (c.getInt(0) and DocumentsContract.Document.FLAG_SUPPORTS_WRITE) != 0
@@ -190,7 +190,7 @@ class ExcelSync @Inject constructor(
 
     private fun rupees(paise: Long): BigDecimal = BigDecimal(paise).movePointLeft(2)
 
-    /** The optional "AIStock Sales" sheet: total revenue and every bill, newest first. */
+    /** The optional "Follower Sales" sheet: total revenue and every bill, newest first. */
     internal suspend fun salesSheet(): Sheet {
         val dao = db.tradeDao()
         val all = dao.salesBetween(0L, Long.MAX_VALUE).filter { it.sale.status != Status.CANCELLED }
@@ -199,7 +199,7 @@ class ExcelSync @Inject constructor(
         fun total(from: Long, to: Long) = all.filter { it.sale.date in from until to }.sumOf { it.sale.total }
         val fmt = SimpleDateFormat("dd-MM-yyyy", Locale.US)
         val rows = ArrayList<List<Any?>>()
-        rows.add(listOf("AIStock sales - kept up to date by the AIStock app. Changes made here are replaced."))
+        rows.add(listOf("Follower sales - kept up to date by the Follower app. Changes made here are replaced."))
         rows.add(listOf("Total revenue", rupees(all.sumOf { it.sale.total })))
         rows.add(listOf("This month", rupees(total(month.start, month.end))))
         rows.add(listOf("Today", rupees(total(today.start, today.end))))
@@ -216,6 +216,6 @@ class ExcelSync @Inject constructor(
         const val DEBOUNCE_MS = 4_000L
         const val KEEP_BACKUPS = 5
         const val MAX_BILLS = 5_000
-        const val SALES_SHEET = "AIStock Sales"
+        const val SALES_SHEET = "Follower Sales"
     }
 }

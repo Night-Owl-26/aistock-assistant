@@ -115,7 +115,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
   }
 
   function requireActive(e) {
-    if (!e.active) fail(402, 'subscription_inactive', 'Your AIStock plan has ended. Renew it to keep using Stocky AI.')
+    if (!e.active) fail(402, 'subscription_inactive', 'Your Follower plan has ended. Renew it to keep using Stocky AI.')
   }
 
   // ---------------------------------------------------------------- public
@@ -260,7 +260,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     if (!['manager', 'staff'].includes(role)) fail(400, 'bad_role', 'Role must be manager or staff.')
     const em = String(req.body?.email ?? '').trim().toLowerCase()
     const target = (await pool.query('SELECT id FROM users WHERE email = $1', [em])).rows[0]
-    if (!target) fail(404, 'user_not_found', 'Ask this person to create an AIStock account first.')
+    if (!target) fail(404, 'user_not_found', 'Ask this person to create a Follower account first.')
     if (target.id === user.id) fail(400, 'bad_request', 'You are already the owner.')
     const existing = (await pool.query('SELECT role FROM memberships WHERE user_id = $1 AND business_id = $2', [target.id, req.params.id])).rows[0]
     if (existing?.role === 'owner') fail(400, 'bad_request', 'An owner cannot be changed to another role here.')

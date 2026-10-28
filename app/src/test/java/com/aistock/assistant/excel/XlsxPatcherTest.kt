@@ -103,11 +103,11 @@ class XlsxPatcherTest {
 
     @Test
     fun salesSheetIsAddedOnceAndRefreshedOnlyWhenItChanges() {
-        val sales = Sheet("AIStock Sales", listOf(listOf("Total revenue", BigDecimal("1250.50")), listOf("Date", "Bill no", "Total"), listOf("01-10-2026", "S-1", BigDecimal("1250.5"))))
+        val sales = Sheet("Follower Sales", listOf(listOf("Total revenue", BigDecimal("1250.50")), listOf("Date", "Bill no", "Total"), listOf("01-10-2026", "S-1", BigDecimal("1250.5"))))
         val first = ExcelSyncPlan.update(workbook(), link(), products, sales)
         val bytes = assertNotNullBytes(first.bytes)
         val all = XlsxReader.readAll(ByteArrayInputStream(bytes))
-        assertEquals(listOf("Notes", "Items", "AIStock Sales"), all.map { it.name })
+        assertEquals(listOf("Notes", "Items", "Follower Sales"), all.map { it.name })
         assertEquals(listOf("Total revenue", "1250.5", ""), all[2].rows[0])
         val parts = XlsxPatcher.parts(bytes)
         assertTrue(String(parts.getValue("[Content_Types].xml")).contains("/xl/worksheets/aistock_sales.xml"))
@@ -118,7 +118,7 @@ class XlsxPatcherTest {
         val more = sales.copy(rows = sales.rows + listOf(listOf("02-10-2026", "S-2", BigDecimal(10))))
         val second = assertNotNullBytes(ExcelSyncPlan.update(bytes, link(), products, more).bytes)
         val names = XlsxReader.readAll(ByteArrayInputStream(second)).map { it.name }
-        assertEquals(listOf("Notes", "Items", "AIStock Sales"), names)
+        assertEquals(listOf("Notes", "Items", "Follower Sales"), names)
     }
 
     /** A file written the way Excel writes it: shared strings, styles, a formula, a prefixed namespace, a dimension. */

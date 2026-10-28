@@ -80,7 +80,7 @@ object HeaderMapper {
 
     /** The request sent to the model: titles and up to three masked example values per column, never the whole sheet. */
     fun prompt(profiles: List<SheetProfile>): String = buildString {
-        append("You match spreadsheet columns for AIStock, an inventory and billing app used by small shops in Tamil Nadu.\n")
+        append("You match spreadsheet columns for Follower, an inventory and billing app used by small shops in Tamil Nadu.\n")
         append("For each sheet below, say what it holds and which column holds each field. Titles may be English, Tamil, Tanglish, short forms or misspelt.\n\n")
         append("Purposes: PRODUCTS (item or price list), STOCK (stock quantities per item), CUSTOMERS, SUPPLIERS, SALES (sales register or bills), PURCHASES, EXPENSES, PAYMENTS (cash book, receipts), OTHER.\n")
         append("Fields:\n")

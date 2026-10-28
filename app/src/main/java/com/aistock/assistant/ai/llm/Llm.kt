@@ -38,7 +38,7 @@ object LlmProblem {
             return when (e.status) {
                 400, 401, 403 -> if (d.contains("key", true) || e.status != 400) t("Google did not accept the AI key. Please check the key in More > Settings > AI Provider.", "AI key-ஐ Google ஏற்கவில்லை. மேலும் > அமைப்புகள் > AI வழங்குநர்-ல் key-ஐ சரிபார்க்கவும்.") + tail
                     else t("The AI service rejected the request.", "AI சேவை கோரிக்கையை நிராகரித்தது.") + tail
-                402 -> d.ifBlank { t("Your AIStock plan has ended.", "உங்கள் AIStock திட்டம் முடிந்தது.") }
+                402 -> d.ifBlank { t("Your Follower plan has ended.", "உங்கள் Follower திட்டம் முடிந்தது.") }
                 404 -> t("The AI model name was not found.", "AI model பெயர் கிடைக்கவில்லை.") + tail
                 429 -> if (d.contains("month", true) || d.contains("minutes", true)) d else t("The AI key has reached its usage limit for now. Try again in a minute.", "AI key-யின் பயன்பாட்டு வரம்பு முடிந்தது. ஒரு நிமிடம் கழித்து முயற்சிக்கவும்.") + tail
                 else -> t("The AI service had a problem (code ${e.status}).", "AI சேவையில் சிக்கல் (code ${e.status}).") + tail
