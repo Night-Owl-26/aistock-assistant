@@ -48,5 +48,5 @@ if [ "$provider" = gemini ]; then setenv GEMINI_TEXT_MODEL "$chosen"; setenv TEX
 else setenv OPENROUTER_MODEL "$chosen"; setenv TEXT_PROVIDER openrouter; fi
 echo; echo "Switching Stocky to $provider / $chosen and restarting the API..."
 files="-f docker-compose.yml"; [ -f docker-compose.nginx.yml ] && sudo docker compose ps --services 2>/dev/null | grep -qx caddy || files="$files -f docker-compose.nginx.yml"
-sudo docker compose $files up -d api >/dev/null && sleep 3
+sudo docker compose $files up -d --force-recreate api >/dev/null && sleep 3
 curl -s "https://$(grep -E '^DOMAIN=' .env | cut -d= -f2)/healthz"; echo
