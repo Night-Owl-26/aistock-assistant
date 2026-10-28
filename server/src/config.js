@@ -15,7 +15,7 @@ export function loadConfig(env = process.env) {
     geminiKey: get('GEMINI_API_KEY', ''),
     geminiBase: get('GEMINI_BASE_URL', 'https://generativelanguage.googleapis.com'),
     // Text conversation model (Stocky's tool-calling chat) and the real-time voice model. Change here, not in the app.
-    textModel: get('GEMINI_TEXT_MODEL', 'gemini-flash-latest'),
+    textModel: get('GEMINI_TEXT_MODEL', 'gemini-flash-lite-latest'),
     liveModel: get('GEMINI_LIVE_MODEL', 'gemini-3.8-live'),
     liveWsUrl: get('GEMINI_LIVE_WS_URL', 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContentConstrained'),
     liveMode: get('LIVE_MODE', 'relay'),

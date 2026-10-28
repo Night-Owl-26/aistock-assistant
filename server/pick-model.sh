@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Finds a chat model that answers quickly with your keys and switches the server to it.
-#   cd /opt/follower/server && bash pick-model.sh
+#   cd /opt/follower/server && bash pick-model.sh            (PREFER=gemini-3.8-flash bash pick-model.sh tries that one first)
 # Tries several Gemini models (each must answer "Say OK" within 20 seconds); if none does, tries OpenRouter.
 set -uo pipefail
 cd "$(dirname "$0")"
@@ -19,7 +19,7 @@ if [ -n "${GEMINI_API_KEY:-}" ]; then
   # Models this key can use, newest names first; the usual fast ones are tried before anything else.
   listed="$(curl -4 -s --max-time 20 -H "x-goog-api-key: $GEMINI_API_KEY" 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=200' \
     | grep -o '"name": *"models/[^"]*"' | sed 's/.*models\///; s/"//' | grep -E 'flash' | grep -viE 'image|tts|live|audio|embedding|preview-tts|exp' || true)"
-  candidates="$(printf '%s\n' gemini-2.5-flash-lite gemini-2.5-flash gemini-flash-lite-latest gemini-2.0-flash gemini-flash-latest $listed | awk 'NF && !seen[$0]++')"
+  candidates="$(printf '%s\n' ${PREFER:-} gemini-flash-lite-latest gemini-3.5-flash-lite gemini-3.8-flash gemini-flash-latest $listed | awk 'NF && !seen[$0]++')"
   echo "Testing Gemini models (20 seconds each at most):"
   for m in $candidates; do
     out="$(curl -4 -s -o /tmp/pick.json --max-time 20 -w '%{http_code} %{time_total}' -H "x-goog-api-key: $GEMINI_API_KEY" -H 'content-type: application/json' \
