@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # One-command setup of the Follower server on a fresh Ubuntu machine (Oracle Cloud Always Free works).
 #
-#   curl -fsSL https://raw.githubusercontent.com/Night-Owl-26/aistock-assistant/main/server/install.sh | \
-#     GEMINI_API_KEY=... SARVAM_API_KEY=... OPENROUTER_API_KEY=... bash
+#   curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github.raw" \
+#     https://api.github.com/repos/Night-Owl-26/aistock-assistant/contents/server/install.sh | \
+#     GITHUB_TOKEN=$GITHUB_TOKEN GEMINI_API_KEY=... SARVAM_API_KEY=... OPENROUTER_API_KEY=... bash
 #
 # Run it again any time: it updates the code, keeps your passwords and data, and only changes the keys you pass.
 # Keys can also be left out of the command; the script then asks for them (input hidden).
