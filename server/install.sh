@@ -106,8 +106,22 @@ fi
 
 [ "$ENV_ONLY" = "--env-only" ] && { say "Settings written (no containers started)"; exit 0; }
 
-say "Building and starting (first time takes a few minutes)"
 cd "$DIR/server"
+# Another web server on ports 80/443 (nginx, apache, another app) stops Caddy from starting: say which one.
+busy=""
+for p in 80 443; do
+  who="$($SUDO ss -ltnpH "( sport = :$p )" 2>/dev/null | grep -v docker-proxy | sed -n 's/.*users:(("\([^"]*\)".*/\1/p' | head -1)"
+  [ -n "$who" ] && busy="$busy port $p is used by '$who';"
+done
+if [ -n "$busy" ]; then
+  warn "Another program is already using the web ports:$busy"
+  warn "Follower needs ports 80 and 443. If that program is not needed, stop it, for example:"
+  warn "  sudo systemctl disable --now nginx     (or apache2)"
+  warn "then run this script again. If you need it, ask for the 'behind nginx' setup instead."
+  exit 1
+fi
+
+say "Building and starting (first time takes a few minutes)"
 $SUDO docker compose up -d --build
 
 say "Waiting for https://$DOMAIN_NOW to answer"
