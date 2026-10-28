@@ -26,6 +26,17 @@ services:
       DATABASE_URL: postgres://aistock:${POSTGRES_PASSWORD}@db:5432/aistock
       PORT: "8080"
 
+  # Optional: Whisper speech-to-text on this server's CPU. Started only with COMPOSE_PROFILES=whisper
+  # (enable-whisper.sh sets that). Not published on any port; only the API reaches it.
+  whisper:
+    build: ./whisper
+    restart: unless-stopped
+    profiles: [whisper]
+    environment:
+      WHISPER_MODEL: ${WHISPER_MODEL:-auto}
+    volumes:
+      - whisper_models:/models
+
   caddy:
     image: caddy:2-alpine
     restart: unless-stopped
@@ -41,6 +52,7 @@ services:
       - caddy_config:/config
 
 volumes:
+  whisper_models:
   pgdata:
   caddy_data:
   caddy_config:

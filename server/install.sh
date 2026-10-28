@@ -124,7 +124,8 @@ fi
 if [ "$MODE" = nginx ]; then
   say "nginx already runs here: Follower goes behind it (your other sites are not touched)"
   $SUDO docker compose rm -sf caddy >/dev/null 2>&1 || true
-  $SUDO docker compose -f docker-compose.yml -f docker-compose.nginx.yml up -d --build db api
+  extra=""; grep -qE '^COMPOSE_PROFILES=.*whisper' .env && extra="whisper"
+  $SUDO docker compose -f docker-compose.yml -f docker-compose.nginx.yml up -d --build db api $extra
   conf_dir=/etc/nginx/conf.d; [ -d /etc/nginx/sites-enabled ] && conf_dir=/etc/nginx/sites-available
   conf="$conf_dir/follower.conf"
   if [ ! -f "$conf" ] || ! grep -q "server_name $DOMAIN_NOW;" "$conf"; then

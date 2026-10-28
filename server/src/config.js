@@ -45,6 +45,8 @@ export function loadConfig(env = process.env) {
     ttsProvider: get('TTS_PROVIDER', 'auto'),
     // Gemini for speech, with the same Gemini key (no extra service): hearing uses the text model,
     // speaking a Gemini TTS model (found automatically when empty) and one of its prebuilt voices.
+    // Self-hosted Whisper (server/whisper, started with COMPOSE_PROFILES=whisper): http://whisper:9000
+    whisperUrl: get('WHISPER_URL', ''),
     geminiSttModel: get('GEMINI_STT_MODEL', ''),
     geminiTtsModel: get('GEMINI_TTS_MODEL', ''),
     geminiTtsVoice: get('GEMINI_TTS_VOICE', 'Kore'),

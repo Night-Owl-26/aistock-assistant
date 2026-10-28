@@ -178,3 +178,21 @@ test('Without Sarvam or Google Cloud, Gemini hears and speaks with the Gemini ke
   assert.equal(speechApi(loadConfig({ ...base, GEMINI_API_KEY: 'g', SARVAM_API_KEY: 's' })).sttProvider(), 'sarvam')
   assert.equal(speechApi(loadConfig({ ...base, GEMINI_API_KEY: 'g', SARVAM_API_KEY: 's', STT_PROVIDER: 'gemini', TTS_PROVIDER: 'gemini' })).ttsProvider(), 'gemini')
 })
+
+test('Whisper on the server hears when it is running; replies are still spoken by Sarvam or Gemini', async () => {
+  const cfg = loadConfig({ ...base, WHISPER_URL: 'http://whisper:9000/', SARVAM_API_KEY: 's', GEMINI_API_KEY: 'g', STT_PROVIDER: 'whisper', TTS_PROVIDER: 'whisper' })
+  const calls = []
+  const f = async (url, init) => { calls.push({ url: String(url), body: JSON.parse(init.body) }); return new Response(JSON.stringify({ text: ' சரி  2 XL shirt ', took: 1.2 }), { status: 200 }) }
+  const api = speechApi(cfg, f)
+  assert.equal(api.sttProvider(), 'whisper')
+  assert.equal(api.ttsProvider(), 'sarvam', 'Whisper does not speak: replies use the next voice')
+  assert.equal(speechApi(loadConfig({ ...base, WHISPER_URL: 'http://whisper:9000', SARVAM_API_KEY: 's' })).ttsProvider(), 'sarvam')
+  const r = await api.recognize({ audio: 'AAAA', language: 'ta-IN', phrases: ['Shirt XL', 'Raju'] })
+  assert.equal(r.text, 'சரி 2 XL shirt')
+  assert.equal(calls[0].url, 'http://whisper:9000/transcribe')
+  assert.deepEqual(calls[0].body, { audio: 'AAAA', language: 'ta-IN', prompt: 'Shirt XL, Raju' })
+  const down = async () => new Response(JSON.stringify({ error: 'audio too long' }), { status: 400 })
+  assert.equal((await speechApi(cfg, down).recognize({ audio: 'AAAA', language: 'ta-IN', phrases: [] })).error, 'audio too long')
+  // Without WHISPER_URL, asking for whisper gives nothing rather than a broken provider.
+  assert.equal(speechApi(loadConfig({ ...base, STT_PROVIDER: 'whisper' })).sttProvider(), null)
+})

@@ -31,13 +31,25 @@ export function wavFromPcm(pcm, rate = 16000) {
 
 export function speechApi(cfg, fetchImpl = fetch) {
   const headers = () => ({ 'content-type': 'application/json', 'x-goog-api-key': cfg.speechKey })
-  const has = { sarvam: () => !!cfg.sarvamKey, google: () => !!cfg.speechKey, gemini: () => !!cfg.geminiKey }
-  // auto: Sarvam if its key is set, else Google Cloud, else Gemini with the Gemini key.
-  const pick = (wanted) => {
-    if (has[wanted]) return has[wanted]() ? wanted : null
-    return ['sarvam', 'google', 'gemini'].find(p => has[p]()) ?? null
+  const has = { whisper: () => !!cfg.whisperUrl, sarvam: () => !!cfg.sarvamKey, google: () => !!cfg.speechKey, gemini: () => !!cfg.geminiKey }
+  // auto: Sarvam if its key is set, else Google Cloud, else Gemini with the Gemini key. Whisper hears when it is running.
+  const pick = (wanted, order) => {
+    if (order.includes(wanted)) return has[wanted]() ? wanted : null
+    return order.find(p => has[p]()) ?? null
   }
-  const sttProvider = () => pick(cfg.sttProvider)
+  const sttProvider = () => pick(cfg.sttProvider, ['whisper', 'sarvam', 'google', 'gemini'])
+
+  /** Whisper on this server's own CPU: free, unlimited, nothing leaves the server. */
+  async function recognizeWhisper({ audio, language, phrases }) {
+    const prompt = phrases.slice(0, 40).join(', ')
+    const r = await fetchImpl(`${cfg.whisperUrl.replace(/\/$/, '')}/transcribe`, {
+      method: 'POST', headers: { 'content-type': 'application/json' }, signal: AbortSignal.timeout(90_000),
+      body: JSON.stringify({ audio, language, prompt }),
+    })
+    const b = await parse(r)
+    if (!r.ok) return { status: r.status, error: b?.error?.message || b?.error || `speech-to-text failed (${r.status})` }
+    return { status: 200, text: String(b.text ?? '').replace(/\s+/g, ' ').trim(), language, confidence: null }
+  }
 
   const gHeaders = () => ({ 'content-type': 'application/json', 'x-goog-api-key': cfg.geminiKey })
   const geminiText = (b) => (b?.candidates?.[0]?.content?.parts ?? []).filter(p => typeof p.text === 'string' && !p.thought).map(p => p.text).join('').trim()
@@ -118,7 +130,7 @@ export function speechApi(cfg, fetchImpl = fetch) {
     return { status: 200, text: String(body.transcript ?? '').replace(/\s+/g, ' ').trim(), language: body.language_code || language, confidence: null }
   }
 
-  const ttsProvider = () => pick(cfg.ttsProvider)
+  const ttsProvider = () => pick(cfg.ttsProvider, ['sarvam', 'google', 'gemini'])
 
   /** Sarvam AI Bulbul: one WAV for the reply. Tries the chosen voice, then the model's own default voice. */
   async function synthesizeSarvam({ text, language }) {
@@ -145,7 +157,7 @@ export function speechApi(cfg, fetchImpl = fetch) {
   return {
     ttsProvider,
     sttProvider,
-    sttModel: () => ({ sarvam: cfg.sarvamModel, google: cfg.sttModel, gemini: cfg.geminiSttModel || cfg.textModel })[sttProvider()] ?? '',
+    sttModel: () => ({ whisper: 'whisper', sarvam: cfg.sarvamModel, google: cfg.sttModel, gemini: cfg.geminiSttModel || cfg.textModel })[sttProvider()] ?? '',
     sttConfigured: () => sttProvider() !== null,
     ttsConfigured: () => ttsProvider() !== null,
     configured: () => sttProvider() !== null || ttsProvider() !== null,
@@ -155,6 +167,7 @@ export function speechApi(cfg, fetchImpl = fetch) {
      * recognised as the shop writes them. Returns { status, text, language, confidence, error }.
      */
     async recognize({ audio, language, phrases }) {
+      if (sttProvider() === 'whisper') return recognizeWhisper({ audio, language, phrases })
       if (sttProvider() === 'sarvam') return recognizeSarvam({ audio, language, phrases })
       if (sttProvider() === 'gemini') return recognizeGemini({ audio, language, phrases })
       const other = SPEECH_LANGS.find(l => l !== language)
