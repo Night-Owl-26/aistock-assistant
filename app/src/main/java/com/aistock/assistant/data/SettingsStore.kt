@@ -69,7 +69,7 @@ data class Prefs(
     /** "server" = Stocky AI through the AIStock server; "key" = own Gemini key on this phone (advanced). */
     val aiSource: String = "server",
     /** Real-time spoken conversation (Gemini Live) when signed in. */
-    val liveVoice: Boolean = true,
+    val liveVoice: Boolean = false,
     /** Google Cloud Speech-to-Text and Text-to-Speech through the server, turn by turn (instead of Gemini Live). */
     val cloudSpeech: Boolean = false,
 ) {
@@ -132,7 +132,7 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
             serverBusinessId = p[K.serverBusiness].orEmpty(),
             // Phones that already used their own key keep doing so until they sign in.
             aiSource = p[K.aiSource] ?: (if (!p[K.key].isNullOrEmpty()) "key" else "server"),
-            liveVoice = p[K.liveVoice] ?: true,
+            liveVoice = p[K.liveVoice] ?: false,
             cloudSpeech = p[K.cloudSpeech] ?: false,
         )
     }

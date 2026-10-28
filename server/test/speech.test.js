@@ -192,7 +192,34 @@ test('Whisper on the server hears when it is running; replies are still spoken b
   assert.equal(calls[0].url, 'http://whisper:9000/transcribe')
   assert.deepEqual(calls[0].body, { audio: 'AAAA', language: 'ta-IN', prompt: 'Shirt XL, Raju' })
   const down = async () => new Response(JSON.stringify({ error: 'audio too long' }), { status: 400 })
-  assert.equal((await speechApi(cfg, down).recognize({ audio: 'AAAA', language: 'ta-IN', phrases: [] })).error, 'audio too long')
+  assert.equal((await speechApi(cfg, down).recognize({ audio: 'AAAA', language: 'ta-IN', phrases: [] })).error, 'audio too long', 'the chosen provider\'s own error is reported')
   // Without WHISPER_URL, asking for whisper gives nothing rather than a broken provider.
   assert.equal(speechApi(loadConfig({ ...base, STT_PROVIDER: 'whisper' })).sttProvider(), null)
+})
+
+test('Sarvam out of credit: Gemini hears and speaks instead, and Sarvam rests instead of slowing every request', async () => {
+  const cfg = loadConfig({ ...base, SARVAM_API_KEY: 's', SARVAM_BASE_URL: 'https://sarvam.test', GEMINI_API_KEY: 'g', GEMINI_BASE_URL: 'https://gemini.test', GEMINI_TTS_MODEL: 'gemini-3.8-flash-lite-tts' })
+  const calls = []
+  const f = async (url, init) => {
+    url = String(url); calls.push(url)
+    const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+    if (url.startsWith('https://sarvam.test')) return json(402, { error: { message: 'Insufficient credits' } })
+    if (url.includes('flash-lite-tts')) return json(200, { candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/L16;rate=24000', data: Buffer.alloc(480).toString('base64') } }] } }] })
+    return json(200, { candidates: [{ content: { parts: [{ text: 'Shirt XL evlo irukku' }] } }] })
+  }
+  const api = speechApi(cfg, f)
+  assert.equal(api.sttProvider(), 'sarvam')
+  let r = await api.recognize({ audio: 'AAAA', language: 'ta-IN', phrases: [] })
+  assert.equal(r.status, 200)
+  assert.equal(r.text, 'Shirt XL evlo irukku')
+  assert.equal(r.provider, 'gemini')
+  assert.match(api.resting().sarvam, /402: Insufficient credits/)
+  assert.equal(api.sttProvider(), 'gemini', 'Sarvam rests')
+  calls.length = 0
+  r = await api.recognize({ audio: 'AAAA', language: 'ta-IN', phrases: [] })
+  assert.ok(calls.every(u => !u.startsWith('https://sarvam.test')), 'no time lost on Sarvam while it rests')
+  const t = await api.synthesize({ text: 'Shirt XL 10 இருக்கு', language: 'ta-IN' })
+  assert.equal(t.status, 200)
+  assert.equal(t.provider, 'gemini')
+  assert.ok(Buffer.from(t.audio, 'base64').subarray(0, 4).toString() === 'RIFF')
 })

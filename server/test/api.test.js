@@ -9,7 +9,7 @@ import { sha256 as sha } from '../src/auth.js'
 // Runs against a real PostgreSQL (TEST_DATABASE_URL) and a fake Google.
 const url = process.env.TEST_DATABASE_URL ?? 'postgres://postgres@localhost:55432/aistock_test?host=/srv/pgtest'
 let pool, app
-const google = { calls: [], tokenFails: false, altRejected: false, ttsVoiceMissing: false, sttDown: false }
+const google = { calls: [], tokenFails: false, altRejected: false, ttsVoiceMissing: false, sttDown: false, geminiDown: false }
 
 function fakeFetch(u, init) {
   google.calls.push({ url: String(u), body: init?.body ? JSON.parse(init.body) : null, headers: init?.headers })
@@ -30,6 +30,7 @@ function fakeFetch(u, init) {
     return json(200, { audioContent: Buffer.from('RIFF....WAVEfmt ').toString('base64') })
   }
   if (String(u).includes(':generateContent')) {
+    if (google.geminiDown) return json(429, { error: { message: 'Resource has been exhausted' } })
     return json(200, { candidates: [{ content: { role: 'model', parts: [{ text: 'Innikku 3 sales.' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 120, candidatesTokenCount: 8 } })
   }
   return json(404, { error: { message: 'unknown' } })
@@ -280,13 +281,21 @@ test('Google Cloud speech: key stays on the server, phrases passed, minutes mete
   const usage = await call('GET', `/v1/businesses/${a.businessId}/usage`, { token: a.accessToken })
   assert.ok(JSON.stringify(usage.json).includes(`"used":${used}`), 'speech counts against the voice minutes')
 
-  // Google failing gives the time back.
+  // Google failing: Gemini hears instead, and the health check says Google is resting.
   google.sttDown = true
   r = await call('POST', `/v1/businesses/${a.businessId}/ai/stt`, { token: a.accessToken, body: { audio: pcm.toString('base64') } })
-  assert.equal(r.status, 502)
-  google.sttDown = false
+  assert.equal(r.status, 200, JSON.stringify(r.json))
+  assert.equal(r.json.text, 'Innikku 3 sales.')
+  assert.match(JSON.stringify((await call('GET', '/healthz')).json.speechResting), /google/)
+  const afterFallback = Number((await pool.query("SELECT COALESCE(SUM(quantity),0) AS n FROM usage_events WHERE business_id = $1 AND kind IN ('stt_seconds','tts_seconds')", [a.businessId])).rows[0].n)
+  // Every provider failing gives the time back.
+  google.geminiDown = true
+  r = await call('POST', `/v1/businesses/${a.businessId}/ai/stt`, { token: a.accessToken, body: { audio: pcm.toString('base64') } })
+  assert.equal(r.status, 503, 'Google is resting, so Gemini alone was asked and is rate limited: busy, try again')
+  google.sttDown = false; google.geminiDown = false
   const after = Number((await pool.query("SELECT COALESCE(SUM(quantity),0) AS n FROM usage_events WHERE business_id = $1 AND kind IN ('stt_seconds','tts_seconds')", [a.businessId])).rows[0].n)
-  assert.equal(after, used)
+  assert.equal(after, afterFallback)
+  assert.equal(afterFallback, used + 3)
 
   // Bad input, too long, other business, no minutes left.
   assert.equal((await call('POST', `/v1/businesses/${a.businessId}/ai/stt`, { token: a.accessToken, body: { audio: 'not base64!' } })).status, 400)

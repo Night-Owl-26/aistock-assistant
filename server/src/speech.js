@@ -32,12 +32,29 @@ export function wavFromPcm(pcm, rate = 16000) {
 export function speechApi(cfg, fetchImpl = fetch) {
   const headers = () => ({ 'content-type': 'application/json', 'x-goog-api-key': cfg.speechKey })
   const has = { whisper: () => !!cfg.whisperUrl, sarvam: () => !!cfg.sarvamKey, google: () => !!cfg.speechKey, gemini: () => !!cfg.geminiKey }
-  // auto: Sarvam if its key is set, else Google Cloud, else Gemini with the Gemini key. Whisper hears when it is running.
-  const pick = (wanted, order) => {
-    if (order.includes(wanted)) return has[wanted]() ? wanted : null
-    return order.find(p => has[p]()) ?? null
+  // auto: Sarvam if its key is set, else Google Cloud, else Gemini with the Gemini key; Whisper (unlimited, on this
+  // server) is the last resort. A provider that fails is skipped for a while and the next one answers instead, so a
+  // used-up Sarvam balance or a Gemini rate limit does not stop Stocky from hearing and speaking.
+  const down = new Map() // provider -> { until, reason }
+  const isDown = (p) => { const d = down.get(p); if (d && d.until > Date.now()) return true; if (d) down.delete(p); return false }
+  const chain = (wanted, order) => {
+    const usable = order.filter(p => has[p]())
+    const first = usable.includes(wanted) ? [wanted, ...usable.filter(p => p !== wanted)] : usable
+    const up = first.filter(p => !isDown(p))
+    return up.length ? up : first // all resting: try them anyway
   }
-  const sttProvider = () => pick(cfg.sttProvider, ['whisper', 'sarvam', 'google', 'gemini'])
+  const STT_ORDER = ['sarvam', 'google', 'gemini', 'whisper']
+  const TTS_ORDER = ['sarvam', 'google', 'gemini']
+  /** Out of credit, wrong key or rate limited: rest 30 minutes. Server error or timeout: rest 2 minutes. */
+  const rest = (p, r) => {
+    const st = Number(r.status) || 0
+    const ms = [401, 402, 403, 429].includes(st) ? 30 * 60_000 : (st >= 500 || st === 0 || st === 408) ? 2 * 60_000 : 0
+    if (ms) down.set(p, { until: Date.now() + ms, reason: `${st || 'no answer'}: ${String(r.error ?? '').slice(0, 120)}` })
+  }
+  const attempt = async (fn) => {
+    try { return await fn() } catch (err) { return { status: err?.name === 'TimeoutError' || err?.name === 'AbortError' ? 408 : 0, error: err?.message || String(err) } }
+  }
+  const sttProvider = () => chain(cfg.sttProvider, STT_ORDER)[0] ?? null
 
   /** Whisper on this server's own CPU: free, unlimited, nothing leaves the server. */
   async function recognizeWhisper({ audio, language, phrases }) {
@@ -65,7 +82,7 @@ export function speechApi(cfg, fetchImpl = fetch) {
       `Write numbers as digits. ${names ? `Names they may say: ${names}. ` : ''}` +
       `Output only what was said, nothing else. If nothing was said, output nothing.`
     const r = await fetchImpl(`${cfg.geminiBase}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: 'POST', headers: gHeaders(), signal: AbortSignal.timeout(45_000),
+      method: 'POST', headers: gHeaders(), signal: AbortSignal.timeout(20_000),
       body: JSON.stringify({ contents: [{ role: 'user', parts: [{ inlineData: { mimeType: 'audio/wav', data: wav } }, { text: prompt }] }], generationConfig: { temperature: 0, maxOutputTokens: 400 } }),
     })
     const b = await parse(r)
@@ -82,6 +99,9 @@ export function speechApi(cfg, fetchImpl = fetch) {
     const r = await fetchImpl(`${cfg.geminiBase}/v1beta/models?pageSize=200`, { headers: gHeaders(), signal: AbortSignal.timeout(15_000) })
     const b = await parse(r)
     const names = (b?.models ?? []).filter(m => (m.supportedGenerationMethods ?? []).includes('generateContent')).map(m => String(m.name).replace(/^models\//, '')).filter(n => /tts/i.test(n))
+    // Newest first, and the "lite" voice first among equals: it answers fastest, which matters more in a shop.
+    const ver = (n) => Number(/(\d+(?:\.\d+)?)/.exec(n)?.[1] ?? 0)
+    names.sort((a, b) => ver(b) - ver(a) || (/lite/i.test(b) - /lite/i.test(a)) || (/preview/i.test(a) - /preview/i.test(b)))
     ttsModelFound = names.find(n => /flash/i.test(n)) ?? names[0] ?? null
     return ttsModelFound
   }
@@ -92,7 +112,7 @@ export function speechApi(cfg, fetchImpl = fetch) {
     if (!model) return { status: 503, error: 'This Gemini key has no text-to-speech model.' }
     const style = language === 'ta-IN' ? 'Read this aloud the way a friendly shop assistant in Tamil Nadu talks, warm and natural, at a normal pace:' : 'Read this aloud in a friendly Indian English voice, natural pace:'
     const r = await fetchImpl(`${cfg.geminiBase}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
-      method: 'POST', headers: gHeaders(), signal: AbortSignal.timeout(45_000),
+      method: 'POST', headers: gHeaders(), signal: AbortSignal.timeout(20_000),
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: `${style}\n${text.slice(0, 2000)}` }] }],
         generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: cfg.geminiTtsVoice } } } },
@@ -123,20 +143,20 @@ export function speechApi(cfg, fetchImpl = fetch) {
     const terms = phrases.filter(p => [...p].length <= 64).slice(0, 50)
     if (terms.length && cfg.sarvamModel.startsWith('saaras:v4')) form.append('keyterms', JSON.stringify(terms))
     const r = await fetchImpl(`${cfg.sarvamBase}/speech-to-text`, {
-      method: 'POST', headers: { 'api-subscription-key': cfg.sarvamKey }, body: form, signal: AbortSignal.timeout(60_000),
+      method: 'POST', headers: { 'api-subscription-key': cfg.sarvamKey }, body: form, signal: AbortSignal.timeout(20_000),
     })
     const body = await parse(r)
     if (!r.ok) return { status: r.status, error: body?.error?.message || body?.message || `speech-to-text failed (${r.status})` }
     return { status: 200, text: String(body.transcript ?? '').replace(/\s+/g, ' ').trim(), language: body.language_code || language, confidence: null }
   }
 
-  const ttsProvider = () => pick(cfg.ttsProvider, ['sarvam', 'google', 'gemini'])
+  const ttsProvider = () => chain(cfg.ttsProvider, TTS_ORDER)[0] ?? null
 
   /** Sarvam AI Bulbul: one WAV for the reply. Tries the chosen voice, then the model's own default voice. */
   async function synthesizeSarvam({ text, language }) {
     const speaker = language === 'ta-IN' ? cfg.sarvamSpeakerTa : cfg.sarvamSpeakerEn
     const send = (body) => fetchImpl(`${cfg.sarvamBase}/text-to-speech`, {
-      method: 'POST', signal: AbortSignal.timeout(30_000),
+      method: 'POST', signal: AbortSignal.timeout(15_000),
       headers: { 'content-type': 'application/json', 'api-subscription-key': cfg.sarvamKey },
       body: JSON.stringify(body),
     })
@@ -149,9 +169,64 @@ export function speechApi(cfg, fetchImpl = fetch) {
       const audio = Array.isArray(b?.audios) ? b.audios[0] : null
       if (r.ok && typeof audio === 'string' && audio.length > 0) return { status: 200, audio }
       last = { status: r.ok ? 502 : r.status, error: b?.error?.message || b?.message || `text-to-speech failed (${r.status})` }
-      if (r.status === 401 || r.status === 403 || r.status === 429) break // key or quota: another voice will not help
+      if ([401, 402, 403, 429].includes(r.status)) break // key or quota: another voice will not help
     }
     return last
+  }
+
+  async function recognizeGoogle({ audio, language, phrases }) {
+    const other = SPEECH_LANGS.find(l => l !== language)
+    const config = {
+      encoding: 'LINEAR16', sampleRateHertz: 16000, audioChannelCount: 1, languageCode: language,
+      model: cfg.sttModel, maxAlternatives: 1, profanityFilter: false,
+      ...(phrases.length ? { speechContexts: [{ phrases, boost: 8 }] } : {}),
+    }
+    const send = (withAlt) => fetchImpl(`${cfg.sttBase}/v1p1beta1/speech:recognize`, {
+      method: 'POST', headers: headers(), signal: AbortSignal.timeout(20_000),
+      body: JSON.stringify({ config: withAlt ? { ...config, alternativeLanguageCodes: [other] } : config, audio: { content: audio } }),
+    })
+    let r = await send(true)
+    let body = await parse(r)
+    // Some models do not accept a second language: ask again with one.
+    if (r.status === 400) { r = await send(false); body = await parse(r) }
+    if (!r.ok) return { status: r.status, error: body?.error?.message || `speech-to-text failed (${r.status})` }
+    const results = Array.isArray(body.results) ? body.results : []
+    const text = results.map(x => x?.alternatives?.[0]?.transcript ?? '').join(' ').replace(/\s+/g, ' ').trim()
+    const conf = results.map(x => x?.alternatives?.[0]?.confidence).filter(n => typeof n === 'number')
+    return {
+      status: 200, text,
+      language: (results.find(x => x.languageCode)?.languageCode || language),
+      confidence: conf.length ? conf.reduce((a, b) => a + b, 0) / conf.length : null,
+    }
+  }
+
+  /** Google Cloud Text-to-Speech. Falls back to Google's default voice for the language. */
+  async function synthesizeGoogle({ text, language }) {
+    const name = language === 'ta-IN' ? cfg.ttsVoiceTa : cfg.ttsVoiceEn
+    const send = (voice) => fetchImpl(`${cfg.ttsBase}/v1/text:synthesize`, {
+      method: 'POST', headers: headers(), signal: AbortSignal.timeout(15_000),
+      body: JSON.stringify({ input: { text }, voice, audioConfig: { audioEncoding: 'LINEAR16', sampleRateHertz: 24000, speakingRate: cfg.ttsRate } }),
+    })
+    let r = await send(name ? { languageCode: language, name } : { languageCode: language })
+    let body = await parse(r)
+    if (!r.ok && name) { r = await send({ languageCode: language }); body = await parse(r) }
+    if (!r.ok || typeof body.audioContent !== 'string') return { status: r.ok ? 502 : r.status, error: body?.error?.message || `text-to-speech failed (${r.status})` }
+    return { status: 200, audio: body.audioContent }
+  }
+
+  const hear = { whisper: recognizeWhisper, sarvam: recognizeSarvam, google: recognizeGoogle, gemini: recognizeGemini }
+  const speak = { sarvam: synthesizeSarvam, google: synthesizeGoogle, gemini: synthesizeGemini }
+
+  /** Tries each provider in turn until one answers; a failing one rests for a while. */
+  async function firstThatWorks(order, impl, args) {
+    let first = null
+    for (const p of order) {
+      const r = await attempt(() => impl[p](args))
+      if (r.status === 200) { down.delete(p); return { ...r, provider: p } }
+      rest(p, r)
+      first ??= { ...r, provider: p } // the preferred provider's error says the most ("not enough credits", ...)
+    }
+    return first ?? { status: 503, error: 'no speech service is available' }
   }
 
   return {
@@ -161,54 +236,16 @@ export function speechApi(cfg, fetchImpl = fetch) {
     sttConfigured: () => sttProvider() !== null,
     ttsConfigured: () => ttsProvider() !== null,
     configured: () => sttProvider() !== null || ttsProvider() !== null,
+    /** Providers resting after a failure, with the reason (shown on /healthz so the owner sees "Sarvam: 402 ..."). */
+    resting: () => Object.fromEntries([...down.entries()].filter(([p]) => isDown(p)).map(([p, d]) => [p, d.reason])),
 
     /**
      * 16 kHz mono 16-bit PCM (base64) -> text. Product and customer names are passed as phrase hints so they are
-     * recognised as the shop writes them. Returns { status, text, language, confidence, error }.
+     * recognised as the shop writes them. Returns { status, text, language, confidence, error, provider }.
      */
-    async recognize({ audio, language, phrases }) {
-      if (sttProvider() === 'whisper') return recognizeWhisper({ audio, language, phrases })
-      if (sttProvider() === 'sarvam') return recognizeSarvam({ audio, language, phrases })
-      if (sttProvider() === 'gemini') return recognizeGemini({ audio, language, phrases })
-      const other = SPEECH_LANGS.find(l => l !== language)
-      const config = {
-        encoding: 'LINEAR16', sampleRateHertz: 16000, audioChannelCount: 1, languageCode: language,
-        model: cfg.sttModel, maxAlternatives: 1, profanityFilter: false,
-        ...(phrases.length ? { speechContexts: [{ phrases, boost: 8 }] } : {}),
-      }
-      const send = (withAlt) => fetchImpl(`${cfg.sttBase}/v1p1beta1/speech:recognize`, {
-        method: 'POST', headers: headers(), signal: AbortSignal.timeout(60_000),
-        body: JSON.stringify({ config: withAlt ? { ...config, alternativeLanguageCodes: [other] } : config, audio: { content: audio } }),
-      })
-      let r = await send(true)
-      let body = await parse(r)
-      // Some models do not accept a second language: ask again with one.
-      if (r.status === 400) { r = await send(false); body = await parse(r) }
-      if (!r.ok) return { status: r.status, error: body?.error?.message || `speech-to-text failed (${r.status})` }
-      const results = Array.isArray(body.results) ? body.results : []
-      const text = results.map(x => x?.alternatives?.[0]?.transcript ?? '').join(' ').replace(/\s+/g, ' ').trim()
-      const conf = results.map(x => x?.alternatives?.[0]?.confidence).filter(n => typeof n === 'number')
-      return {
-        status: 200, text,
-        language: (results.find(x => x.languageCode)?.languageCode || language),
-        confidence: conf.length ? conf.reduce((a, b) => a + b, 0) / conf.length : null,
-      }
-    },
+    recognize: (args) => firstThatWorks(chain(cfg.sttProvider, STT_ORDER), hear, args),
 
-    /** Text -> spoken audio (WAV, 16-bit PCM, 24 kHz). Falls back to Google's default voice for the language. */
-    async synthesize({ text, language }) {
-      if (ttsProvider() === 'sarvam') return synthesizeSarvam({ text, language })
-      if (ttsProvider() === 'gemini') return synthesizeGemini({ text, language })
-      const name = language === 'ta-IN' ? cfg.ttsVoiceTa : cfg.ttsVoiceEn
-      const send = (voice) => fetchImpl(`${cfg.ttsBase}/v1/text:synthesize`, {
-        method: 'POST', headers: headers(), signal: AbortSignal.timeout(30_000),
-        body: JSON.stringify({ input: { text }, voice, audioConfig: { audioEncoding: 'LINEAR16', sampleRateHertz: 24000, speakingRate: cfg.ttsRate } }),
-      })
-      let r = await send(name ? { languageCode: language, name } : { languageCode: language })
-      let body = await parse(r)
-      if (!r.ok && name) { r = await send({ languageCode: language }); body = await parse(r) }
-      if (!r.ok || typeof body.audioContent !== 'string') return { status: r.ok ? 502 : r.status, error: body?.error?.message || `text-to-speech failed (${r.status})` }
-      return { status: 200, audio: body.audioContent }
-    },
+    /** Text -> spoken audio (WAV, 16-bit PCM). Returns { status, audio, error, provider }. */
+    synthesize: (args) => firstThatWorks(chain(cfg.ttsProvider, TTS_ORDER), speak, args),
   }
 }

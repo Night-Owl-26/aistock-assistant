@@ -130,7 +130,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
 
   app.get('/healthz', async () => {
     await pool.query('SELECT 1')
-    return { ok: true, gemini: gemini.configured(), textProvider, textReady: textApi.configured(), speech: speech.sttConfigured(), speechToText: speech.sttProvider(), textToSpeech: speech.ttsProvider(), textModel, liveModel: cfg.liveModel }
+    return { ok: true, gemini: gemini.configured(), textProvider, textReady: textApi.configured(), speech: speech.sttConfigured(), speechToText: speech.sttProvider(), textToSpeech: speech.ttsProvider(), speechResting: speech.resting(), textModel, liveModel: cfg.liveModel }
   })
 
   app.get('/v1/plans', async () => ({

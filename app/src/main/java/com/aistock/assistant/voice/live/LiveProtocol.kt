@@ -39,16 +39,22 @@ object LiveProtocol {
             .put("inputAudioTranscription", JSONObject())
             .put("outputAudioTranscription", JSONObject())
             .put("realtimeInputConfig", JSONObject()
-                // A shop is noisy: start less eagerly, and wait a moment of silence before answering.
+                // A shop is noisy: start less eagerly so background talk does not interrupt, but notice the end of
+                // the owner's sentence quickly (low end-sensitivity kept waiting through shop noise and felt slow).
                 .put("automaticActivityDetection", JSONObject()
                     .put("startOfSpeechSensitivity", "START_SENSITIVITY_LOW")
-                    .put("endOfSpeechSensitivity", "END_SENSITIVITY_LOW")
+                    .put("endOfSpeechSensitivity", "END_SENSITIVITY_HIGH")
                     .put("prefixPaddingMs", 120)
-                    .put("silenceDurationMs", 700))
+                    .put("silenceDurationMs", 450))
                 .put("activityHandling", "START_OF_ACTIVITY_INTERRUPTS"))
             .put("sessionResumption", if (resumeHandle != null) JSONObject().put("handle", resumeHandle) else JSONObject())
             .put("contextWindowCompression", JSONObject().put("slidingWindow", JSONObject()))
-        if (tools.isNotEmpty()) s.put("tools", JSONArray().put(JSONObject().put("functionDeclarations", Gemini.declarations(tools))))
+        if (tools.isNotEmpty()) {
+            // Newer Live models do not wait for a tool's answer unless told to; Stocky must answer from the real stock.
+            val decls = Gemini.declarations(tools)
+            for (i in 0 until decls.length()) decls.getJSONObject(i).put("behavior", "BLOCKING")
+            s.put("tools", JSONArray().put(JSONObject().put("functionDeclarations", decls)))
+        }
         return JSONObject().put("setup", s).toString()
     }
 

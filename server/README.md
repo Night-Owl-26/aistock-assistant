@@ -61,6 +61,10 @@ business's id answers "not found". This is covered by `test/api.test.js`.
    - `GOOGLE_CLOUD_API_KEY` (optional): a Google Cloud API key for **Cloud Speech-to-Text** and **Cloud Text-to-Speech**. In console.cloud.google.com: pick or create a project with billing, enable both APIs, create an API key under *APIs & Services > Credentials*, and restrict it to those two APIs. Without it the app uses the phone's own speech and Gemini Live. Speech time counts against the plan's voice minutes.
    - **Whisper (optional, free):** `bash enable-whisper.sh` runs OpenAI's Whisper (via faster-whisper) in its own container
      on this server's CPU and makes it hear Server voice requests. `bash enable-whisper.sh off` switches back.
+   - **Choosing the voice service:** `bash use-voice.sh gemini` (Gemini key only), `sarvam` or `auto`. If the chosen
+     service fails (no credit, rate limit, error) the next configured one answers and the failing one rests for 30 minutes
+     (2 minutes after a server error); `/healthz` lists resting services under `speechResting`. Whisper, when running, is
+     the last resort for hearing. If every service fails, the phone's own voice reads the reply.
 5. **Start it.**
    ```
    docker compose up -d --build

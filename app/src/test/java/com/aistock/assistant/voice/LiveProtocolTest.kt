@@ -26,6 +26,8 @@ class LiveProtocolTest {
         assertEquals("START_OF_ACTIVITY_INTERRUPTS", s.getJSONObject("realtimeInputConfig").getString("activityHandling"))
         assertEquals("h1", s.getJSONObject("sessionResumption").getString("handle"))
         assertEquals("get_sales", s.getJSONArray("tools").getJSONObject(0).getJSONArray("functionDeclarations").getJSONObject(0).getString("name"))
+        assertEquals("BLOCKING", s.getJSONArray("tools").getJSONObject(0).getJSONArray("functionDeclarations").getJSONObject(0).getString("behavior"))
+        assertEquals("END_SENSITIVITY_HIGH", s.getJSONObject("realtimeInputConfig").getJSONObject("automaticActivityDetection").getString("endOfSpeechSensitivity"))
         assertEquals("You are Stocky", s.getJSONObject("systemInstruction").getJSONArray("parts").getJSONObject(0).getString("text"))
         val a = JSONObject(LiveProtocol.audio("AAAA")).getJSONObject("realtimeInput").getJSONObject("audio")
         assertEquals("audio/pcm;rate=16000", a.getString("mimeType"))
