@@ -1,0 +1,6 @@
+# Used when the machine already runs nginx on ports 80/443 (install.sh picks this automatically).
+# The API is published only on 127.0.0.1:8088 and nginx forwards the Follower address to it; Caddy is not started.
+services:
+  api:
+    ports:
+      - "127.0.0.1:8088:8080"

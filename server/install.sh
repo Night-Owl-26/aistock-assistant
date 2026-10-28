@@ -107,22 +107,63 @@ fi
 [ "$ENV_ONLY" = "--env-only" ] && { say "Settings written (no containers started)"; exit 0; }
 
 cd "$DIR/server"
-# Another web server on ports 80/443 (nginx, apache, another app) stops Caddy from starting: say which one.
-busy=""
+# What already listens on ports 80/443 (ignoring our own Docker containers).
+busy_names=""
 for p in 80 443; do
   who="$($SUDO ss -ltnpH "( sport = :$p )" 2>/dev/null | grep -v docker-proxy | sed -n 's/.*users:(("\([^"]*\)".*/\1/p' | head -1)"
-  [ -n "$who" ] && busy="$busy port $p is used by '$who';"
+  [ -n "$who" ] && busy_names="$busy_names $who"
 done
-if [ -n "$busy" ]; then
-  warn "Another program is already using the web ports:$busy"
-  warn "Follower needs ports 80 and 443. If that program is not needed, stop it, for example:"
-  warn "  sudo systemctl disable --now nginx     (or apache2)"
-  warn "then run this script again. If you need it, ask for the 'behind nginx' setup instead."
+MODE=caddy
+if echo "$busy_names" | grep -qw nginx; then
+  MODE=nginx
+elif [ -n "$busy_names" ]; then
+  warn "Ports 80/443 are used by:$busy_names. Follower needs them (or nginx in front). Stop that program and run this again."
   exit 1
 fi
 
+if [ "$MODE" = nginx ]; then
+  say "nginx already runs here: Follower goes behind it (your other sites are not touched)"
+  $SUDO docker compose rm -sf caddy >/dev/null 2>&1 || true
+  $SUDO docker compose -f docker-compose.yml -f docker-compose.nginx.yml up -d --build db api
+  conf_dir=/etc/nginx/conf.d; [ -d /etc/nginx/sites-enabled ] && conf_dir=/etc/nginx/sites-available
+  conf="$conf_dir/follower.conf"
+  if [ ! -f "$conf" ] || ! grep -q "server_name $DOMAIN_NOW;" "$conf"; then
+    $SUDO tee "$conf" >/dev/null <<NGINX
+# Follower API ($DIR/server). Written by install.sh.
+map \$http_upgrade \$follower_connection { default upgrade; '' close; }
+server {
+    listen 80;
+    listen [::]:80;
+    server_name $DOMAIN_NOW;
+    client_max_body_size 25m;
+    location /admin/ { return 404; }
+    location / {
+        proxy_pass http://127.0.0.1:8088;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Upgrade \$http_upgrade;
+        proxy_set_header Connection \$follower_connection;
+        proxy_read_timeout 3600s;
+        proxy_send_timeout 3600s;
+    }
+}
+NGINX
+    [ "$conf_dir" = /etc/nginx/sites-available ] && $SUDO ln -sf "$conf" /etc/nginx/sites-enabled/follower.conf
+  fi
+  $SUDO nginx -t
+  $SUDO systemctl reload nginx
+  say "Getting an HTTPS certificate for $DOMAIN_NOW"
+  if ! command -v certbot >/dev/null 2>&1; then
+    $SUDO apt-get update -q && $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y -q certbot python3-certbot-nginx
+  fi
+  $SUDO certbot --nginx -d "$DOMAIN_NOW" --non-interactive --agree-tos --register-unsafely-without-email --redirect --keep-until-expiring \
+    || warn "certificate failed; check that ports 80 and 443 are open in Oracle Cloud (Security List) and run again"
+else
 say "Building and starting (first time takes a few minutes)"
 $SUDO docker compose up -d --build
+fi
 
 say "Waiting for https://$DOMAIN_NOW to answer"
 ok=""
