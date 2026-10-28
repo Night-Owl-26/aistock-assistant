@@ -199,8 +199,8 @@ jobs:
           espeak-ng -v en -w /tmp/en.wav "two XL shirts sold for cash"
           espeak-ng -v ta -w /tmp/ta.wav "இரண்டு சட்டை விற்பனை"
           docker build -q -t follower-whisper whisper
-          docker run -d --name whisper -p 127.0.0.1:9000:9000 -e WHISPER_MODEL=small follower-whisper
-          for i in $(seq 1 120); do curl -sf 127.0.0.1:9000/health && break; sleep 5; done
+          docker run -d --name whisper -p 127.0.0.1:9000:9000 -e WHISPER_MODEL=medium follower-whisper
+          for i in $(seq 1 240); do curl -sf 127.0.0.1:9000/health && break; sleep 5; done
           python3 - <<'PY' | tee whisper.log
           import base64, json, urllib.request, wave, array
           def pcm16k(path):

@@ -33,6 +33,8 @@ def transcribe(pcm_b64: str, language: str, prompt: str, vad: bool = True) -> di
         segments, info = MODEL.transcribe(
             audio, language=lang, beam_size=1, vad_filter=vad, condition_on_previous_text=False,
             initial_prompt=(prompt or None), without_timestamps=True,
+            # A shop command is one or two sentences: stop runaway repetition, which Whisper does on unclear audio.
+            max_new_tokens=120, no_repeat_ngram_size=4, repetition_penalty=1.1,
         )
         text = " ".join(s.text.strip() for s in segments).strip()
     return {"text": text, "language": info.language, "took": round(time.time() - t, 2), "model": NAME}
