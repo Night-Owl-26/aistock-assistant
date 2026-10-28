@@ -64,6 +64,11 @@ class AssistantViewModel @Inject constructor(
     /** The conversation manager: a real language model with safe tools when configured, on-device rules otherwise. */
     private val stocky = factory.create()
 
+    init {
+        // Learn what the owner's server offers (for example no real-time voice when it runs on OpenRouter only).
+        if (server.signedIn) viewModelScope.launch { try { server.account() } catch (e: Exception) { } }
+    }
+
     private val _items = MutableStateFlow<List<ChatItem>>(emptyList())
     val items: StateFlow<List<ChatItem>> = _items
     private val _voice = MutableStateFlow(VoiceState.IDLE)
@@ -194,7 +199,7 @@ class AssistantViewModel @Inject constructor(
     /** Real-time voice is used when the owner is signed in to their AIStock server and has it switched on. */
     fun liveAvailable(): Boolean {
         val p = settings.current.value
-        return p.liveVoice && !p.cloudSpeech && p.aiSource == "server" && server.signedIn && connectivity.isOnline()
+        return p.liveVoice && !p.cloudSpeech && p.aiSource == "server" && server.signedIn && server.liveReady && connectivity.isOnline()
     }
 
     // ------------------------------------------------------------ Google Cloud speech (turn by turn)

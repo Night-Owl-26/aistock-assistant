@@ -61,3 +61,53 @@ test('WAV header is valid 16 kHz mono 16-bit', () => {
   assert.equal(w.readUInt16LE(34), 16)
   assert.equal(w.readUInt32LE(40), 10)
 })
+
+import { toChat, fromChat, openRouterApi } from '../src/openrouter.js'
+
+test('OpenRouter: Gemini-format conversation with tools is translated both ways', async () => {
+  const req = {
+    systemInstruction: { parts: [{ text: 'You are Stocky.' }] },
+    contents: [
+      { role: 'user', parts: [{ text: 'Shirt XL stock evlo?' }] },
+      { role: 'model', parts: [{ functionCall: { name: 'find_products', args: { query: 'shirt xl' } } }] },
+      { role: 'user', parts: [{ functionResponse: { name: 'find_products', response: { result: 'Shirt XL: 10 pieces' } } }] },
+    ],
+    tools: [{ functionDeclarations: [{ name: 'find_products', description: 'Look up', parameters: { type: 'OBJECT', properties: { query: { type: 'STRING', description: 'q' } } } }] }],
+    generationConfig: { temperature: 0.3, maxOutputTokens: 9999, thinkingConfig: { thinkingBudget: 0 } },
+  }
+  const c = toChat(req, 'openrouter/free')
+  assert.equal(c.model, 'openrouter/free')
+  assert.deepEqual(c.messages[0], { role: 'system', content: 'You are Stocky.' })
+  assert.deepEqual(c.messages[1], { role: 'user', content: 'Shirt XL stock evlo?' })
+  assert.equal(c.messages[2].role, 'assistant')
+  const id = c.messages[2].tool_calls[0].id
+  assert.equal(c.messages[2].tool_calls[0].function.arguments, '{"query":"shirt xl"}')
+  assert.deepEqual(c.messages[3], { role: 'tool', tool_call_id: id, content: 'Shirt XL: 10 pieces' })
+  assert.equal(c.tools[0].function.parameters.type, 'object')
+  assert.equal(c.tools[0].function.parameters.properties.query.type, 'string')
+  assert.equal(c.max_tokens, 4096)
+  assert.equal(c.thinkingConfig, undefined)
+
+  const g = fromChat({ model: 'x', choices: [{ message: { content: null, tool_calls: [{ id: 'c9', type: 'function', function: { name: 'propose_sale', arguments: '{"product":"shirt","size":"XL","quantity":2}' } }] } }], usage: { prompt_tokens: 50, completion_tokens: 7 } })
+  assert.deepEqual(g.candidates[0].content.parts[0], { functionCall: { id: 'c9', name: 'propose_sale', args: { product: 'shirt', size: 'XL', quantity: 2 } } })
+  assert.equal(g.usageMetadata.promptTokenCount, 50)
+  assert.equal(fromChat({ choices: [{ message: { content: 'Shirt XL 10 irukku.' } }] }).candidates[0].content.parts[0].text, 'Shirt XL 10 irukku.')
+})
+
+test('OpenRouter: key in the header only, errors passed on', async () => {
+  const cfg = loadConfig({ ...base, OPENROUTER_API_KEY: 'or-key', OPENROUTER_BASE_URL: 'https://or.test/api/v1' })
+  const seen = []
+  const ok = async (url, init) => { seen.push({ url, init }); return new Response(JSON.stringify({ choices: [{ message: { content: 'Vanakkam' } }] }), { status: 200 }) }
+  const r = await openRouterApi(cfg, ok).generate('openrouter/free', { contents: [{ role: 'user', parts: [{ text: 'hi' }] }] })
+  assert.equal(r.status, 200)
+  assert.equal(r.body.candidates[0].content.parts[0].text, 'Vanakkam')
+  assert.equal(seen[0].url, 'https://or.test/api/v1/chat/completions')
+  assert.equal(seen[0].init.headers.authorization, 'Bearer or-key')
+  assert.ok(!seen[0].init.body.includes('or-key'))
+  const bad = async () => new Response(JSON.stringify({ error: { message: 'No auth credentials found', code: 401 } }), { status: 401 })
+  const e = await openRouterApi(cfg, bad).generate('m', { contents: [] })
+  assert.equal(e.status, 401)
+  assert.equal(e.body.error.message, 'No auth credentials found')
+  const busy = async () => new Response(JSON.stringify({ error: { message: 'Provider returned error', code: 429 } }), { status: 200 })
+  assert.equal((await openRouterApi(cfg, busy).generate('m', { contents: [] })).status, 429)
+})

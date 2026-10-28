@@ -150,7 +150,7 @@ class HandsFreeService : Service() {
             if (WakePhrase.isStop(command)) { say(getString(R.string.handsfree_bye)) { waitForWake() }; return }
             // Signed in with real-time voice: the whole conversation is spoken naturally until it goes quiet.
             val p = settings.current.value
-            if (p.liveVoice && !p.cloudSpeech && p.aiSource == "server" && server.signedIn && connectivity.isOnline()) { startLive(command); return }
+            if (p.liveVoice && !p.cloudSpeech && p.aiSource == "server" && server.signedIn && server.liveReady && connectivity.isOnline()) { startLive(command); return }
             if (command.isBlank()) {
                 // Only the name was said: answer and listen for the request.
                 say(getString(R.string.handsfree_yes)) { listenForReply() }

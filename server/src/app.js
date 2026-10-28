@@ -5,6 +5,7 @@ import { registerLiveRelay } from './liveRelay.js'
 import { checkPassword, hashPassword, randomToken, sameSecret, sha256, tokens } from './auth.js'
 import { tx } from './db.js'
 import { geminiApi, sanitizeRequest } from './gemini.js'
+import { openRouterApi } from './openrouter.js'
 import { SPEECH_LANGS, speechApi, speechLanguage, ttsSeconds } from './speech.js'
 import { validateConfig } from './businessConfig.js'
 
@@ -24,6 +25,13 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
   const jwt = tokens(cfg)
   const gemini = geminiApi(cfg, fetchImpl)
   const speech = speechApi(cfg, fetchImpl)
+  const openRouter = openRouterApi(cfg, fetchImpl)
+  // Which service answers Stocky's typed conversation.
+  const textProvider = cfg.textProvider === 'gemini' ? 'gemini'
+    : cfg.textProvider === 'openrouter' ? 'openrouter'
+    : (openRouter.configured() ? 'openrouter' : 'gemini')
+  const textApi = textProvider === 'openrouter' ? openRouter : gemini
+  const textModel = textProvider === 'openrouter' ? cfg.openRouterModel : cfg.textModel
 
   // Signed-in requests are limited per person (many shops can share one mobile-network address); others per address.
   await app.register(rateLimit, {
@@ -122,7 +130,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
 
   app.get('/healthz', async () => {
     await pool.query('SELECT 1')
-    return { ok: true, gemini: gemini.configured(), speech: speech.sttConfigured(), speechToText: speech.sttProvider(), textToSpeech: speech.ttsConfigured() ? 'google' : null, textModel: cfg.textModel, liveModel: cfg.liveModel }
+    return { ok: true, gemini: gemini.configured(), textProvider, textReady: textApi.configured(), speech: speech.sttConfigured(), speechToText: speech.sttProvider(), textToSpeech: speech.ttsConfigured() ? 'google' : null, textModel, liveModel: cfg.liveModel }
   })
 
   app.get('/v1/plans', async () => ({
@@ -192,7 +200,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     for (const b of rows) businesses.push({ ...b, entitlement: await entitlement(b.id) })
     return {
       user: { id: u.id, email: u.email, name: u.name }, businesses,
-      ai: { configured: gemini.configured(), speech: speech.sttConfigured(), speechToText: speech.sttProvider(), textToSpeech: speech.ttsConfigured() ? 'google' : null, textModel: cfg.textModel, liveModel: cfg.liveModel, liveWsUrl: cfg.liveWsUrl },
+      ai: { configured: textApi.configured(), textProvider, live: gemini.configured(), speech: speech.sttConfigured(), speechToText: speech.sttProvider(), textToSpeech: speech.ttsConfigured() ? 'google' : null, textModel, liveModel: cfg.liveModel, liveWsUrl: cfg.liveWsUrl },
     }
   })
 
@@ -286,15 +294,15 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
 
   app.post('/v1/businesses/:id/ai/generate', { config: { rateLimit: { max: 40, timeWindow: '1 minute' } } }, async (req, reply) => {
     const { user } = await member(req, req.params.id)
-    if (!gemini.configured()) fail(503, 'ai_not_configured', 'The server has no Gemini key yet.')
+    if (!textApi.configured()) fail(503, 'ai_not_configured', textProvider === 'openrouter' ? 'The server has no OpenRouter key yet.' : 'The server has no Gemini key yet.')
     const body = sanitizeRequest(req.body?.request)
     if (!body) fail(400, 'bad_request', 'Not a valid conversation request.')
     const usageId = await reserve(req.params.id, async (c, e) => {
       if (e.aiRequests.used >= e.aiRequests.limit) fail(429, 'quota_exceeded', 'This month\'s Stocky AI limit is used up. It resets on your renewal date.')
-      return (await c.query("INSERT INTO usage_events (business_id, user_id, kind, quantity, model) VALUES ($1,$2,'ai_request',1,$3) RETURNING id", [req.params.id, user.id, cfg.textModel])).rows[0].id
+      return (await c.query("INSERT INTO usage_events (business_id, user_id, kind, quantity, model) VALUES ($1,$2,'ai_request',1,$3) RETURNING id", [req.params.id, user.id, textModel])).rows[0].id
     })
     let r
-    try { r = await gemini.generate(cfg.textModel, body) } catch (err) { await pool.query('DELETE FROM usage_events WHERE id = $1', [usageId]); throw err }
+    try { r = await textApi.generate(textModel, body) } catch (err) { await pool.query('DELETE FROM usage_events WHERE id = $1', [usageId]); throw err }
     if (r.status >= 200 && r.status < 300) {
       const m = r.body?.usageMetadata ?? {}
       await pool.query('UPDATE usage_events SET input_tokens = $2, output_tokens = $3 WHERE id = $1',

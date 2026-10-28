@@ -36,6 +36,12 @@ export function loadConfig(env = process.env) {
     sarvamModel: get('SARVAM_STT_MODEL', 'saaras:v4'),
     sarvamMode: get('SARVAM_STT_MODE', 'codemix'),
     sttProvider: get('STT_PROVIDER', 'auto'),
+    // OpenRouter for Stocky's typed conversation (any model there, including free ones). When its key is set it is
+    // used instead of Gemini for text (TEXT_PROVIDER=gemini keeps Gemini). Real-time voice always needs Gemini.
+    openRouterKey: get('OPENROUTER_API_KEY', ''),
+    openRouterBase: get('OPENROUTER_BASE_URL', 'https://openrouter.ai/api/v1'),
+    openRouterModel: get('OPENROUTER_MODEL', 'openrouter/free'),
+    textProvider: get('TEXT_PROVIDER', 'auto'),
     trialDays: Number(get('TRIAL_DAYS', 14)),
     accessTtlSeconds: Number(get('ACCESS_TTL_SECONDS', 3600)),
     refreshTtlDays: Number(get('REFRESH_TTL_DAYS', 60)),

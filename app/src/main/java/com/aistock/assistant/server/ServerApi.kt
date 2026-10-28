@@ -34,6 +34,9 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
     private var accessUntil = 0L
     private val lock = Mutex()
 
+    /** False when the server has no Gemini key: real-time voice is then not offered (typed chat may use another model). */
+    @Volatile var liveReady: Boolean = true
+
     val signedIn: Boolean get() = settings.current.value.serverUrl.isNotBlank() && settings.current.value.serverBusinessId.isNotBlank()
     private val base: String get() = settings.current.value.serverUrl.trimEnd('/')
     val businessId: String get() = settings.current.value.serverBusinessId
@@ -126,6 +129,7 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
         for (i in 0 until list.length()) if (list.getJSONObject(i).optString("id") == businessId) chosen = list.getJSONObject(i)
         val b = chosen ?: list.optJSONObject(0) ?: throw ServerException(0, "no_business", "This account has no business.")
         val ai = me.optJSONObject("ai") ?: JSONObject()
+        liveReady = ai.optBoolean("live", ai.optBoolean("configured", true))
         return Account(me.getJSONObject("user").optString("email"), b.getString("id"), b.optString("name"), b.optString("role"),
             b.optJSONObject("entitlement")?.let { usage(it) }, ai.optBoolean("configured"), ai.optString("textModel"), ai.optString("liveModel"), ai.optBoolean("speech"))
     }
@@ -149,7 +153,10 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
         call("POST", "/v1/businesses/$businessId/ai/generate", JSONObject().put("request", request)).let { (c, b) -> c to String(b, Charsets.UTF_8) }
 
     suspend fun liveSession(): LiveTicket {
-        val o = obj("POST", "/v1/businesses/$businessId/ai/live-session")
+        val o = try { obj("POST", "/v1/businesses/$businessId/ai/live-session") } catch (e: ServerException) {
+            if (e.code == "ai_not_configured") liveReady = false
+            throw e
+        }
         return LiveTicket(o.optString("mode", "token"), o.optString("sessionId"), o.optString("token"), o.getString("wsUrl"), o.getString("model"), o.optInt("maxSeconds", 600))
     }
 
