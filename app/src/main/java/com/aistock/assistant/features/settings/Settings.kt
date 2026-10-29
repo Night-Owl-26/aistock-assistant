@@ -78,6 +78,8 @@ fun MoreScreen(nav: AppNav, vm: MainViewModel, cfg: com.aistock.assistant.busine
         if (cfg.has(com.aistock.assistant.business.Module.FOLLOWUPS)) MenuRow(R.drawable.ic_people, stringResource(R.string.followups), stringResource(R.string.followups_sub)) { nav.go("followups") }
         MenuRow(R.drawable.ic_people, stringResource(R.string.customers), stringResource(R.string.customers_sub)) { nav.go("parties/customer") }
         MenuRow(R.drawable.ic_people, stringResource(R.string.suppliers), stringResource(R.string.suppliers_sub)) { nav.go("parties/supplier") }
+        MenuRow(R.drawable.ic_chart, stringResource(R.string.analysis), stringResource(R.string.analysis_sub)) { nav.go("analysis") }
+        MenuRow(R.drawable.ic_call, stringResource(R.string.call_stocky), stringResource(R.string.call_stocky_sub)) { nav.go("call") }
         MenuRow(R.drawable.ic_report, stringResource(R.string.reports), stringResource(R.string.reports_sub)) { nav.go("reports") }
         if ("inventory" !in tabRoutes && cfg.has(com.aistock.assistant.business.Module.INVENTORY)) MenuRow(R.drawable.ic_inventory, stringResource(R.string.nav_inventory), stringResource(R.string.inventory_sub)) { nav.go("inventory") }
         if ("transactions" !in tabRoutes) MenuRow(R.drawable.ic_receipt, stringResource(R.string.nav_transactions), stringResource(R.string.transactions_sub)) { nav.go("transactions") }
@@ -86,6 +88,7 @@ fun MoreScreen(nav: AppNav, vm: MainViewModel, cfg: com.aistock.assistant.busine
         MenuRow(R.drawable.ic_stock_in, stringResource(R.string.import_export), stringResource(R.string.import_export_sub)) { nav.go("data") }
         MenuRow(R.drawable.ic_backup, stringResource(R.string.backup_restore), stringResource(R.string.backup_restore_sub)) { nav.go("backup") }
         MenuRow(R.drawable.ic_work, stringResource(R.string.business_setup), stringResource(R.string.business_setup_sub)) { nav.go("setup") }
+        MenuRow(R.drawable.ic_payment, stringResource(R.string.plan_and_payment), stringResource(R.string.plan_and_payment_sub)) { nav.go("plan") }
         MenuRow(R.drawable.ic_lock, stringResource(R.string.aistock_account), stringResource(R.string.account_sub)) { nav.go("account") }
         MenuRow(R.drawable.ic_settings, stringResource(R.string.settings), stringResource(R.string.settings_sub)) { nav.go("settings") }
     }

@@ -14,6 +14,8 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 
 val CURRENCIES = listOf(
@@ -28,6 +30,7 @@ class MainViewModel @Inject constructor(
     private val llm: com.aistock.assistant.di.LlmSource,
     private val alarms: com.aistock.assistant.business.AlarmReminders,
     platform: com.aistock.assistant.business.RoomBusinessBackend,
+    private val server: com.aistock.assistant.server.ServerApi,
 ) : ViewModel() {
     val businessConfig: StateFlow<com.aistock.assistant.business.BusinessConfig> =
         platform.observeConfig().stateIn(viewModelScope, SharingStarted.Eagerly, com.aistock.assistant.business.Templates.DEFAULT)
@@ -39,6 +42,14 @@ class MainViewModel @Inject constructor(
     val hasPin: StateFlow<Boolean?> = business.observeUser().map { u -> val set: Boolean? = u != null && u.pinHash.isNotEmpty(); set }
         .stateIn(viewModelScope, SharingStarted.Eagerly, null)
     val ownerName: StateFlow<String> = business.observeUser().map { it?.name.orEmpty() }.stateIn(viewModelScope, SharingStarted.Eagerly, "")
+
+    init {
+        // The plan (trial days left, paid, ended) is checked at every start when online; offline the saved one is used.
+        viewModelScope.launch {
+            val p = settings.flow.first { it.loaded }
+            if (p.serverBusinessId.isNotBlank() && p.serverBusinessId != "pending") try { server.refreshPlan() } catch (e: Exception) { }
+        }
+    }
 
     private val _unlocked = MutableStateFlow(false)
     val unlocked: StateFlow<Boolean> = _unlocked

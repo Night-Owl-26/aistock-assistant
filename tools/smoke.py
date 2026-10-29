@@ -183,6 +183,26 @@ def xlsx_cell(raw, ref):
 def step(name):
     say("==", name)
 
+def sql(q):
+    """Runs SQL on the test server's database (the CI Postgres service)."""
+    r = subprocess.run(["psql", "postgresql://postgres:postgres@localhost:5432/aistock", "-tAc", q], capture_output=True, text=True, timeout=30)
+    say("  sql:", q[:80], "->", (r.stdout or r.stderr).strip()[:120])
+    return r.stdout.strip()
+
+def admin(method, path, body=None):
+    import json, urllib.request
+    req = urllib.request.Request("http://127.0.0.1:8080" + path, method=method, data=None if body is None else json.dumps(body).encode(),
+                                 headers={"authorization": "Bearer smoke-admin-token", "content-type": "application/json"})
+    try:
+        return json.load(urllib.request.urlopen(req, timeout=20))
+    except Exception as e:
+        say("  admin call failed:", path, e); return {}
+
+def set_field(label, text, clear=45):
+    tap_field(label); adb("shell", "input", "keyevent", "KEYCODE_MOVE_END")
+    for _ in range(clear): adb("shell", "input", "keyevent", "KEYCODE_DEL")
+    type_text(text); hide_keyboard()
+
 # ---------------------------------------------------------------- run
 time.sleep(40)  # let the freshly booted emulator settle
 adb("shell", "settings", "put", "global", "hide_error_dialogs", "1")
@@ -202,7 +222,16 @@ tap_field("Owner name", 1); type_text("Bharath"); hide_keyboard()
 adb("shell", "input", "swipe", "500", "1500", "500", "600", "300"); time.sleep(1)
 tap("Load sample data"); shot("business-setup")
 tap("Get started", exact=True)
-expect("Already keep your stock in Excel", "import offer after setup", 30); shot("import-offer"); tap("Later", exact=True)
+step("sign-in gate: email and password only, the server is built in")
+expect("Create your Follower account", "account needed after setup", 30); shot("signin-gate")
+if find("Server address", exact=True): problems.append("server address shown without asking")
+tap("Change server", required=True); set_field("Server address", "http://10.0.2.2:8080")
+tap_field("Email"); type_text("owner@shop.in"); hide_keyboard()
+tap_field("Password"); type_text("shopowner1"); hide_keyboard()
+if not find("Sri Murugan Textiles"): problems.append("business name not filled in from setup")
+tap("Create account", exact=True, last=True)
+expect("Already keep your stock in Excel", "import offer after sign-in", 40); shot("import-offer"); tap("Later", exact=True)
+check("sign-in gate")
 expect("Today's Sales", "dashboard after onboarding", 30); check("onboarding"); shot("dashboard")
 
 step("inventory")
@@ -323,24 +352,58 @@ step("back to a shop")
 tap("More", exact=True); scroll_to("Business setup"); tap("Business setup"); tap("Fancy store / retail shop"); tap("Save", exact=True, last=True); time.sleep(2)
 expect("Transactions", "shop tabs back"); tap("Home", exact=True)
 
-step("sign in to the test Follower server; Stocky answers through it")
-tap("More", exact=True); scroll_to("Follower account"); tap("Follower account"); expect("Server address", "account screen")
-tap_field("Server address"); adb("shell", "input", "keyevent", "KEYCODE_MOVE_END")
-for _ in range(12): adb("shell", "input", "keyevent", "KEYCODE_DEL")
-type_text("http://10.0.2.2:8080"); hide_keyboard()
-tap("Create account", exact=True)
-tap_field("Email"); type_text("owner@shop.in"); hide_keyboard()
-tap_field("Password"); type_text("shopowner1"); hide_keyboard()
-tap_field("Business name"); type_text("Test Shop"); hide_keyboard()
-tap("Create account", exact=True, last=True); expect("Plan", "signed in", 30); shot("account-signed-in")
+step("Follower account: free trial; Stocky answers through the server")
+tap("More", exact=True); scroll_to("Follower account"); tap("Follower account"); expect("Plan", "account screen", 30); shot("account-signed-in")
 expect("Free trial", "trial plan")
 back(); tap("Settings"); scroll_to("Server voice"); expect("Server voice", "server voice option when signed in"); shot("settings-cloud-voice"); back()
-tap("More", exact=True); scroll_to("Follower account"); tap("Follower account"); expect("Plan", "account again")
-back(); tap("Chat", exact=True); tap("New conversation", required=False)
+tap("Chat", exact=True); tap("New conversation", required=False)
 tap_field("Type what happened"); type_text("hello Stocky"); tap("Send", exact=True)
 expect("Vanakkam from the test server", "AI reply through the server", 40); hide_keyboard(); shot("assistant-through-server")
-tap("More", exact=True); scroll_to("Follower account"); tap("Follower account"); scroll_to("Sign out"); tap("Sign out"); time.sleep(2); back()
 check("server")
+
+step("analysis page")
+tap("More", exact=True); tap("Analysis"); expect("Gross profit", "analysis tiles", 20); expect("Top products", "top products chart"); shot("analysis")
+tap("12 months", exact=True); time.sleep(2); expect("Busiest days", "analysis year"); shot("analysis-year")
+back()
+check("analysis")
+
+step("calls: call a customer, note afterwards, history")
+tap("More", exact=True); tap("Customers"); expect("Kumar Traders", "customers")
+tap("Call Kumar Traders"); time.sleep(6); shot("dialler")
+adb("shell", "monkey", "-p", PKG, "-c", "android.intent.category.LAUNCHER", "1"); time.sleep(3)
+if expect("How did the call with", "note after the call", 15):
+    shot("call-note"); tap("Will pay", exact=True); tap("Save", exact=True, last=True); time.sleep(2)
+tap("Kumar Traders", exact=True); expect("Calls and notes", "call history on the customer"); expect("Will pay", "note saved"); shot("customer-calls"); back(); back()
+check("calls")
+
+step("call Stocky: hands-free call screen")
+adb("shell", "pm", "grant", PKG, "android.permission.RECORD_AUDIO")
+tap("More", exact=True); scroll_to("Call Stocky"); tap("Call Stocky"); expect("Hang up", "call screen", 15); time.sleep(6); shot("call-stocky")
+tap("Hang up", exact=True); time.sleep(2); expect("Call Stocky", "back after hanging up")
+check("call stocky")
+
+step("trial ends: read-only until a UPI payment is approved")
+sql("UPDATE subscriptions SET current_period_end = now() - interval '1 day'")
+tap("More", exact=True); scroll_to("Plan & payment"); tap("Plan & payment"); expect("Free trial ended", "plan ended", 30); shot("plan-ended")
+expect("with UPI", "UPI pay button"); expect("testshop@upi", "UPI ID from the server")
+back(); tap("Chat", exact=True); tap("New conversation", required=False)
+tap_field("Type what happened"); type_text("Sold 1 Blue Shirt"); tap("Send", exact=True); hide_keyboard()
+if expect("Confirm", "sale proposal while read-only", 25):
+    tap("Confirm", exact=True); expect("free trial has ended", "sale refused while read-only"); shot("read-only-refused")
+tap("Home", exact=True); expect("Free trial ended", "home banner"); shot("home-read-only")
+tap("Free trial ended"); expect("Plan & payment", "banner opens the plan screen")
+scroll_to("UPI transaction ID"); tap_field("UPI transaction ID"); type_text("412345678901"); hide_keyboard()
+tap("Send for approval"); expect("waiting for approval", "payment pending", 20); shot("payment-pending")
+pending = admin("GET", "/admin/payments").get("payments", [])
+mine = [p for p in pending if p.get("utr") == "412345678901"]
+if not mine: problems.append("payment claim not on the server")
+else: say("  approve:", admin("POST", f"/admin/payments/{mine[0]['id']}/approve", {}))
+scroll_to("Refresh"); tap("Refresh", exact=True); expect("Basic plan until", "plan active after approval", 20); shot("plan-paid")
+back(); tap("Chat", exact=True)
+tap_field("Type what happened"); type_text("Sold 1 Blue Shirt"); tap("Send", exact=True); hide_keyboard()
+if expect("Confirm", "sale proposal after paying", 25):
+    tap("Confirm", exact=True); expect("Sale saved", "sale saved after paying")
+check("payment")
 
 step("settings: dark mode and Tamil")
 tap("Settings"); expect("Language", "settings"); shot("settings")

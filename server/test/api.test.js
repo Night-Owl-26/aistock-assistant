@@ -40,7 +40,7 @@ before(async () => {
   pool = createPool(url)
   await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
   await migrate(pool)
-  const cfg = loadConfig({ DATABASE_URL: url, JWT_SECRET: 'x'.repeat(40), GEMINI_API_KEY: 'server-key', ADMIN_TOKEN: 'admin-secret-token', GEMINI_BASE_URL: 'https://google.test', GOOGLE_CLOUD_API_KEY: 'cloud-key', GOOGLE_STT_BASE_URL: 'https://stt.test', GOOGLE_TTS_BASE_URL: 'https://tts.test', REGISTER_PER_HOUR: '1000', LIVE_MODE: 'token' })
+  const cfg = loadConfig({ DATABASE_URL: url, JWT_SECRET: 'x'.repeat(40), GEMINI_API_KEY: 'server-key', ADMIN_TOKEN: 'admin-secret-token', GEMINI_BASE_URL: 'https://google.test', GOOGLE_CLOUD_API_KEY: 'cloud-key', GOOGLE_STT_BASE_URL: 'https://stt.test', GOOGLE_TTS_BASE_URL: 'https://tts.test', REGISTER_PER_HOUR: '1000', LIVE_MODE: 'token', UPI_ID: 'shop@okaxis', UPI_NAME: 'Follower' })
   app = await buildApp({ cfg, pool, fetchImpl: fakeFetch })
 })
 after(async () => { await app?.close(); await pool?.end() })
@@ -304,4 +304,55 @@ test('Google Cloud speech: key stays on the server, phrases passed, minutes mete
   assert.equal((await call('POST', `/v1/businesses/${a.businessId}/ai/stt`, { token: b.accessToken, body: { audio: pcm.toString('base64') } })).status, 404)
   await pool.query("INSERT INTO usage_events (business_id, kind, quantity) VALUES ($1, 'stt_seconds', 1000000)", [a.businessId])
   assert.equal((await call('POST', `/v1/businesses/${a.businessId}/ai/stt`, { token: a.accessToken, body: { audio: pcm.toString('base64') } })).status, 429)
+})
+
+test('UPI payment: the owner sends the UTR, the administrator approves, the plan starts; a UTR works once', async () => {
+  const a = await register('upi@shop.in', 'UPI Shop')
+  const plans = await call('GET', '/v1/plans')
+  assert.equal(plans.json.payment.upiId, 'shop@okaxis')
+  assert.equal(plans.json.payment.trialDays, 14)
+  // Trial ended: Stocky's AI stops until a plan is paid.
+  await pool.query("UPDATE subscriptions SET current_period_end = now() - interval '1 day' WHERE business_id = $1", [a.businessId])
+  let me = await call('GET', '/v1/me', { token: a.accessToken })
+  assert.equal(me.json.businesses[0].entitlement.active, false)
+
+  const path = `/v1/businesses/${a.businessId}/payments`
+  assert.equal((await call('POST', path, { token: a.accessToken, body: { planId: 'basic', utr: '12' } })).status, 400, 'too short')
+  assert.equal((await call('POST', path, { token: a.accessToken, body: { planId: 'trial', utr: '412345678901' } })).status, 400, 'trial cannot be bought')
+  const claim = await call('POST', path, { token: a.accessToken, body: { planId: 'basic', utr: '4123 4567 8901' } })
+  assert.equal(claim.status, 200, JSON.stringify(claim.json))
+  assert.equal(claim.json.utr, '412345678901')
+  assert.equal(claim.json.amountMinor, 19900)
+  assert.equal((await call('POST', path, { token: a.accessToken, body: { planId: 'basic', utr: '412345678901' } })).status, 409, 'same UTR twice')
+  const other = await register('upi-other@shop.in', 'Other UPI')
+  assert.equal((await call('POST', path, { token: other.accessToken, body: { planId: 'basic', utr: '999999999999' } })).status, 404, 'not their business')
+  me = await call('GET', '/v1/me', { token: a.accessToken })
+  assert.equal(me.json.businesses[0].entitlement.pendingPayments, 1)
+
+  const adminH = { authorization: 'Bearer admin-secret-token' }
+  assert.equal((await call('GET', '/admin/payments')).status, 401)
+  const list = await call('GET', '/admin/payments', { headers: adminH })
+  const mine = list.json.payments.find(p => p.utr === '412345678901')
+  assert.equal(mine.email, 'upi@shop.in')
+  const ok = await call('POST', `/admin/payments/${mine.id}/approve`, { headers: adminH, body: {} })
+  assert.equal(ok.status, 200, JSON.stringify(ok.json))
+  assert.equal((await call('POST', `/admin/payments/${mine.id}/approve`, { headers: adminH, body: {} })).status, 409, 'not twice')
+  me = await call('GET', '/v1/me', { token: a.accessToken })
+  const e = me.json.businesses[0].entitlement
+  assert.equal(e.active, true); assert.equal(e.planId, 'basic'); assert.equal(e.status, 'active'); assert.equal(e.pendingPayments, 0)
+  const days = (new Date(e.periodEnd) - Date.now()) / 86400000
+  assert.ok(days > 29 && days < 31, `about 30 days, got ${days}`)
+
+  // Paying again before the month ends adds a month after the current one.
+  const c2 = await call('POST', path, { token: a.accessToken, body: { planId: 'basic', utr: 'T2410290001' } })
+  await call('POST', `/admin/payments/${c2.json.id}/approve`, { headers: adminH, body: {} })
+  me = await call('GET', '/v1/me', { token: a.accessToken })
+  const days2 = (new Date(me.json.businesses[0].entitlement.periodEnd) - Date.now()) / 86400000
+  assert.ok(days2 > 59 && days2 < 61, `about 60 days, got ${days2}`)
+
+  const c3 = await call('POST', path, { token: a.accessToken, body: { planId: 'pro', utr: 'FAKE123456' } })
+  const rej = await call('POST', `/admin/payments/${c3.json.id}/reject`, { headers: adminH, body: { note: 'not received' } })
+  assert.equal(rej.json.status, 'rejected')
+  const mineList = await call('GET', path, { token: a.accessToken })
+  assert.equal(mineList.json.payments.find(p => p.utr === 'FAKE123456').note, 'not received')
 })

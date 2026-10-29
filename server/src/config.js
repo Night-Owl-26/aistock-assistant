@@ -57,6 +57,10 @@ export function loadConfig(env = process.env) {
     openRouterModel: get('OPENROUTER_MODEL', 'openrouter/free'),
     textProvider: get('TEXT_PROVIDER', 'auto'),
     trialDays: Number(get('TRIAL_DAYS', 14)),
+    // Where owners pay after the trial (shown in the app, never a secret). Empty: the app says to contact you.
+    upiId: get('UPI_ID', ''),
+    upiName: get('UPI_NAME', 'Follower'),
+    supportPhone: get('SUPPORT_PHONE', ''),
     accessTtlSeconds: Number(get('ACCESS_TTL_SECONDS', 3600)),
     refreshTtlDays: Number(get('REFRESH_TTL_DAYS', 60)),
     maxBackupBytes: Number(get('MAX_BACKUP_BYTES', 20 * 1024 * 1024)),

@@ -6,7 +6,14 @@ http.createServer((req, res) => {
   req.on('data', c => { body += c })
   req.on('end', () => {
     const send = (code, o) => { res.writeHead(code, { 'content-type': 'application/json' }); res.end(JSON.stringify(o)) }
-    if (req.url.includes(':generateContent')) return send(200, { candidates: [{ content: { role: 'model', parts: [{ text: 'Vanakkam from the test server!' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 } })
+    if (req.url.includes(':generateContent')) {
+      // Only "hello Stocky" gets an AI answer; every other chat fails, so the app's on-device rules answer it and the
+      // emulator test can check real stock numbers while signed in.
+      let last = ''
+      try { const users = (JSON.parse(body).contents ?? []).filter(c => c.role === 'user'); last = JSON.stringify(users[users.length - 1] ?? {}) } catch {}
+      if (!/hello stocky/i.test(last)) return send(400, { error: { message: 'test server: no AI for this request' } })
+      return send(200, { candidates: [{ content: { role: 'model', parts: [{ text: 'Vanakkam from the test server!' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 10, candidatesTokenCount: 5 } })
+    }
     if (req.url.startsWith('/v1beta/models')) return send(200, { models: [{ name: 'models/gemini-flash-latest', supportedGenerationMethods: ['generateContent'] }] })
     if (req.url.endsWith('/auth_tokens')) return send(200, { name: 'auth_tokens/test', expireTime: new Date(Date.now() + 600000).toISOString() })
     send(404, { error: { message: 'not here' } })

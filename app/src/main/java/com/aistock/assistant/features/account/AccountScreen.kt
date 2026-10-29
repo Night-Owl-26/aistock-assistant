@@ -1,6 +1,16 @@
 package com.aistock.assistant.features.account
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import com.aistock.assistant.data.Access
+import com.aistock.assistant.data.Prefs
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -53,8 +63,74 @@ class AccountViewModel @Inject constructor(val api: ServerApi, val settings: Set
 }
 
 /**
- * Sign in to the owner's own AIStock server. Once signed in, Stocky's AI and real-time voice go through the server,
- * which holds the Gemini key, counts usage and checks the plan. Business records stay on this phone.
+ * Email and password only: the Follower server is built into the app. The address can still be changed under
+ * "Change server" (for a test server or your own deployment).
+ */
+@Composable
+fun SignInForm(vm: AccountViewModel, p: Prefs, startMode: String, defaultBusiness: String = "") {
+    val toast = LocalToast.current
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var url by remember(p.serverUrl) { mutableStateOf(p.serverUrl.ifBlank { com.aistock.assistant.BuildConfig.DEFAULT_SERVER }) }
+    var showServer by remember { mutableStateOf(false) }
+    var mode by remember { mutableStateOf(startMode) }
+    var email by remember { mutableStateOf(p.serverEmail) }
+    var password by remember { mutableStateOf("") }
+    var business by remember(defaultBusiness) { mutableStateOf(defaultBusiness) }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf("") }
+
+    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FilterChip(mode == "register", { mode = "register" }, label = { Text(stringResource(R.string.create_account)) })
+        FilterChip(mode == "login", { mode = "login" }, label = { Text(stringResource(R.string.sign_in)) })
+    }
+    TextInput(stringResource(R.string.email), email, { email = it.trim() }, keyboard = KeyboardType.Email, capitalize = false)
+    OutlinedTextField(password, { password = it }, label = { Text(stringResource(R.string.password)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+        visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+    if (mode == "register") TextInput(stringResource(R.string.business_name), business, { business = it })
+    if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+    Button(modifier = Modifier.fillMaxWidth(), enabled = !busy && url.length > 10 && email.contains('@') && password.length >= 8 && (mode == "login" || business.isNotBlank()), onClick = {
+        busy = true; error = ""
+        scope.launch {
+            try {
+                vm.api.health(url)
+                if (mode == "login") vm.api.login(url, email, password) else vm.api.register(url, email, password, "", business)
+                password = ""
+                toast(ctx.getString(R.string.signed_in))
+            } catch (e: java.io.IOException) {
+                error = ctx.getString(R.string.signin_no_internet)
+            } catch (e: Exception) {
+                error = e.message ?: e.toString()
+            }
+            busy = false
+        }
+    }) { Text(stringResource(if (busy) R.string.please_wait else if (mode == "login") R.string.sign_in else R.string.create_account)) }
+    TextButton(onClick = { showServer = !showServer }) { Text(stringResource(R.string.change_server), style = MaterialTheme.typography.bodySmall) }
+    if (showServer) {
+        TextInput(stringResource(R.string.server_address), url, { url = it.trim() }, keyboard = KeyboardType.Uri, capitalize = false)
+        Text(stringResource(R.string.server_address_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    }
+}
+
+/** Shown after setup until the owner has a Follower account: the 14-day free trial starts with it. */
+@Composable
+fun SignInGate(businessName: String, vm: AccountViewModel = hiltViewModel()) {
+    val prefs by vm.prefs.collectAsStateWithLifecycle(initialValue = null)
+    val p = prefs ?: return
+    Column(
+        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).safeDrawingPadding().imePadding()
+            .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 24.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(stringResource(R.string.gate_title), style = MaterialTheme.typography.headlineSmall)
+        Text(stringResource(R.string.gate_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        SignInForm(vm, p, "register", businessName)
+    }
+}
+
+/**
+ * The owner's Follower account. Once signed in, Stocky's AI and voice go through the Follower server,
+ * which holds the AI keys, counts usage and checks the plan. Business records stay on this phone.
  */
 @Composable
 fun AccountScreen(nav: AppNav, vm: AccountViewModel = hiltViewModel()) {
@@ -64,11 +140,6 @@ fun AccountScreen(nav: AppNav, vm: AccountViewModel = hiltViewModel()) {
     val ctx = LocalContext.current
     val ownerCheck = LocalOwnerCheck.current
     val scope = rememberCoroutineScope()
-    var url by remember(p.serverUrl) { mutableStateOf(p.serverUrl.ifBlank { "https://" }) }
-    var mode by remember { mutableStateOf("login") }
-    var email by remember { mutableStateOf(p.serverEmail) }
-    var password by remember { mutableStateOf("") }
-    var business by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var account by remember { mutableStateOf<Account?>(null) }
     var error by remember { mutableStateOf("") }
@@ -82,40 +153,15 @@ fun AccountScreen(nav: AppNav, vm: AccountViewModel = hiltViewModel()) {
     FormPage(stringResource(R.string.aistock_account), nav.back) {
         Text(stringResource(R.string.account_intro), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         if (!signedIn) {
-            TextInput(stringResource(R.string.server_address), url, { url = it.trim() }, keyboard = KeyboardType.Uri, capitalize = false)
-            Text(stringResource(R.string.server_address_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                FilterChip(mode == "login", { mode = "login" }, label = { Text(stringResource(R.string.sign_in)) })
-                FilterChip(mode == "register", { mode = "register" }, label = { Text(stringResource(R.string.create_account)) })
-            }
-            TextInput(stringResource(R.string.email), email, { email = it.trim() }, keyboard = KeyboardType.Email, capitalize = false)
-            OutlinedTextField(password, { password = it }, label = { Text(stringResource(R.string.password)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
-            if (mode == "register") TextInput(stringResource(R.string.business_name), business, { business = it })
-            if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
-            Button(enabled = !busy && url.length > 10 && email.contains('@') && password.length >= 8 && (mode == "login" || business.isNotBlank()), onClick = {
-                busy = true; error = ""
-                scope.launch {
-                    try {
-                        vm.api.health(url)
-                        if (mode == "login") vm.api.login(url, email, password) else vm.api.register(url, email, password, "", business)
-                        password = ""
-                        toast(ctx.getString(R.string.signed_in))
-                    } catch (e: Exception) {
-                        error = e.message ?: e.toString()
-                    }
-                    busy = false
-                }
-            }) { Text(stringResource(if (busy) R.string.please_wait else if (mode == "login") R.string.sign_in else R.string.create_account)) }
+            SignInForm(vm, p, "login")
         } else {
             AppCard(Modifier.fillMaxWidth()) {
                 LabelValue(stringResource(R.string.email), p.serverEmail)
-                LabelValue(stringResource(R.string.server_address), p.serverUrl)
                 account?.let { a ->
                     LabelValue(stringResource(R.string.business_name), a.businessName)
                     a.usage?.let { u ->
-                        LabelValue(stringResource(R.string.plan), "${u.planName} · ${u.status}" + if (u.priceMinor > 0) " · ${Money.format(u.priceMinor.toLong(), "₹")}/month" else "")
-                        LabelValue(stringResource(R.string.renews), u.periodEnd.take(10))
+                        LabelValue(stringResource(R.string.plan), "${u.planName}" + if (u.priceMinor > 0) " · ${Money.format(u.priceMinor.toLong(), "₹")}/month" else "")
+                        LabelValue(stringResource(if (u.active) R.string.plan_until else R.string.plan_ended_on), u.periodEnd.take(10))
                         LabelValue(stringResource(R.string.ai_requests_used), "${u.aiUsed} / ${u.aiLimit}")
                         LabelValue(stringResource(R.string.voice_minutes_used), "${u.liveUsedSec / 60} / ${u.liveLimitSec / 60}")
                         if (!u.active) Text(stringResource(R.string.plan_inactive), color = MaterialTheme.colorScheme.error)
@@ -124,7 +170,7 @@ fun AccountScreen(nav: AppNav, vm: AccountViewModel = hiltViewModel()) {
                 }
                 if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error)
             }
-            Text(stringResource(R.string.plan_how_to_pay), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Button(onClick = { nav.go("plan") }, modifier = Modifier.fillMaxWidth()) { Text(stringResource(R.string.plan_and_payment)) }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = { scope.launch { error = ""; load() } }) { Text(stringResource(R.string.refresh)) }
                 OutlinedButton(enabled = !busy, onClick = {

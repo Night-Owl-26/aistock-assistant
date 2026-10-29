@@ -21,6 +21,9 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import com.aistock.assistant.ui.components.LabelValue
+import com.aistock.assistant.ui.components.SectionTitle
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -125,6 +128,7 @@ fun PartyListScreen(nav: AppNav, kindRoute: String, vm: PartyViewModel = hiltVie
                                 else -> stringResource(R.string.settled)
                             },
                             onClick = { nav.go("party/$kindRoute?id=${p.id}") },
+                            action = if (p.phone.any { it.isDigit() }) ({ com.aistock.assistant.features.calls.CallButton(p.name, p.phone, p.id, p.kind) }) else null,
                         )
                     }
                 }
@@ -200,6 +204,23 @@ fun PartyFormScreen(nav: AppNav, kindRoute: String, partyId: String?, vm: PartyV
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = { nav.go("payment?kind=$kindRoute&partyId=${p.id}") }) {
                     Text(stringResource(if (isCustomer) R.string.record_payment_received else R.string.record_payment_made))
+                }
+                if (p.phone.any { it.isDigit() }) {
+                    Spacer(Modifier.height(4.dp))
+                    OutlinedButton(onClick = { com.aistock.assistant.features.calls.CallTracker.call(ctx, p.name, p.phone, p.id, p.kind) }) {
+                        Text(stringResource(R.string.call_person, p.name))
+                    }
+                }
+            }
+            // Calls and notes with this person, newest first.
+            val calls: com.aistock.assistant.features.calls.CallViewModel = androidx.hilt.navigation.compose.hiltViewModel()
+            var history by remember { mutableStateOf<List<com.aistock.assistant.business.ContactRef>>(emptyList()) }
+            val pending by com.aistock.assistant.features.calls.CallTracker.pending.collectAsState()
+            LaunchedEffect(p.id, pending) { history = calls.history(if (isCustomer) p.id else null, p.name) }
+            if (history.isNotEmpty()) {
+                SectionTitle(stringResource(R.string.call_history))
+                AppCard(Modifier.fillMaxWidth()) {
+                    for (h in history.take(10)) LabelValue(com.aistock.assistant.ui.fmtDateTime(h.at), h.summary)
                 }
             }
         }

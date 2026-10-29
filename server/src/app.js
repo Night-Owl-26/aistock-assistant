@@ -117,6 +117,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     return {
       active, status: s.status, planId: s.plan_id, planName: s.plan_name, priceMinor: s.price_minor, currency: s.currency,
       periodEnd: s.current_period_end, maxStaff: s.max_staff,
+      pendingPayments: Number((await db.query("SELECT COUNT(*) AS n FROM payment_claims WHERE business_id = $1 AND status = 'pending'", [businessId])).rows[0].n),
       aiRequests: { used: ai, limit: s.ai_requests_month },
       liveSeconds: { used: live, limit: s.live_seconds_month },
     }
@@ -135,6 +136,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
 
   app.get('/v1/plans', async () => ({
     plans: (await pool.query('SELECT id, name, price_minor, currency, period_days, ai_requests_month, live_seconds_month, max_staff FROM plans WHERE active ORDER BY price_minor')).rows,
+    payment: { upiId: cfg.upiId, payeeName: cfg.upiName, supportPhone: cfg.supportPhone, trialDays: cfg.trialDays },
   }))
 
   app.post('/v1/auth/register', { config: { rateLimit: { max: cfg.registerPerHour, timeWindow: '1 hour' } } }, async (req) => {
@@ -470,10 +472,88 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     fail(501, 'not_configured', 'Google Play billing is not connected on this server yet. Plans are activated by the administrator for now.')
   })
 
-  /** Administrator: activate or extend a plan after a payment received outside the app. */
-  app.post('/admin/subscriptions', async (req) => {
+  // ---------------------------------------------------------------- UPI payments (claimed in the app, approved by the administrator)
+
+  const UTR = /^[A-Za-z0-9]{6,30}$/
+  const claimRow = (r) => ({ id: Number(r.id), planId: r.plan_id, amountMinor: r.amount_minor, utr: r.utr, status: r.status, note: r.note, createdAt: r.created_at, decidedAt: r.decided_at })
+
+  /** The owner paid by UPI and sends the transaction reference; the plan starts when the administrator approves it. */
+  app.post('/v1/businesses/:id/payments', { config: { rateLimit: { max: 10, timeWindow: '1 hour' } } }, async (req) => {
+    const { user } = await member(req, req.params.id, 'owner')
+    const planId = String(req.body?.planId ?? '')
+    const utr = String(req.body?.utr ?? '').replace(/\s+/g, '')
+    if (!UTR.test(utr)) fail(400, 'bad_utr', 'Enter the UPI transaction ID (UTR / reference number) shown in your UPI app: 6 to 30 letters or digits.')
+    const plan = (await pool.query('SELECT id, price_minor FROM plans WHERE id = $1 AND active AND price_minor > 0', [planId])).rows[0]
+    if (!plan) fail(400, 'bad_plan', 'Choose a plan.')
+    const pending = Number((await pool.query("SELECT COUNT(*) AS n FROM payment_claims WHERE business_id = $1 AND status = 'pending'", [req.params.id])).rows[0].n)
+    if (pending >= 3) fail(429, 'too_many_pending', 'You already sent payments that are waiting to be checked.')
+    const r = await pool.query(
+      `INSERT INTO payment_claims (business_id, user_id, plan_id, amount_minor, utr) VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (utr) DO NOTHING RETURNING *`, [req.params.id, user.id, plan.id, plan.price_minor, utr])
+    if (!r.rowCount) fail(409, 'utr_used', 'This UPI transaction ID was already sent.')
+    audit(req.params.id, user.id, 'payment_claimed', { planId: plan.id, utr }, req.ip)
+    return claimRow(r.rows[0])
+  })
+
+  app.get('/v1/businesses/:id/payments', async (req) => {
+    await member(req, req.params.id, 'owner')
+    return { payments: (await pool.query('SELECT * FROM payment_claims WHERE business_id = $1 ORDER BY created_at DESC LIMIT 20', [req.params.id])).rows.map(claimRow) }
+  })
+
+  const admin = (req) => {
     const h = req.headers.authorization ?? ''
     if (!cfg.adminToken || !sameSecret(h.replace(/^Bearer /, ''), cfg.adminToken)) fail(401, 'unauthorized', 'Admin token required.')
+  }
+
+  /** Administrator: payments waiting to be checked, with who sent them. */
+  app.get('/admin/payments', async (req) => {
+    admin(req)
+    const status = ['pending', 'approved', 'rejected'].includes(req.query?.status) ? req.query.status : 'pending'
+    const rows = (await pool.query(
+      `SELECT c.*, b.name AS business_name, u.email FROM payment_claims c JOIN businesses b ON b.id = c.business_id
+         LEFT JOIN users u ON u.id = c.user_id WHERE c.status = $1 ORDER BY c.created_at LIMIT 200`, [status])).rows
+    return { payments: rows.map(r => ({ ...claimRow(r), businessId: r.business_id, business: r.business_name, email: r.email })) }
+  })
+
+  /**
+   * Administrator: the money arrived (approve: the plan starts now, or continues after the paid period that is still
+   * running, for the plan's period) or it did not (reject).
+   */
+  app.post('/admin/payments/:claimId/:decision', async (req) => {
+    admin(req)
+    const decision = req.params.decision
+    if (!['approve', 'reject'].includes(decision) || !/^\d+$/.test(req.params.claimId)) fail(404, 'not_found', 'Unknown payment or action.')
+    const c = await pool.connect()
+    try {
+      await c.query('BEGIN')
+      const claim = (await c.query("SELECT * FROM payment_claims WHERE id = $1 FOR UPDATE", [req.params.claimId])).rows[0]
+      if (!claim) fail(404, 'not_found', 'Unknown payment.')
+      if (claim.status !== 'pending') fail(409, 'already_decided', `This payment was already ${claim.status}.`)
+      const note = String(req.body?.note ?? '').slice(0, 200)
+      await c.query('UPDATE payment_claims SET status = $2, note = $3, decided_at = now() WHERE id = $1', [claim.id, decision === 'approve' ? 'approved' : 'rejected', note])
+      let periodEnd = null
+      if (decision === 'approve') {
+        const days = Number((await c.query('SELECT period_days FROM plans WHERE id = $1', [claim.plan_id])).rows[0]?.period_days) || 30
+        const r = await c.query(
+          `UPDATE subscriptions SET plan_id = $2, status = 'active', source = 'manual', external_ref = $4, updated_at = now(),
+              current_period_start = CASE WHEN status = 'active' AND current_period_end > now() THEN current_period_start ELSE now() END,
+              current_period_end = GREATEST(CASE WHEN status = 'active' THEN current_period_end ELSE now() END, now()) + make_interval(days => $3)
+            WHERE business_id = $1 RETURNING current_period_end`, [claim.business_id, claim.plan_id, days, `UPI ${claim.utr}`])
+        if (!r.rowCount) fail(404, 'not_found', 'Business not found.')
+        periodEnd = r.rows[0].current_period_end
+      }
+      await c.query('COMMIT')
+      audit(claim.business_id, null, decision === 'approve' ? 'payment_approved' : 'payment_rejected', { claimId: Number(claim.id), utr: claim.utr }, req.ip)
+      return { ok: true, status: decision === 'approve' ? 'approved' : 'rejected', periodEnd }
+    } catch (err) {
+      await c.query('ROLLBACK').catch(() => {})
+      throw err
+    } finally { c.release() }
+  })
+
+  /** Administrator: activate or extend a plan after a payment received outside the app. */
+  app.post('/admin/subscriptions', async (req) => {
+    admin(req)
     const { businessId, planId, days = 30, reference = '' } = req.body ?? {}
     if (!/^[0-9a-f-]{36}$/i.test(String(businessId)) || !Number.isInteger(Number(days)) || Number(days) < 1 || Number(days) > 3660) fail(400, 'bad_request', 'businessId must be an id and days 1-3660.')
     const plan = (await pool.query('SELECT id FROM plans WHERE id = $1', [planId])).rows[0]

@@ -1,5 +1,6 @@
 package com.aistock.assistant.server
 
+import com.aistock.assistant.BuildConfig
 import com.aistock.assistant.ai.llm.Http
 import com.aistock.assistant.data.SettingsStore
 import kotlinx.coroutines.Dispatchers
@@ -9,6 +10,7 @@ import kotlinx.coroutines.withContext
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
+import org.json.JSONArray
 import org.json.JSONObject
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -16,7 +18,14 @@ import javax.inject.Singleton
 /** The server answered with an error, in words meant for the owner. */
 class ServerException(val status: Int, val code: String, message: String) : Exception(message)
 
-data class Usage(val active: Boolean, val status: String, val planName: String, val periodEnd: String, val aiUsed: Int, val aiLimit: Int, val liveUsedSec: Int, val liveLimitSec: Int, val priceMinor: Int)
+data class Usage(val active: Boolean, val status: String, val planName: String, val periodEnd: String, val aiUsed: Int, val aiLimit: Int, val liveUsedSec: Int, val liveLimitSec: Int, val priceMinor: Int, val planId: String = "", val pendingPayments: Int = 0) {
+    val endMillis: Long get() = try { java.time.Instant.parse(periodEnd).toEpochMilli() } catch (e: Exception) { 0L }
+}
+/** A plan the owner can pay for, and where to pay (UPI). */
+data class PaidPlan(val id: String, val name: String, val priceMinor: Int, val periodDays: Int, val aiRequests: Int, val voiceMinutes: Int, val maxStaff: Int)
+data class PayInfo(val plans: List<PaidPlan>, val upiId: String, val payeeName: String, val supportPhone: String, val trialDays: Int)
+/** A UPI payment the owner reported; "pending" until the Follower team checks it. */
+data class PaymentClaim(val id: Long, val planId: String, val amountMinor: Int, val utr: String, val status: String, val note: String, val createdAt: String)
 data class Account(val email: String, val businessId: String, val businessName: String, val role: String, val usage: Usage?, val aiConfigured: Boolean, val textModel: String, val liveModel: String, val speechConfigured: Boolean = false)
 /** What Google Cloud Speech-to-Text heard. */
 data class Heard(val text: String, val language: String, val confidence: Double?)
@@ -42,7 +51,7 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
     val businessId: String get() = settings.current.value.serverBusinessId
 
     private fun url(path: String): String {
-        val b = base
+        val b = server
         if (!b.startsWith("https://") && !b.startsWith("http://10.0.2.2")) throw ServerException(0, "bad_url", "The server address must start with https://")
         return b + path
     }
@@ -92,6 +101,42 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
 
     // ---------------------------------------------------------------- account
 
+    /** The server this phone talks to: the one signed in to, else the one built into the app. */
+    val server: String get() = base.ifBlank { BuildConfig.DEFAULT_SERVER }.trimEnd('/')
+
+    /** Asks the server for the plan (trial, paid, ended) and keeps it on the phone, so read-only also works offline. */
+    suspend fun refreshPlan(): Usage? {
+        val me = obj("GET", "/v1/me")
+        val list = me.getJSONArray("businesses")
+        var chosen: JSONObject? = null
+        for (i in 0 until list.length()) if (list.getJSONObject(i).optString("id") == businessId) chosen = list.getJSONObject(i)
+        val u = (chosen ?: list.optJSONObject(0))?.optJSONObject("entitlement")?.let { usage(it) } ?: return null
+        settings.setPlan(u.status, u.planName, u.endMillis, u.active, u.pendingPayments)
+        return u
+    }
+
+    /** Plans to pay for and the UPI ID to pay to (public, no sign-in needed). */
+    suspend fun payInfo(): PayInfo = withContext(Dispatchers.IO) {
+        val o = send("GET", "/v1/plans", null, null).let { (c, b) -> parse(c, b) }
+        val arr = o.optJSONArray("plans") ?: JSONArray()
+        val plans = (0 until arr.length()).map { arr.getJSONObject(it) }.filter { it.optInt("price_minor") > 0 }.map {
+            PaidPlan(it.getString("id"), it.optString("name"), it.optInt("price_minor"), it.optInt("period_days", 30), it.optInt("ai_requests_month"), it.optInt("live_seconds_month") / 60, it.optInt("max_staff", 1))
+        }
+        val pay = o.optJSONObject("payment") ?: JSONObject()
+        PayInfo(plans, pay.optString("upiId"), pay.optString("payeeName", "Follower"), pay.optString("supportPhone"), pay.optInt("trialDays", 14))
+    }
+
+    /** Reports a UPI payment with its transaction ID (UTR); the plan starts when it is approved. */
+    suspend fun claimPayment(planId: String, utr: String): PaymentClaim =
+        claim(obj("POST", "/v1/businesses/$businessId/payments", JSONObject().put("planId", planId).put("utr", utr)))
+
+    suspend fun payments(): List<PaymentClaim> {
+        val arr = obj("GET", "/v1/businesses/$businessId/payments").optJSONArray("payments") ?: JSONArray()
+        return (0 until arr.length()).map { claim(arr.getJSONObject(it)) }
+    }
+
+    private fun claim(o: JSONObject) = PaymentClaim(o.optLong("id"), o.optString("planId"), o.optInt("amountMinor"), o.optString("utr"), o.optString("status"), o.optString("note"), o.optString("createdAt"))
+
     suspend fun health(url: String): JSONObject = withContext(Dispatchers.IO) {
         val r = Http.get(url.trimEnd('/') + "/healthz")
         if (r.code != 200) throw ServerException(r.code, "unhealthy", "The server did not answer correctly (${r.code}).")
@@ -103,6 +148,7 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
         val o = send("POST", "/v1/auth/register", JSONObject().put("email", email).put("password", password).put("name", name).put("businessName", businessName), null).let { (c, b) -> parse(c, b) }
         remember(o)
         if (!settings.setServerSession(url, email.trim().lowercase(), o.getString("businessId"), o.getString("refreshToken"))) throw ServerException(0, "keystore", "This phone could not store the sign-in securely.")
+        try { refreshPlan() } catch (e: Exception) { }
     }
 
     suspend fun login(url: String, email: String, password: String) = withContext(Dispatchers.IO) {
@@ -113,6 +159,7 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
         val me = obj("GET", "/v1/me")
         val first = me.getJSONArray("businesses").optJSONObject(0) ?: throw ServerException(0, "no_business", "This account has no business.")
         settings.setServerBusiness(first.getString("id"))
+        try { refreshPlan() } catch (e: Exception) { }
     }
 
     suspend fun logout() {
@@ -130,6 +177,7 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
         val b = chosen ?: list.optJSONObject(0) ?: throw ServerException(0, "no_business", "This account has no business.")
         val ai = me.optJSONObject("ai") ?: JSONObject()
         liveReady = ai.optBoolean("live", ai.optBoolean("configured", true))
+        b.optJSONObject("entitlement")?.let { usage(it) }?.let { settings.setPlan(it.status, it.planName, it.endMillis, it.active, it.pendingPayments) }
         return Account(me.getJSONObject("user").optString("email"), b.getString("id"), b.optString("name"), b.optString("role"),
             b.optJSONObject("entitlement")?.let { usage(it) }, ai.optBoolean("configured"), ai.optString("textModel"), ai.optString("liveModel"), ai.optBoolean("speech"))
     }
@@ -138,6 +186,7 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
         e.optBoolean("active"), e.optString("status"), e.optString("planName"), e.optString("periodEnd"),
         e.optJSONObject("aiRequests")?.optInt("used") ?: 0, e.optJSONObject("aiRequests")?.optInt("limit") ?: 0,
         e.optJSONObject("liveSeconds")?.optInt("used") ?: 0, e.optJSONObject("liveSeconds")?.optInt("limit") ?: 0, e.optInt("priceMinor"),
+        e.optString("planId"), e.optInt("pendingPayments"),
     )
 
     suspend fun deleteAccount(password: String) {

@@ -22,6 +22,8 @@ object ErrCode {
     const val NEEDS_PARTY = "NEEDS_PARTY"
     const val ALREADY_DONE = "ALREADY_DONE"
     const val FAILED = "FAILED"
+    /** The free trial or plan has ended: records can be seen but not changed until the owner pays. */
+    const val READ_ONLY = "READ_ONLY"
 }
 
 class BizException(val code: String) : Exception(code)
@@ -34,7 +36,7 @@ fun <T> Op<T>.orThrow(): T = when (this) {
 }
 
 /** Runs [block] in one database transaction. Any failure rolls everything back and is reported as an error code. */
-suspend fun <T> AppDatabase.op(block: suspend () -> T): Op<T> = try {
+suspend fun <T> AppDatabase.op(block: suspend () -> T): Op<T> = if (Access.readOnly()) Op.Err(ErrCode.READ_ONLY) else try {
     Op.Ok(withTransaction { block() })
 } catch (e: BizException) {
     Op.Err(e.code)

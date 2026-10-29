@@ -111,6 +111,26 @@ fun DashboardScreen(nav: AppNav, vm: DashboardViewModel = hiltViewModel(), work:
             Text(fmtDate(System.currentTimeMillis()), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
+        // Trial ending soon, ended (read-only), or a payment waiting to be checked.
+        val days = com.aistock.assistant.data.Access.daysLeft()
+        val readOnly = com.aistock.assistant.data.Access.readOnly()
+        if (readOnly || com.aistock.assistant.data.Access.pending > 0 || (com.aistock.assistant.data.Access.trial && days != null && days <= 5)) {
+            AppCard(Modifier.fillMaxWidth(), onClick = { nav.go("plan") }) {
+                Text(
+                    when {
+                        com.aistock.assistant.data.Access.pending > 0 && readOnly -> stringResource(R.string.payment_waiting)
+                        readOnly && com.aistock.assistant.data.Access.trial -> stringResource(R.string.plan_state_ended)
+                        readOnly -> stringResource(R.string.plan_state_plan_ended)
+                        com.aistock.assistant.data.Access.pending > 0 -> stringResource(R.string.payment_waiting)
+                        else -> stringResource(R.string.plan_state_trial, days ?: 0)
+                    },
+                    style = MaterialTheme.typography.titleMedium,
+                    color = if (readOnly) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface,
+                )
+                Text(stringResource(if (readOnly) R.string.read_only_body else R.string.trial_banner_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+
         // The business type is chosen once; until then the shop default is used.
         val configured by work.configured.collectAsState()
         if (configured == false) {

@@ -22,6 +22,7 @@ import androidx.compose.material3.TabRow
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import com.aistock.assistant.ai.PartyKind
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -63,6 +64,7 @@ import kotlinx.coroutines.launch
 private data class Detail(
     val kind: String, val id: String, val title: String, val party: String, val date: Long, val status: String,
     val subtotal: Long, val discount: Long, val tax: Long, val total: Long, val paid: Long, val balance: Long, val notes: String,
+    val partyId: String? = null,
 )
 
 @Composable
@@ -105,7 +107,7 @@ fun TransactionsScreen(nav: AppNav, initialTab: Int, vm: TradeViewModel = hiltVi
                                 subtitle = s.invoiceNumber + " · " + fmtDate(s.date) + (r.itemSummary?.let { "\n$it" } ?: ""),
                                 trailing = money(s.total),
                                 trailingSub = if (s.balanceAmount > 0 && s.status != Status.CANCELLED) stringResource(R.string.due_amount, money(s.balanceAmount)) else "",
-                                onClick = { detail = Detail("sale", s.id, s.invoiceNumber, r.partyName.orEmpty(), s.date, s.status, s.subtotal, s.discount, s.tax, s.total, s.paidAmount, s.balanceAmount, s.notes) },
+                                onClick = { detail = Detail("sale", s.id, s.invoiceNumber, r.partyName.orEmpty(), s.date, s.status, s.subtotal, s.discount, s.tax, s.total, s.paidAmount, s.balanceAmount, s.notes, s.customerId) },
                                 badge = { StatusTag(s.status) },
                             )
                         }
@@ -122,7 +124,7 @@ fun TransactionsScreen(nav: AppNav, initialTab: Int, vm: TradeViewModel = hiltVi
                                 subtitle = s.purchaseNumber + " · " + fmtDate(s.date) + (r.itemSummary?.let { "\n$it" } ?: ""),
                                 trailing = money(s.total),
                                 trailingSub = if (s.balanceAmount > 0 && s.status != Status.CANCELLED) stringResource(R.string.due_amount, money(s.balanceAmount)) else "",
-                                onClick = { detail = Detail("purchase", s.id, s.purchaseNumber, r.partyName.orEmpty(), s.date, s.status, s.subtotal, s.discount, s.tax, s.total, s.paidAmount, s.balanceAmount, s.notes) },
+                                onClick = { detail = Detail("purchase", s.id, s.purchaseNumber, r.partyName.orEmpty(), s.date, s.status, s.subtotal, s.discount, s.tax, s.total, s.paidAmount, s.balanceAmount, s.notes, s.supplierId) },
                                 badge = { StatusTag(s.status) },
                             )
                         }
@@ -193,6 +195,9 @@ private fun DetailDialog(d: Detail, vm: TradeViewModel, onClose: () -> Unit) {
     val ctx = LocalContext.current
     val toast = LocalToast.current
     LaunchedEffect(d.id) { lines = if (d.kind == "sale") vm.saleLines(d.id) else vm.purchaseLines(d.id) }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    var party by remember { mutableStateOf<com.aistock.assistant.data.PartyRow?>(null) }
+    LaunchedEffect(d.partyId) { party = d.partyId?.let { vm.party(if (d.kind == "sale") PartyKind.CUSTOMER else PartyKind.SUPPLIER, it) } }
     AlertDialog(
         onDismissRequest = onClose,
         title = { Text(d.title) },
@@ -201,6 +206,9 @@ private fun DetailDialog(d: Detail, vm: TradeViewModel, onClose: () -> Unit) {
                 StatusTag(d.status)
                 Spacer(Modifier.height(8.dp))
                 if (d.party.isNotBlank()) LabelValue(stringResource(if (d.kind == "sale") R.string.customer else R.string.supplier), d.party)
+                if (party != null && party!!.phone.any { it.isDigit() }) TextButton(onClick = {
+                    com.aistock.assistant.features.calls.CallTracker.call(ctx, party!!.name, party!!.phone, party!!.id, party!!.kind)
+                }) { Text(stringResource(R.string.call_person, party!!.name)) }
                 LabelValue(stringResource(R.string.date), fmtDate(d.date))
                 HorizontalDivider(Modifier.padding(vertical = 8.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 for (l in lines) {

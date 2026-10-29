@@ -43,6 +43,7 @@ class TradeViewModel @Inject constructor(
 
     suspend fun products(): List<ProductEntity> = inventory.activeProducts()
     suspend fun partyList(kind: PartyKind): List<PartyRow> = parties.list(kind)
+    suspend fun party(kind: PartyKind, id: String): PartyRow? = parties.get(kind, id)
     suspend fun expenseCategories(): List<String> = trade.expenseCategories()
     suspend fun saleLines(id: String): List<ItemWithProduct> = trade.saleLines(id)
     suspend fun purchaseLines(id: String): List<ItemWithProduct> = trade.purchaseLines(id)

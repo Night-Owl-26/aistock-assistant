@@ -85,6 +85,7 @@ fun errorRes(code: String?): Int = when (code) {
     ErrCode.INVALID -> R.string.err_invalid
     ErrCode.NEEDS_PARTY -> R.string.err_needs_party
     ErrCode.ALREADY_DONE -> R.string.err_already_done
+    ErrCode.READ_ONLY -> R.string.err_read_only
     else -> R.string.err_failed
 }
 
@@ -319,7 +320,7 @@ fun LabelValue(label: String, value: String, modifier: Modifier = Modifier, stro
 
 /** List row used across the app: title, a line of detail, and something on the right. */
 @Composable
-fun ListRow(title: String, subtitle: String = "", trailing: String = "", trailingSub: String = "", onClick: (() -> Unit)? = null, badge: @Composable (() -> Unit)? = null) {
+fun ListRow(title: String, subtitle: String = "", trailing: String = "", trailingSub: String = "", onClick: (() -> Unit)? = null, badge: @Composable (() -> Unit)? = null, action: @Composable (() -> Unit)? = null) {
     AppCard(Modifier.fillMaxWidth(), onClick = onClick, padding = PaddingValues(horizontal = 16.dp, vertical = 14.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Column(Modifier.weight(1f)) {
@@ -334,6 +335,7 @@ fun ListRow(title: String, subtitle: String = "", trailing: String = "", trailin
                     if (trailingSub.isNotEmpty()) Text(trailingSub, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            if (action != null) { Spacer(Modifier.width(4.dp)); action() }
         }
     }
 }

@@ -98,6 +98,8 @@ class AssistantViewModel @Inject constructor(
 
     fun isOnline(): Boolean = connectivity.isOnline()
 
+    val prefsFlow: StateFlow<com.aistock.assistant.data.Prefs> = settings.current
+
     fun newConversation() {
         stocky.reset()
         conversationId = null

@@ -95,6 +95,11 @@ fun AppRoot(startTalking: Boolean = false, openChat: Boolean = false, vm: MainVi
                 !prefs.loaded || (prefs.onboardingDone && hasPin == null) -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
                 !prefs.onboardingDone -> OnboardingScreen(vm)
                 hasPin == true && !unlocked -> LockScreen(vm)
+                // A Follower account is needed: it starts the free trial and carries the plan afterwards.
+                prefs.serverBusinessId.isBlank() || prefs.serverBusinessId == "pending" -> {
+                    val profile by vm.businessProfile.collectAsStateWithLifecycle()
+                    com.aistock.assistant.features.account.SignInGate(profile?.name.orEmpty())
+                }
                 else -> OwnerCheckHost(prefs.ownerCheck, hasPin == true, { vm.unlock(it) }) { MainScaffold(vm, startTalking, openChat) }
             }
         }
@@ -147,6 +152,7 @@ private fun MainScaffold(vm: MainViewModel, startTalking: Boolean, openChat: Boo
     }
 
     CompositionLocalProvider(LocalToast provides toast) {
+        com.aistock.assistant.features.calls.CallNoteHost()
         Scaffold(
             contentWindowInsets = WindowInsets(0, 0, 0, 0),
             snackbarHost = { SnackbarHost(snackbar) },
@@ -199,6 +205,9 @@ private fun MainScaffold(vm: MainViewModel, startTalking: Boolean, openChat: Boo
                 composable("reminders") { RemindersScreen(nav) }
                 composable("setup") { BusinessSetupScreen(nav) }
                 composable("account") { com.aistock.assistant.features.account.AccountScreen(nav) }
+                composable("plan") { com.aistock.assistant.features.account.PlanScreen(nav) }
+                composable("analysis") { com.aistock.assistant.features.reports.AnalysisScreen(nav) }
+                composable("call") { com.aistock.assistant.features.ai.CallStockyScreen(nav) }
 
                 composable("product?id={id}", arguments = listOf(navArgument("id") { type = NavType.StringType; nullable = true; defaultValue = null })) {
                     ProductFormScreen(nav, it.arguments?.getString("id"))

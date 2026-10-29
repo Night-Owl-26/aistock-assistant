@@ -811,6 +811,7 @@ class AssistantEngine(
             is Plan.UpdateProduct -> p.productNotFound(plan.product.name)
             else -> p.saveFailed()
         }
+        "READ_ONLY" -> p.readOnly()
         else -> p.saveFailed()
     }
 

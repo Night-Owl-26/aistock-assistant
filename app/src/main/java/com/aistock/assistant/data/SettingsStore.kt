@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.emptyPreferences
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -21,6 +22,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.withTimeoutOrNull
+import kotlinx.coroutines.launch
 import java.security.KeyStore
 import java.security.SecureRandom
 import java.util.Base64
@@ -71,7 +73,13 @@ data class Prefs(
     /** Real-time spoken conversation (Gemini Live) when signed in. */
     val liveVoice: Boolean = false,
     /** Google Cloud Speech-to-Text and Text-to-Speech through the server, turn by turn (instead of Gemini Live). */
-    val cloudSpeech: Boolean = false,
+    val cloudSpeech: Boolean = true,
+    /** The Follower plan as the server last reported it (kept for offline use). planEnd 0 = not known yet. */
+    val planStatus: String = "",
+    val planName: String = "",
+    val planEnd: Long = 0L,
+    val planActive: Boolean = false,
+    val planPending: Int = 0,
 ) {
     val tamil: Boolean get() = language == "ta"
     val cloudReady: Boolean get() = cloudEndpoint.startsWith("https://") && cloudModel.isNotBlank() && cloudKeySaved
@@ -104,6 +112,11 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
         val liveVoice = booleanPreferencesKey("live_voice")
         val cloudSpeech = booleanPreferencesKey("cloud_speech")
         val session = stringPreferencesKey("server_session_enc")
+        val planStatus = stringPreferencesKey("plan_status")
+        val planName = stringPreferencesKey("plan_name")
+        val planEnd = longPreferencesKey("plan_end")
+        val planActive = booleanPreferencesKey("plan_active")
+        val planPending = intPreferencesKey("plan_pending")
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -133,12 +146,19 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
             // Phones that already used their own key keep doing so until they sign in.
             aiSource = p[K.aiSource] ?: (if (!p[K.key].isNullOrEmpty()) "key" else "server"),
             liveVoice = p[K.liveVoice] ?: false,
-            cloudSpeech = p[K.cloudSpeech] ?: false,
+            cloudSpeech = p[K.cloudSpeech] ?: true,
+            planStatus = p[K.planStatus].orEmpty(),
+            planName = p[K.planName].orEmpty(),
+            planEnd = p[K.planEnd] ?: 0L,
+            planActive = p[K.planActive] ?: false,
+            planPending = p[K.planPending] ?: 0,
         )
     }
 
     /** Latest preferences for code that cannot suspend. */
     val current: StateFlow<Prefs> = flow.stateIn(scope, SharingStarted.Eagerly, Prefs())
+
+    init { scope.launch { current.collect { Access.follow(it) } } }
 
     override fun allowNegativeStock(): Boolean = current.value.allowNegativeStock
 
@@ -192,7 +212,13 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
 
     suspend fun refreshToken(): String? = context.dataStore.data.first()[K.session]?.let { SecretBox.decrypt(it) }
 
-    suspend fun clearServerSession() { context.dataStore.edit { it.remove(K.session); it.remove(K.serverBusiness); it.remove(K.serverEmail) }; settle { it.serverBusinessId.isBlank() } }
+    /** Saves the plan the server reported; [Access] follows it so the app turns read-only when the trial or plan ends. */
+    suspend fun setPlan(status: String, name: String, endMillis: Long, active: Boolean, pending: Int) {
+        context.dataStore.edit { it[K.planStatus] = status; it[K.planName] = name; it[K.planEnd] = endMillis; it[K.planActive] = active; it[K.planPending] = pending }
+        settle { it.planEnd == endMillis && it.planActive == active && it.planPending == pending }
+    }
+
+    suspend fun clearServerSession() { context.dataStore.edit { it.remove(K.session); it.remove(K.serverBusiness); it.remove(K.serverEmail); it.remove(K.planEnd); it.remove(K.planActive); it.remove(K.planStatus); it.remove(K.planPending) }; settle { it.serverBusinessId.isBlank() } }
 
     suspend fun setHandsFree(on: Boolean) = context.dataStore.edit { it[K.handsFree] = on }.let { }
 

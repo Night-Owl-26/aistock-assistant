@@ -281,6 +281,8 @@ class DataExchange @Inject constructor(
 
     /** Saves the rows that passed the preview. Everything is written in one transaction. */
     suspend fun import(kind: ImportKind, preview: ImportPreview): ImportResult = withContext(Dispatchers.IO) {
+        if (com.aistock.assistant.data.Access.readOnly()) return@withContext ImportResult(0, preview.skipped,
+            preview.errors + ImportIssue(0, "The free trial has ended, so nothing was imported. Pay from More > Plan & payment to continue."))
         var imported = 0
         val errors = ArrayList(preview.errors)
         val skipped = ArrayList(preview.skipped)

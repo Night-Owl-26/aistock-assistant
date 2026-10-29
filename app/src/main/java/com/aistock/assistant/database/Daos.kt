@@ -20,6 +20,7 @@ data class PaymentWithParty(@Embedded val payment: PaymentEntity, val partyName:
 data class CategoryTotal(val category: String, val count: Int, val total: Long)
 data class ProductTotal(val productName: String, val unit: String, val quantity: Long, val total: Long)
 data class MoneyTotals(val count: Int, val total: Long, val balance: Long)
+data class DateAmount(val date: Long, val amount: Long)
 data class ConversationSummary(@Embedded val conversation: ConversationEntity, val messageCount: Int, val lastText: String?)
 
 @Dao
@@ -233,6 +234,25 @@ interface TradeDao {
     @Query("SELECT COALESCE(SUM(amount), 0) FROM expenses WHERE status = 'ACTIVE' AND date >= :from AND date < :to")
     fun observeExpenseTotal(from: Long, to: Long): Flow<Long>
     @Query("SELECT DISTINCT category FROM expenses ORDER BY category COLLATE NOCASE") suspend fun expenseCategories(): List<String>
+
+    // ---- analysis
+    @Query("SELECT date AS date, total AS amount FROM sales WHERE status != 'CANCELLED' AND date >= :from AND date < :to")
+    suspend fun saleAmounts(from: Long, to: Long): List<DateAmount>
+    @Query("SELECT date AS date, amount AS amount FROM expenses WHERE status = 'ACTIVE' AND date >= :from AND date < :to")
+    suspend fun expenseAmounts(from: Long, to: Long): List<DateAmount>
+    @Query("SELECT date AS date, total AS amount FROM purchases WHERE status != 'CANCELLED' AND date >= :from AND date < :to")
+    suspend fun purchaseAmounts(from: Long, to: Long): List<DateAmount>
+    /** What the goods sold cost at today's purchase prices (quantities are in thousandths). An estimate. */
+    @Query(
+        "SELECT COALESCE(SUM((i.quantity * p.purchasePrice + 500) / 1000), 0) FROM sale_items i JOIN sales s ON s.id = i.saleId " +
+            "JOIN products p ON p.id = i.productId WHERE s.status != 'CANCELLED' AND s.date >= :from AND s.date < :to"
+    )
+    suspend fun costOfSales(from: Long, to: Long): Long
+    @Query(
+        "SELECT c.name AS category, COUNT(*) AS count, SUM(s.total) AS total FROM sales s JOIN customers c ON c.id = s.customerId " +
+            "WHERE s.status != 'CANCELLED' AND s.date >= :from AND s.date < :to GROUP BY c.id ORDER BY total DESC LIMIT :limit"
+    )
+    suspend fun salesByCustomer(from: Long, to: Long, limit: Int): List<CategoryTotal>
 
     // ---- payments
     @Insert suspend fun insertPayment(p: PaymentEntity)
