@@ -229,9 +229,13 @@ private fun Bars(values: List<Long>, labels: List<String>, color: Color, max: Lo
         }
         // Only some labels fit under many bars.
         val every = when { labels.size > 20 -> 5; labels.size > 10 -> 2; else -> 1 }
+        // Each shown label gets the width of the bars it stands for, so "30" or "Nov" is not cut to one letter.
         Row(Modifier.fillMaxWidth()) {
-            for (i in labels.indices) Text(if (i % every == 0) labels[i] else "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1, modifier = Modifier.weight(1f))
+            for (i in labels.indices step every) {
+                val span = minOf(every, labels.size - i)
+                Text(labels[i], style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    maxLines = 1, softWrap = false, modifier = Modifier.weight(span.toFloat()))
+            }
         }
     }
 }
