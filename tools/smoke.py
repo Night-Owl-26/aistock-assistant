@@ -102,11 +102,11 @@ def scroll_to(label, tries=8):
         adb("shell", "input", "swipe", "540", "1700", "540", "700", "400"); time.sleep(1.2)
     return False
 
-def tap_field(label, index=0, secs=8):
+def tap_field(label, index=0, secs=8, exact=False):
     """Taps a text field by its label or placeholder; falls back to the n-th edit box on screen."""
     end = time.time() + secs
     while time.time() < end:
-        n = find(label)
+        n = find(label, exact)
         if n:
             adb("shell", "input", "tap", str(n["x"]), str(n["y"])); time.sleep(1.0); return True
         time.sleep(0.7)
@@ -225,8 +225,9 @@ tap("Get started", exact=True)
 step("sign-in gate: email and password only, the server is built in")
 expect("Create your Follower account", "account needed after setup", 30); shot("signin-gate")
 if find("Server address", exact=True): problems.append("server address shown without asking")
-tap_field("Email"); type_text("owner@shop.in"); hide_keyboard()
-tap_field("Password"); type_text("shopowner1"); hide_keyboard()
+# Exact labels: the text above the form also says "email" and "password".
+tap_field("Email", 0, exact=True); type_text("owner@shop.in"); hide_keyboard()
+tap_field("Password (8+ characters)", 1, exact=True); type_text("shopowner1"); hide_keyboard()
 tap("Change server", required=True); set_field("Server address", "http://10.0.2.2:8080")
 shot("signin-filled")
 if not find("owner@shop.in"): problems.append("sign-in gate: email not filled in")
