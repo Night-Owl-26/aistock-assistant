@@ -198,6 +198,10 @@ def admin(method, path, body=None):
     except Exception as e:
         say("  admin call failed:", path, e); return {}
 
+def to_top():
+    for _ in range(6): adb("shell", "input", "swipe", "540", "700", "540", "1700", "150")
+    time.sleep(1)
+
 def set_field(label, text, clear=45):
     tap_field(label); adb("shell", "input", "keyevent", "KEYCODE_MOVE_END")
     for _ in range(clear): adb("shell", "input", "keyevent", "KEYCODE_DEL")
@@ -269,7 +273,7 @@ time.sleep(2); shot("mic-permission")
 for label in ("While using the app", "Only this time", "Allow"):
     if tap(label, secs=3, required=False): break
 time.sleep(4); shot("mic-after-permission")
-if find("Stop listening", exact=True): tap("Stop listening", exact=True)
+tap("Stop listening", exact=True, secs=3, required=False)
 check("voice")
 
 step("transactions")
@@ -393,7 +397,7 @@ back(); tap("Chat", exact=True); tap("New conversation", required=False)
 tap_field("Type what happened"); type_text("Sold 1 Blue Shirt"); tap("Send", exact=True); hide_keyboard()
 if expect("Confirm", "sale proposal while read-only", 25):
     tap("Confirm", exact=True); expect("free trial has ended", "sale refused while read-only"); shot("read-only-refused")
-tap("Home", exact=True); expect("Free trial ended", "home banner"); shot("home-read-only")
+tap("Home", exact=True); to_top(); expect("Free trial ended", "home banner"); shot("home-read-only")
 tap("Free trial ended"); expect("Plan & payment", "banner opens the plan screen")
 scroll_to("UPI transaction ID"); tap_field("UPI transaction ID"); type_text("412345678901"); hide_keyboard()
 tap("Send for approval"); expect("waiting for approval", "payment pending", 20); shot("payment-pending")
@@ -401,7 +405,7 @@ pending = admin("GET", "/admin/payments").get("payments", [])
 mine = [p for p in pending if p.get("utr") == "412345678901"]
 if not mine: problems.append("payment claim not on the server")
 else: say("  approve:", admin("POST", f"/admin/payments/{mine[0]['id']}/approve", {}))
-scroll_to("Refresh"); tap("Refresh", exact=True); expect("Basic plan until", "plan active after approval", 20); shot("plan-paid")
+scroll_to("Refresh"); tap("Refresh", exact=True); time.sleep(3); to_top(); expect("Basic plan until", "plan active after approval", 20); shot("plan-paid")
 back(); tap("Chat", exact=True)
 tap_field("Type what happened"); type_text("Sold 1 Blue Shirt"); tap("Send", exact=True); hide_keyboard()
 if expect("Confirm", "sale proposal after paying", 25):
@@ -409,7 +413,7 @@ if expect("Confirm", "sale proposal after paying", 25):
 check("payment")
 
 step("settings: dark mode and Tamil")
-tap("Settings"); expect("Language", "settings"); shot("settings")
+tap("More", exact=True); scroll_to("Settings"); tap("Settings"); expect("Language", "settings"); shot("settings")
 if not scroll_to("AI Provider"): problems.append("settings: AI Provider section missing")
 step("AI connection check (network path to Google, no key)")
 if scroll_to("My Follower account"):
