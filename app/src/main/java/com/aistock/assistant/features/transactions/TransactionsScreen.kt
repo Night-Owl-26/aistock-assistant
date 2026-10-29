@@ -195,7 +195,6 @@ private fun DetailDialog(d: Detail, vm: TradeViewModel, onClose: () -> Unit) {
     val ctx = LocalContext.current
     val toast = LocalToast.current
     LaunchedEffect(d.id) { lines = if (d.kind == "sale") vm.saleLines(d.id) else vm.purchaseLines(d.id) }
-    val ctx = androidx.compose.ui.platform.LocalContext.current
     var party by remember { mutableStateOf<com.aistock.assistant.data.PartyRow?>(null) }
     LaunchedEffect(d.partyId) { party = d.partyId?.let { vm.party(if (d.kind == "sale") PartyKind.CUSTOMER else PartyKind.SUPPLIER, it) } }
     AlertDialog(
