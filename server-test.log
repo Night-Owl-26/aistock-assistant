@@ -1,0 +1,182 @@
+
+> aistock-server@1.0.0 test
+> node --test --test-concurrency=1 test/*.test.js
+
+TAP version 13
+# Subtest: register, sign in, refresh rotates, me shows trial
+ok 1 - register, sign in, refresh rotates, me shows trial
+  ---
+  duration_ms: 1122.424997
+  type: 'test'
+  ...
+# Subtest: one business can never see another business
+ok 2 - one business can never see another business
+  ---
+  duration_ms: 358.505922
+  type: 'test'
+  ...
+# Subtest: business configuration is validated and versioned
+ok 3 - business configuration is validated and versioned
+  ---
+  duration_ms: 189.26034
+  type: 'test'
+  ...
+# Subtest: roles: staff cannot change settings or see backups
+ok 4 - roles: staff cannot change settings or see backups
+  ---
+  duration_ms: 362.096678
+  type: 'test'
+  ...
+# Subtest: AI proxy: key stays on the server, tools only, usage metered, limits enforced
+ok 5 - AI proxy: key stays on the server, tools only, usage metered, limits enforced
+  ---
+  duration_ms: 198.915335
+  type: 'test'
+  ...
+# Subtest: live voice: short-lived token, usage capped by the clock, never counted twice
+ok 6 - live voice: short-lived token, usage capped by the clock, never counted twice
+  ---
+  duration_ms: 220.313077
+  type: 'test'
+  ...
+# Subtest: live voice: Google refusing the token is reported, not hidden
+ok 7 - live voice: Google refusing the token is reported, not hidden
+  ---
+  duration_ms: 173.674041
+  type: 'test'
+  ...
+# Subtest: backups round-trip, only 10 kept, owner only
+ok 8 - backups round-trip, only 10 kept, owner only
+  ---
+  duration_ms: 219.722
+  type: 'test'
+  ...
+# Subtest: admin activation needs the admin token; account deletion removes owned data
+ok 9 - admin activation needs the admin token; account deletion removes owned data
+  ---
+  duration_ms: 501.281868
+  type: 'test'
+  ...
+# Subtest: health and plans are public
+ok 10 - health and plans are public
+  ---
+  duration_ms: 2.507836
+  type: 'test'
+  ...
+# Subtest: parallel requests cannot slip past the monthly limit
+ok 11 - parallel requests cannot slip past the monthly limit
+  ---
+  duration_ms: 252.131989
+  type: 'test'
+  ...
+# Subtest: a refresh token works once even in parallel; a stolen old one signs the person out
+ok 12 - a refresh token works once even in parallel; a stolen old one signs the person out
+  ---
+  duration_ms: 179.259178
+  type: 'test'
+  ...
+# Subtest: owners cannot be demoted by mistake; bad admin input is refused
+ok 13 - owners cannot be demoted by mistake; bad admin input is refused
+  ---
+  duration_ms: 173.41268
+  type: 'test'
+  ...
+# Subtest: Google Cloud speech: key stays on the server, phrases passed, minutes metered and refunded on failure
+ok 14 - Google Cloud speech: key stays on the server, phrases passed, minutes metered and refunded on failure
+  ---
+  duration_ms: 402.68431
+  type: 'test'
+  ...
+# Subtest: UPI payment: the owner sends the UTR, the administrator approves, the plan starts; a UTR works once
+ok 15 - UPI payment: the owner sends the UTR, the administrator approves, the plan starts; a UTR works once
+  ---
+  duration_ms: 389.552918
+  type: 'test'
+  ...
+# Subtest: forgot password: emailed code sets a new password once, signs out other phones; admin can make a code
+ok 16 - forgot password: emailed code sets a new password once, signs out other phones; admin can make a code
+  ---
+  duration_ms: 856.451327
+  type: 'test'
+  ...
+# Subtest: cards and net banking: a Razorpay page per plan; once paid the plan starts, only once; keys stay on the server
+ok 17 - cards and net banking: a Razorpay page per plan; once paid the plan starts, only once; keys stay on the server
+  ---
+  duration_ms: 188.142437
+  type: 'test'
+  ...
+# Subtest: voice goes through the server with the server key and the server model, and minutes are measured here
+ok 18 - voice goes through the server with the server key and the server model, and minutes are measured here
+  ---
+  duration_ms: 1218.966226
+  type: 'test'
+  ...
+# Subtest: voice is refused without a valid sign-in or for another business
+ok 19 - voice is refused without a valid sign-in or for another business
+  ---
+  duration_ms: 341.561674
+  type: 'test'
+  ...
+# Subtest: Sarvam AI hears the owner when its key is set; key, model, language and names are sent
+ok 20 - Sarvam AI hears the owner when its key is set; key, model, language and names are sent
+  ---
+  duration_ms: 22.382422
+  type: 'test'
+  ...
+# Subtest: Sarvam errors are reported, and STT_PROVIDER=google keeps Google
+ok 21 - Sarvam errors are reported, and STT_PROVIDER=google keeps Google
+  ---
+  duration_ms: 0.854184
+  type: 'test'
+  ...
+# Subtest: WAV header is valid 16 kHz mono 16-bit
+ok 22 - WAV header is valid 16 kHz mono 16-bit
+  ---
+  duration_ms: 0.224202
+  type: 'test'
+  ...
+# Subtest: OpenRouter: Gemini-format conversation with tools is translated both ways
+ok 23 - OpenRouter: Gemini-format conversation with tools is translated both ways
+  ---
+  duration_ms: 0.694187
+  type: 'test'
+  ...
+# Subtest: OpenRouter: key in the header only, errors passed on
+ok 24 - OpenRouter: key in the header only, errors passed on
+  ---
+  duration_ms: 1.151201
+  type: 'test'
+  ...
+# Subtest: Sarvam reads replies aloud in a Tamil voice, falling back to the default voice
+ok 25 - Sarvam reads replies aloud in a Tamil voice, falling back to the default voice
+  ---
+  duration_ms: 2.319383
+  type: 'test'
+  ...
+# Subtest: Without Sarvam or Google Cloud, Gemini hears and speaks with the Gemini key
+ok 26 - Without Sarvam or Google Cloud, Gemini hears and speaks with the Gemini key
+  ---
+  duration_ms: 2.320139
+  type: 'test'
+  ...
+# Subtest: Whisper on the server hears when it is running; replies are still spoken by Sarvam or Gemini
+ok 27 - Whisper on the server hears when it is running; replies are still spoken by Sarvam or Gemini
+  ---
+  duration_ms: 1.327779
+  type: 'test'
+  ...
+# Subtest: Sarvam out of credit: Gemini hears and speaks instead, and Sarvam rests instead of slowing every request
+ok 28 - Sarvam out of credit: Gemini hears and speaks instead, and Sarvam rests instead of slowing every request
+  ---
+  duration_ms: 1.863625
+  type: 'test'
+  ...
+1..28
+# tests 28
+# suites 0
+# pass 28
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 7877.706986
