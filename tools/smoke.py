@@ -409,7 +409,7 @@ if expect("Confirm", "sale proposal while read-only", 25):
 tap("Home", exact=True); to_top(); expect("Free trial ended", "home banner"); shot("home-read-only")
 tap("Free trial ended"); expect("Plan & payment", "banner opens the plan screen")
 scroll_to("UPI transaction ID"); tap_field("UPI transaction ID"); type_text("412345678901"); hide_keyboard()
-tap("Send for approval"); expect("waiting for approval", "payment pending", 20); shot("payment-pending")
+tap("Send for approval"); time.sleep(3); to_top(); expect("waiting for approval", "payment pending", 20); shot("payment-pending")
 pending = admin("GET", "/admin/payments").get("payments", [])
 mine = [p for p in pending if p.get("utr") == "412345678901"]
 if not mine: problems.append("payment claim not on the server")
