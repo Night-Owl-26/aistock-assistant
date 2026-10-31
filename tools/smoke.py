@@ -198,6 +198,12 @@ def admin(method, path, body=None):
     except Exception as e:
         say("  admin call failed:", path, e); return {}
 
+def long_press(label):
+    n = wait_for(label, 10)
+    if not n: problems.append(f"could not find '{label}' to long-press"); return False
+    adb("shell", "input", "swipe", str(n["x"]), str(n["y"]), str(n["x"]), str(n["y"]), "1500"); time.sleep(1.2)
+    return True
+
 def to_top():
     for _ in range(6): adb("shell", "input", "swipe", "540", "700", "540", "1700", "150")
     time.sleep(1)
@@ -228,10 +234,12 @@ tap("Load sample data"); shot("business-setup")
 tap("Get started", exact=True)
 step("sign-in gate: email and password only, the server is built in")
 expect("Create your Follower account", "account needed after setup", 30); shot("signin-gate")
-if find("Server address", exact=True): problems.append("server address shown without asking")
+if find("Server address", exact=True) or find("Change server"): problems.append("server address offered to owners")
+tap("Sign in", exact=True); expect("Forgot password?", "forgot password link"); tap("Create account", exact=True)
 # Exact labels: the text above the form also says "email" and "password".
 tap_field("Email", 0, exact=True); type_text("owner@shop.in"); hide_keyboard()
 tap_field("Password (8+ characters)", 1, exact=True); type_text("shopowner1"); hide_keyboard()
+long_press("Create your Follower account")
 tap("Change server", required=True); set_field("Server address", "http://10.0.2.2:8080")
 shot("signin-filled")
 if not find("owner@shop.in"): problems.append("sign-in gate: email not filled in")
@@ -392,7 +400,8 @@ check("call stocky")
 step("trial ends: read-only until a UPI payment is approved")
 sql("UPDATE subscriptions SET current_period_end = now() - interval '1 day'")
 tap("More", exact=True); scroll_to("Plan & payment"); tap("Plan & payment"); expect("Free trial ended", "plan ended", 30); shot("plan-ended")
-expect("with UPI", "UPI pay button"); expect("testshop@upi", "UPI ID from the server")
+expect("with UPI", "UPI pay button"); expect("Scan with GPay", "UPI QR code shown")
+if find("testshop@upi"): problems.append("the UPI ID is shown as text")
 back(); tap("Chat", exact=True); tap("New conversation", required=False)
 tap_field("Type what happened"); type_text("Sold 1 Blue Shirt"); tap("Send", exact=True); hide_keyboard()
 if expect("Confirm", "sale proposal while read-only", 25):

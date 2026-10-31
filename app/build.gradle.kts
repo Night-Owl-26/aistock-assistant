@@ -87,6 +87,8 @@ ksp {
 
 dependencies {
     implementation(libs.androidx.core.ktx)
+    // QR code for paying the plan by UPI (encoding only, no camera).
+    implementation("com.google.zxing:core:3.5.3")
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

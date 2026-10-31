@@ -14,6 +14,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -134,6 +135,8 @@ fun WorkbookScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
     var isXlsx by remember { mutableStateOf(false) }
     var profiles by remember { mutableStateOf<List<SheetProfile>>(emptyList()) }
     var aiStatus by remember { mutableStateOf<ColumnAiStatus?>(null) }
+    // The sheets as read from the file, before the AI looked at them (kept to ask the AI again).
+    var original by remember { mutableStateOf<List<SheetProfile>>(emptyList()) }
     var changes by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
     var plan by remember { mutableStateOf<List<WorkbookPlanItem>>(emptyList()) }
     var result by remember { mutableStateOf<WorkbookResult?>(null) }
@@ -156,6 +159,7 @@ fun WorkbookScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
                 writable = isXlsx && withContext(Dispatchers.IO) { vm.excelSync.keepPermission(uri) && vm.excelSync.canWrite(uri) }
                 changes = vm.exchange.workbookChanges(found)
                 profiles = found
+                original = found
                 busy = false
                 if (found.isNotEmpty()) {
                     reading = true
@@ -267,6 +271,14 @@ fun WorkbookScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
                         ColumnAiStatus.OFF -> R.string.cols_ai_off
                         else -> R.string.cols_rules
                     }), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    // The AI was slow or unreachable: let the owner ask again before importing with the header rules.
+                    if (aiStatus == ColumnAiStatus.FAILED && original.isNotEmpty()) TextButton(onClick = {
+                        scope.launch {
+                            reading = true
+                            try { val (smart, status) = vm.exchange.smartColumns(original); profiles = smart; aiStatus = status } catch (e: Exception) { }
+                            reading = false
+                        }
+                    }) { Text(stringResource(R.string.cols_ai_retry)) }
                 }
             }
             for ((index, p) in profiles.withIndex()) {

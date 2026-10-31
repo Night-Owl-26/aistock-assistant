@@ -475,7 +475,7 @@ class DataExchange @Inject constructor(
 
     companion object {
         const val MAX_SHEET_ROWS = 20_000
-        const val AI_TIMEOUT_MS = 30_000L
+        const val AI_TIMEOUT_MS = 45_000L
     }
 
     fun fileName(base: String): String =

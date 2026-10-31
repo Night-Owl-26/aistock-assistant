@@ -28,5 +28,8 @@ case "${1:-}" in
   approve|reject) # ./scripts.sh approve 12   (the plan starts or is extended)   ./scripts.sh reject 12 "not received"
     docker compose exec -T api wget -qO- --header "Authorization: Bearer $(grep ^ADMIN_TOKEN .env | cut -d= -f2-)" \
       --header 'Content-Type: application/json' --post-data "{\"note\":\"${3:-}\"}" "http://127.0.0.1:8080/admin/payments/$2/$1"; echo ;;
-  *) echo "usage: ./scripts.sh backup|restore <file>|activate <businessId> <plan> [days] [ref]|find <email>|usage|payments|approve <#>|reject <#> [note]" ;;
+  reset-code) # ./scripts.sh reset-code owner@email.com  -> a 6-digit code (15 minutes) to read out to an owner who forgot the password
+    docker compose exec -T api wget -qO- --header "Authorization: Bearer $(grep ^ADMIN_TOKEN .env | cut -d= -f2-)" \
+      --header 'Content-Type: application/json' --post-data "{\"email\":\"$2\"}" http://127.0.0.1:8080/admin/password-code; echo ;;
+  *) echo "usage: ./scripts.sh backup|restore <file>|activate <businessId> <plan> [days] [ref]|find <email>|usage|payments|approve <#>|reject <#> [note]|reset-code <email>" ;;
 esac

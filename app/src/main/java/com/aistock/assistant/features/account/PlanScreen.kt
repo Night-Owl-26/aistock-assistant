@@ -10,6 +10,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -56,6 +58,13 @@ fun upiLink(upiId: String, payee: String, rupees: Long, note: String): Uri = Uri
     .appendQueryParameter("am", "$rupees.00").appendQueryParameter("cu", "INR")
     .appendQueryParameter("tn", note.take(50)).build()
 
+/** A black-and-white QR code for [text], or null if it cannot be made. */
+fun qrBitmap(text: String, size: Int): androidx.compose.ui.graphics.ImageBitmap? = try {
+    val m = com.google.zxing.qrcode.QRCodeWriter().encode(text, com.google.zxing.BarcodeFormat.QR_CODE, size, size, mapOf(com.google.zxing.EncodeHintType.MARGIN to 1))
+    val px = IntArray(m.width * m.height) { if (m.get(it % m.width, it / m.width)) android.graphics.Color.BLACK else android.graphics.Color.WHITE }
+    android.graphics.Bitmap.createBitmap(px, m.width, m.height, android.graphics.Bitmap.Config.RGB_565).asImageBitmap()
+} catch (e: Exception) { null }
+
 /** UPI transaction IDs (UTR / reference number) are 6 to 30 letters or digits; spaces are dropped. */
 fun cleanUtr(s: String): String = s.filter { it.isLetterOrDigit() }.take(30)
 
@@ -76,13 +85,27 @@ fun PlanScreen(nav: AppNav, vm: AccountViewModel = hiltViewModel()) {
     var utr by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
+    // Back from the Razorpay page in the browser: ask the server whether the payment went through.
+    var waitingForCard by remember { mutableStateOf(false) }
 
     suspend fun load() {
         error = ""
+        try { vm.api.checkPayments() } catch (e: Exception) { }
         try { info = vm.api.payInfo() } catch (e: Exception) { error = ctx.getString(R.string.signin_no_internet) }
         try { vm.api.refreshPlan(); claims = vm.api.payments() } catch (e: Exception) { }
     }
     LaunchedEffect(Unit) { load() }
+    val owner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    androidx.compose.runtime.DisposableEffect(owner) {
+        val obs = androidx.lifecycle.LifecycleEventObserver { _, e ->
+            if (e == androidx.lifecycle.Lifecycle.Event.ON_RESUME && waitingForCard) scope.launch {
+                try { if (vm.api.checkPayments() > 0) { waitingForCard = false; toast(ctx.getString(R.string.payment_card_done)) } } catch (e: Exception) { }
+                load()
+            }
+        }
+        owner.lifecycle.addObserver(obs)
+        onDispose { owner.lifecycle.removeObserver(obs) }
+    }
 
     val days = Access.daysLeft(p)
     val readOnly = Access.readOnly(p)
@@ -119,20 +142,33 @@ fun PlanScreen(nav: AppNav, vm: AccountViewModel = hiltViewModel()) {
                 }
             }
             val plan = i.plans.firstOrNull { it.id == chosen } ?: i.plans.firstOrNull()
+            if (plan != null && i.cards) {
+                // Razorpay: cards, net banking, UPI and wallets on one page; the plan starts by itself when paid.
+                SectionTitle(stringResource(R.string.pay_card_title))
+                Button(modifier = Modifier.fillMaxWidth(), enabled = !busy, onClick = {
+                    busy = true
+                    scope.launch {
+                        try {
+                            val url = vm.api.paymentLink(plan.id)
+                            waitingForCard = true
+                            ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+                        } catch (e: Exception) { toast(e.message ?: e.toString()) }
+                        busy = false
+                    }
+                }) { Text(stringResource(R.string.pay_card, Money.format(plan.priceMinor.toLong(), "₹"))) }
+                Text(stringResource(R.string.pay_card_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             if (plan != null && i.upiId.isNotBlank()) {
-                SectionTitle(stringResource(R.string.pay_step1))
-                Button(modifier = Modifier.fillMaxWidth(), onClick = {
-                    val uri = upiLink(i.upiId, i.payeeName, plan.priceMinor / 100L, "Follower ${plan.name} ${p.serverEmail}")
+                val uri = upiLink(i.upiId, i.payeeName, plan.priceMinor / 100L, "Follower ${plan.name} ${p.serverEmail}")
+                SectionTitle(stringResource(if (i.cards) R.string.pay_upi_title_or else R.string.pay_step1))
+                // The UPI ID itself is not shown: the QR code and the UPI app button carry it.
+                val qr = remember(uri.toString()) { qrBitmap(uri.toString(), 640) }
+                if (qr != null) androidx.compose.foundation.Image(qr, contentDescription = stringResource(R.string.upi_qr), modifier = Modifier.size(220.dp).align(Alignment.CenterHorizontally))
+                Text(stringResource(R.string.upi_qr_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                OutlinedButton(modifier = Modifier.fillMaxWidth(), onClick = {
                     try { ctx.startActivity(Intent.createChooser(Intent(Intent.ACTION_VIEW, uri), ctx.getString(R.string.pay_with_upi))) }
                     catch (e: Exception) { toast(ctx.getString(R.string.no_upi_app)) }
                 }) { Text(stringResource(R.string.pay_amount_upi, Money.format(plan.priceMinor.toLong(), "₹"))) }
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(stringResource(R.string.upi_id_label, i.upiId), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.weight(1f))
-                    TextButton(onClick = {
-                        (ctx.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText("UPI", i.upiId))
-                        toast(ctx.getString(R.string.copied))
-                    }) { Text(stringResource(R.string.copy)) }
-                }
                 SectionTitle(stringResource(R.string.pay_step2))
                 OutlinedTextField(utr, { utr = cleanUtr(it) }, label = { Text(stringResource(R.string.utr_label)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters))
@@ -145,7 +181,8 @@ fun PlanScreen(nav: AppNav, vm: AccountViewModel = hiltViewModel()) {
                         busy = false
                     }
                 }) { Text(stringResource(R.string.send_for_approval)) }
-            } else if (i.upiId.isBlank()) {
+            }
+            if (i.upiId.isBlank() && !i.cards) {
                 Text(stringResource(R.string.plan_how_to_pay), style = MaterialTheme.typography.bodyMedium)
             }
             if (i.supportPhone.isNotBlank()) {

@@ -1,5 +1,6 @@
 package com.aistock.assistant.features.account
 
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Column
@@ -31,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
@@ -67,7 +69,7 @@ class AccountViewModel @Inject constructor(val api: ServerApi, val settings: Set
  * "Change server" (for a test server or your own deployment).
  */
 @Composable
-fun SignInForm(vm: AccountViewModel, p: Prefs, startMode: String, defaultBusiness: String = "") {
+fun SignInForm(vm: AccountViewModel, p: Prefs, startMode: String, defaultBusiness: String = "", serverOption: Boolean = false) {
     val toast = LocalToast.current
     val ctx = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -79,6 +81,43 @@ fun SignInForm(vm: AccountViewModel, p: Prefs, startMode: String, defaultBusines
     var business by remember(defaultBusiness) { mutableStateOf(defaultBusiness) }
     var busy by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
+    // Forgot password: 0 = off, 1 = asking for the code, 2 = code sent, enter it with a new password.
+    var forgot by remember { mutableStateOf(0) }
+    var code by remember { mutableStateOf("") }
+    var info by remember { mutableStateOf("") }
+
+    if (forgot > 0) {
+        Text(stringResource(R.string.forgot_title), style = MaterialTheme.typography.titleMedium)
+        TextInput(stringResource(R.string.email), email, { email = it.trim() }, keyboard = KeyboardType.Email, capitalize = false)
+        if (forgot == 2) {
+            TextInput(stringResource(R.string.reset_code), code, { code = it.filter { c -> c.isDigit() }.take(6) }, keyboard = KeyboardType.Number)
+            OutlinedTextField(password, { password = it }, label = { Text(stringResource(R.string.new_password)) }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+                visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password))
+        }
+        if (info.isNotBlank()) Text(info, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
+        if (error.isNotBlank()) Text(error, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodyMedium)
+        if (forgot == 1) Button(modifier = Modifier.fillMaxWidth(), enabled = !busy && email.contains('@'), onClick = {
+            busy = true; error = ""
+            scope.launch {
+                try {
+                    val emailed = vm.api.forgotPassword(url, email)
+                    info = ctx.getString(if (emailed) R.string.reset_code_emailed else R.string.reset_code_support)
+                    forgot = 2
+                } catch (e: java.io.IOException) { error = ctx.getString(R.string.signin_no_internet) } catch (e: Exception) { error = e.message ?: e.toString() }
+                busy = false
+            }
+        }) { Text(stringResource(if (busy) R.string.please_wait else R.string.send_code)) }
+        else Button(modifier = Modifier.fillMaxWidth(), enabled = !busy && code.length == 6 && password.length >= 8, onClick = {
+            busy = true; error = ""
+            scope.launch {
+                try { vm.api.resetPassword(url, email, code, password); password = ""; toast(ctx.getString(R.string.password_changed)) }
+                catch (e: java.io.IOException) { error = ctx.getString(R.string.signin_no_internet) } catch (e: Exception) { error = e.message ?: e.toString() }
+                busy = false
+            }
+        }) { Text(stringResource(if (busy) R.string.please_wait else R.string.set_new_password)) }
+        TextButton(onClick = { forgot = 0; error = ""; info = ""; code = "" }) { Text(stringResource(R.string.back_to_sign_in)) }
+        return
+    }
 
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
         FilterChip(mode == "register", { mode = "register" }, label = { Text(stringResource(R.string.create_account)) })
@@ -105,8 +144,10 @@ fun SignInForm(vm: AccountViewModel, p: Prefs, startMode: String, defaultBusines
             busy = false
         }
     }) { Text(stringResource(if (busy) R.string.please_wait else if (mode == "login") R.string.sign_in else R.string.create_account)) }
-    TextButton(onClick = { showServer = !showServer }) { Text(stringResource(R.string.change_server), style = MaterialTheme.typography.bodySmall) }
-    if (showServer) {
+    if (mode == "login") TextButton(onClick = { forgot = 1; error = "" }) { Text(stringResource(R.string.forgot_password)) }
+    // The server is built in; changing it is only for testing, behind a long press on the screen title.
+    if (serverOption) TextButton(onClick = { showServer = !showServer }) { Text(stringResource(R.string.change_server), style = MaterialTheme.typography.bodySmall) }
+    if (showServer && serverOption) {
         TextInput(stringResource(R.string.server_address), url, { url = it.trim() }, keyboard = KeyboardType.Uri, capitalize = false)
         Text(stringResource(R.string.server_address_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
@@ -122,9 +163,11 @@ fun SignInGate(businessName: String, vm: AccountViewModel = hiltViewModel()) {
             .verticalScroll(rememberScrollState()).padding(horizontal = 20.dp, vertical = 24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text(stringResource(R.string.gate_title), style = MaterialTheme.typography.headlineSmall)
+        var serverOption by remember { mutableStateOf(false) }
+        Text(stringResource(R.string.gate_title), style = MaterialTheme.typography.headlineSmall,
+            modifier = Modifier.pointerInput(Unit) { detectTapGestures(onLongPress = { serverOption = true }) })
         Text(stringResource(R.string.gate_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        SignInForm(vm, p, "register", businessName)
+        SignInForm(vm, p, "register", businessName, serverOption)
     }
 }
 
@@ -151,9 +194,11 @@ fun AccountScreen(nav: AppNav, vm: AccountViewModel = hiltViewModel()) {
     LaunchedEffect(signedIn) { if (signedIn) load() }
 
     FormPage(stringResource(R.string.aistock_account), nav.back) {
-        Text(stringResource(R.string.account_intro), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        var serverOption by remember { mutableStateOf(false) }
+        Text(stringResource(R.string.account_intro), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.pointerInput(Unit) { detectTapGestures(onLongPress = { serverOption = true }) })
         if (!signedIn) {
-            SignInForm(vm, p, "login")
+            SignInForm(vm, p, "login", serverOption = serverOption)
         } else {
             AppCard(Modifier.fillMaxWidth()) {
                 LabelValue(stringResource(R.string.email), p.serverEmail)

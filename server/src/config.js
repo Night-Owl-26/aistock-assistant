@@ -61,6 +61,16 @@ export function loadConfig(env = process.env) {
     upiId: get('UPI_ID', ''),
     upiName: get('UPI_NAME', 'Follower'),
     supportPhone: get('SUPPORT_PHONE', ''),
+    // Razorpay (cards, net banking, UPI) for paying after the trial: Dashboard > Account & Settings > API Keys.
+    razorpayKeyId: get('RAZORPAY_KEY_ID', ''),
+    razorpayKeySecret: get('RAZORPAY_KEY_SECRET', ''),
+    razorpayBase: get('RAZORPAY_BASE_URL', 'https://api.razorpay.com'),
+    // Email for "Forgot password" codes (optional). Gmail: smtp.gmail.com, 465, your address, an app password.
+    smtpHost: get('SMTP_HOST', ''),
+    smtpPort: Number(get('SMTP_PORT', 465)),
+    smtpUser: get('SMTP_USER', ''),
+    smtpPass: get('SMTP_PASS', ''),
+    smtpFrom: get('SMTP_FROM', ''),
     accessTtlSeconds: Number(get('ACCESS_TTL_SECONDS', 3600)),
     refreshTtlDays: Number(get('REFRESH_TTL_DAYS', 60)),
     maxBackupBytes: Number(get('MAX_BACKUP_BYTES', 20 * 1024 * 1024)),

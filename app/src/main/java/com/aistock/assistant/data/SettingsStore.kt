@@ -46,6 +46,8 @@ data class Prefs(
     val onboardingDone: Boolean = false,
     val language: String = "en",
     val theme: String = "system",
+    /** Colour of the app: teal, blue, purple, saffron, rose, or "phone" (Android 12+ wallpaper colours). */
+    val colorTheme: String = "teal",
     val ttsEnabled: Boolean = true,
     /** local = on-device rules only, cloud = use the configured AI service when online */
     val aiMode: String = "local",
@@ -92,6 +94,7 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
         val onboarding = booleanPreferencesKey("onboarding_done")
         val language = stringPreferencesKey("language")
         val theme = stringPreferencesKey("theme")
+        val colorTheme = stringPreferencesKey("color_theme")
         val tts = booleanPreferencesKey("tts_enabled")
         val aiMode = stringPreferencesKey("ai_mode")
         val endpoint = stringPreferencesKey("cloud_endpoint")
@@ -127,6 +130,7 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
             onboardingDone = p[K.onboarding] ?: false,
             language = p[K.language] ?: "en",
             theme = p[K.theme] ?: "system",
+            colorTheme = p[K.colorTheme] ?: "teal",
             ttsEnabled = p[K.tts] ?: true,
             aiMode = p[K.aiMode] ?: "local",
             cloudEndpoint = p[K.endpoint]?.ifBlank { null } ?: GEMINI_ENDPOINT,
@@ -170,6 +174,7 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
     }
 
     suspend fun setTheme(theme: String) = context.dataStore.edit { it[K.theme] = theme }.let { }
+    suspend fun setColorTheme(c: String) = context.dataStore.edit { it[K.colorTheme] = c }.let { }
     suspend fun setTts(enabled: Boolean) = context.dataStore.edit { it[K.tts] = enabled }.let { }
     suspend fun setAllowNegative(allow: Boolean) = context.dataStore.edit { it[K.negative] = allow }.let { }
     suspend fun setLowStockAlerts(on: Boolean) = context.dataStore.edit { it[K.alerts] = on }.let { }

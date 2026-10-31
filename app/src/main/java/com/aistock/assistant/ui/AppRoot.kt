@@ -89,7 +89,7 @@ fun AppRoot(startTalking: Boolean = false, openChat: Boolean = false, vm: MainVi
     val prefs by vm.prefs.collectAsStateWithLifecycle()
     val hasPin by vm.hasPin.collectAsStateWithLifecycle()
     val unlocked by vm.unlocked.collectAsStateWithLifecycle()
-    AIStockTheme(prefs.theme) {
+    AIStockTheme(prefs.theme, prefs.colorTheme) {
         CompositionLocalProvider(LocalCurrency provides prefs.currencySymbol, LocalTamil provides prefs.tamil) {
             when {
                 !prefs.loaded || (prefs.onboardingDone && hasPin == null) -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))

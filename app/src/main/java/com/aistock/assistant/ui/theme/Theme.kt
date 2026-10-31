@@ -51,13 +51,30 @@ private val Dark = darkColorScheme(
     surfaceContainer = Color(0xFF1B2220), surfaceContainerHigh = Color(0xFF252C2A), surfaceContainerHighest = Color(0xFF303735),
 )
 
+/** The accent of each colour theme, light and dark; backgrounds and text colours stay the same. */
+private data class Accent(val p: Long, val pc: Long, val opc: Long, val s: Long, val sc: Long, val dp: Long, val dpc: Long, val dopc: Long, val ds: Long, val dsc: Long)
+
+private val ACCENTS = mapOf(
+    "teal" to Accent(0xFF0B6B5B, 0xFFBFEFE3, 0xFF00201A, 0xFF4A635C, 0xFFD5EAE3, 0xFF7FD8C4, 0xFF005144, 0xFFBFEFE3, 0xFFB1CCC4, 0xFF2B4640),
+    "blue" to Accent(0xFF1F5FAF, 0xFFD5E3FF, 0xFF001B3E, 0xFF555F71, 0xFFD9E3F8, 0xFFA7C8FF, 0xFF00468C, 0xFFD5E3FF, 0xFFBDC7DC, 0xFF3E4759),
+    "purple" to Accent(0xFF6A4BA8, 0xFFEADDFF, 0xFF22005D, 0xFF625B71, 0xFFE8DEF8, 0xFFD0BCFF, 0xFF51358E, 0xFFEADDFF, 0xFFCCC2DC, 0xFF4A4458),
+    "saffron" to Accent(0xFFA14F00, 0xFFFFDCC4, 0xFF331200, 0xFF755845, 0xFFFFDCC6, 0xFFFFB683, 0xFF7B3B00, 0xFFFFDCC4, 0xFFE5BFA8, 0xFF5B4130),
+    "rose" to Accent(0xFFA3355C, 0xFFFFD9E2, 0xFF3E001B, 0xFF74565F, 0xFFFFD9E2, 0xFFFFB1C8, 0xFF831E45, 0xFFFFD9E2, 0xFFE3BDC6, 0xFF5B3F47),
+)
+
+private fun androidx.compose.material3.ColorScheme.with(a: Accent, dark: Boolean) = if (dark) copy(
+    primary = Color(a.dp), primaryContainer = Color(a.dpc), onPrimaryContainer = Color(a.dopc), secondary = Color(a.ds), secondaryContainer = Color(a.dsc),
+) else copy(
+    primary = Color(a.p), primaryContainer = Color(a.pc), onPrimaryContainer = Color(a.opc), secondary = Color(a.s), secondaryContainer = Color(a.sc),
+)
+
 private val AppShapes = Shapes(
     extraSmall = RoundedCornerShape(8.dp), small = RoundedCornerShape(12.dp), medium = RoundedCornerShape(16.dp),
     large = RoundedCornerShape(20.dp), extraLarge = RoundedCornerShape(28.dp),
 )
 
 @Composable
-fun AIStockTheme(mode: String, content: @Composable () -> Unit) {
+fun AIStockTheme(mode: String, color: String = "teal", content: @Composable () -> Unit) {
     val dark = when (mode) {
         "dark" -> true
         "light" -> false
@@ -82,5 +99,11 @@ fun AIStockTheme(mode: String, content: @Composable () -> Unit) {
             }
         }
     }
-    MaterialTheme(colorScheme = if (dark) Dark else Light, typography = typography, shapes = AppShapes, content = content)
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val scheme = when {
+        color == "phone" && android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S ->
+            if (dark) androidx.compose.material3.dynamicDarkColorScheme(ctx) else androidx.compose.material3.dynamicLightColorScheme(ctx)
+        else -> (if (dark) Dark else Light).with(ACCENTS[color] ?: ACCENTS.getValue("teal"), dark)
+    }
+    MaterialTheme(colorScheme = scheme, typography = typography, shapes = AppShapes, content = content)
 }

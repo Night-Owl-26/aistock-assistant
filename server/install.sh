@@ -100,6 +100,8 @@ ask_key SARVAM_API_KEY "Sarvam AI, Tamil speech-to-text"
 ask_key OPENROUTER_API_KEY "OpenRouter, optional spare chat model"
 ask_key GOOGLE_CLOUD_API_KEY "Google Cloud Speech/Text-to-Speech, optional"
 ask_key UPI_ID "your UPI ID, e.g. name@okaxis: owners pay this after the free trial"
+ask_key RAZORPAY_KEY_ID "Razorpay key id, for card and net-banking payments, optional"
+ask_key RAZORPAY_KEY_SECRET "Razorpay key secret, optional"
 ask_key SUPPORT_PHONE "your phone number shown to owners for payment help, optional"
 # With a Gemini key, Stocky's chat uses Gemini (best for Tamil and tools); OpenRouter stays as a spare.
 if [ -n "${TEXT_PROVIDER:-}" ]; then setenv "$ENVF" TEXT_PROVIDER "$TEXT_PROVIDER"

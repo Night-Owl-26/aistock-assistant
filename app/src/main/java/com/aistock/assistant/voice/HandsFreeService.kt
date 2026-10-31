@@ -105,6 +105,13 @@ class HandsFreeService : Service() {
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE else 0,
             )
         } catch (e: Exception) {
+            // Android restarted the service in the background, where it may not use the microphone.
+            // Say so instead of going quiet: one tap on the notification opens the app, which starts listening again.
+            try {
+                getSystemService(NotificationManager::class.java)?.notify(NOTIFICATION_ID + 1, NotificationCompat.Builder(this, CHANNEL)
+                    .setSmallIcon(R.drawable.ic_mic).setContentTitle(getString(R.string.handsfree_paused_title))
+                    .setContentText(getString(R.string.handsfree_paused_body)).setContentIntent(openApp()).setAutoCancel(true).build())
+            } catch (e2: Exception) { }
             stopSelf(); return
         }
         HandsFree.setRunning(true)

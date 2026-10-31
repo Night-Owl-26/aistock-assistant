@@ -7,6 +7,8 @@ import { tx } from './db.js'
 import { geminiApi, sanitizeRequest } from './gemini.js'
 import { openRouterApi } from './openrouter.js'
 import { SPEECH_LANGS, speechApi, speechLanguage, ttsSeconds } from './speech.js'
+import { mailer } from './mail.js'
+import { randomInt } from 'node:crypto'
 import { validateConfig } from './businessConfig.js'
 
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}$/
@@ -20,7 +22,7 @@ const fail = (status, code, message) => { throw new HttpError(status, code, mess
  * Builds the API. Every business route goes through member(): the caller must belong to that business,
  * and the role must be allowed. Data of one business is never readable with another business's id.
  */
-export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, WebSocketImpl }) {
+export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, WebSocketImpl, mailTransport = null }) {
   const app = Fastify({ logger, bodyLimit: 1024 * 1024, trustProxy: true })
   const jwt = tokens(cfg)
   const gemini = geminiApi(cfg, fetchImpl)
@@ -136,7 +138,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
 
   app.get('/v1/plans', async () => ({
     plans: (await pool.query('SELECT id, name, price_minor, currency, period_days, ai_requests_month, live_seconds_month, max_staff FROM plans WHERE active ORDER BY price_minor')).rows,
-    payment: { upiId: cfg.upiId, payeeName: cfg.upiName, supportPhone: cfg.supportPhone, trialDays: cfg.trialDays },
+    payment: { upiId: cfg.upiId, payeeName: cfg.upiName, supportPhone: cfg.supportPhone, trialDays: cfg.trialDays, cards: rzpReady() },
   }))
 
   app.post('/v1/auth/register', { config: { rateLimit: { max: cfg.registerPerHour, timeWindow: '1 hour' } } }, async (req) => {
@@ -170,6 +172,55 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     return issueSession(u.id)
   })
 
+  // ---------------------------------------------------------------- forgot password
+
+  const mail = mailer(cfg, mailTransport)
+
+  /** A new 6-digit code for this person, valid 15 minutes; earlier unused codes stop working. */
+  async function newResetCode(userId) {
+    const code = String(randomInt(0, 1_000_000)).padStart(6, '0')
+    await pool.query('UPDATE password_resets SET used_at = now() WHERE user_id = $1 AND used_at IS NULL', [userId])
+    await pool.query("INSERT INTO password_resets (user_id, code_hash, expires_at) VALUES ($1,$2, now() + interval '15 minutes')", [userId, sha256(code)])
+    return code
+  }
+
+  /** Sends a reset code by email. The answer is the same whether or not the email has an account. */
+  app.post('/v1/auth/forgot', { config: { rateLimit: { max: 5, timeWindow: '1 hour' } } }, async (req) => {
+    const em = String(req.body?.email ?? '').trim().toLowerCase()
+    if (!EMAIL.test(em)) fail(400, 'bad_email', 'Enter a valid email address.')
+    const u = (await pool.query('SELECT id FROM users WHERE email = $1 AND NOT disabled', [em])).rows[0]
+    if (u && mail.configured()) {
+      const code = await newResetCode(u.id)
+      try {
+        await mail.send(em, 'Your Follower password reset code', `Your code is ${code}\n\nType it in the Follower app within 15 minutes to choose a new password. If you did not ask for this, ignore this email.`)
+      } catch (err) { req.log?.warn?.({ err: String(err) }, 'reset email failed') }
+      audit(null, u.id, 'password_reset_requested', {}, req.ip)
+    }
+    return { ok: true, emailed: mail.configured() }
+  })
+
+  /** Sets a new password with a valid code; every signed-in phone of that person has to sign in again. */
+  app.post('/v1/auth/reset', { config: { rateLimit: { max: 10, timeWindow: '15 minutes' } } }, async (req) => {
+    const em = String(req.body?.email ?? '').trim().toLowerCase()
+    const code = String(req.body?.code ?? '').replace(/\s+/g, '')
+    const password = req.body?.password
+    if (typeof password !== 'string' || password.length < 8 || password.length > 200) fail(400, 'weak_password', 'Use a password of at least 8 characters.')
+    const u = (await pool.query('SELECT id FROM users WHERE email = $1 AND NOT disabled', [em])).rows[0]
+    const r = u && (await pool.query('SELECT * FROM password_resets WHERE user_id = $1 AND used_at IS NULL AND expires_at > now() ORDER BY created_at DESC LIMIT 1', [u.id])).rows[0]
+    if (!r || r.attempts >= 5) fail(400, 'bad_code', 'The code is wrong or has expired. Ask for a new one.')
+    if (!/^\d{6}$/.test(code) || !sameSecret(sha256(code), r.code_hash)) {
+      await pool.query('UPDATE password_resets SET attempts = attempts + 1 WHERE id = $1', [r.id])
+      fail(400, 'bad_code', 'The code is wrong or has expired. Ask for a new one.')
+    }
+    const hash = await hashPassword(password)
+    await pool.query('UPDATE password_resets SET used_at = now() WHERE id = $1', [r.id])
+    await pool.query('UPDATE users SET password_hash = $2 WHERE id = $1', [u.id, hash])
+    // Back-dated, so the 60-second grace for parallel refreshes does not apply.
+    await pool.query("UPDATE refresh_tokens SET revoked_at = now() - interval '1 hour' WHERE user_id = $1 AND revoked_at IS NULL", [u.id])
+    audit(null, u.id, 'password_reset', {}, req.ip)
+    return { ok: true }
+  })
+
   app.post('/v1/auth/refresh', async (req) => {
     const hash = sha256(String(req.body?.refreshToken ?? ''))
     // Each refresh token works once, claimed in one statement so two parallel refreshes cannot both win.
@@ -199,7 +250,11 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
       `SELECT b.id, b.name, m.role FROM memberships m JOIN businesses b ON b.id = m.business_id
         WHERE m.user_id = $1 AND b.deleted_at IS NULL ORDER BY b.created_at`, [u.id])).rows
     const businesses = []
-    for (const b of rows) businesses.push({ ...b, entitlement: await entitlement(b.id) })
+    for (const b of rows) {
+      // A card or net-banking payment finished in the browser starts the plan here, the next time the app looks.
+      if (b.role === 'owner') try { await checkLinks(b.id) } catch { }
+      businesses.push({ ...b, entitlement: await entitlement(b.id) })
+    }
     return {
       user: { id: u.id, email: u.email, name: u.name }, businesses,
       ai: { configured: textApi.configured(), textProvider, live: gemini.configured(), speech: speech.sttConfigured(), speechToText: speech.sttProvider(), textToSpeech: speech.ttsProvider(), textModel, liveModel: cfg.liveModel, liveWsUrl: cfg.liveWsUrl },
@@ -500,10 +555,97 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     return { payments: (await pool.query('SELECT * FROM payment_claims WHERE business_id = $1 ORDER BY created_at DESC LIMIT 20', [req.params.id])).rows.map(claimRow) }
   })
 
+  /** Starts the paid plan now, or adds its period after a paid period that is still running. Inside a transaction. */
+  async function activatePlan(c, businessId, planId, reference) {
+    const days = Number((await c.query('SELECT period_days FROM plans WHERE id = $1', [planId])).rows[0]?.period_days) || 30
+    const r = await c.query(
+      `UPDATE subscriptions SET plan_id = $2, status = 'active', source = 'manual', external_ref = $4, updated_at = now(),
+          current_period_start = CASE WHEN status = 'active' AND current_period_end > now() THEN current_period_start ELSE now() END,
+          current_period_end = GREATEST(CASE WHEN status = 'active' THEN current_period_end ELSE now() END, now()) + make_interval(days => $3)
+        WHERE business_id = $1 RETURNING current_period_end`, [businessId, planId, days, reference])
+    if (!r.rowCount) fail(404, 'not_found', 'Business not found.')
+    return r.rows[0].current_period_end
+  }
+
+  // ---------------------------------------------------------------- Razorpay payment links
+
+  const rzpReady = () => !!(cfg.razorpayKeyId && cfg.razorpayKeySecret)
+  const rzp = async (method, path, body) => {
+    const r = await fetchImpl(`${cfg.razorpayBase}/v1${path}`, {
+      method, signal: AbortSignal.timeout(20_000),
+      headers: { 'content-type': 'application/json', authorization: 'Basic ' + Buffer.from(`${cfg.razorpayKeyId}:${cfg.razorpayKeySecret}`).toString('base64') },
+      body: body ? JSON.stringify(body) : undefined,
+    })
+    const text = await r.text()
+    let json; try { json = JSON.parse(text) } catch { json = {} }
+    if (!r.ok) fail(502, 'payment_provider', json?.error?.description || `Razorpay answered ${r.status}.`)
+    return json
+  }
+
+  /** A Razorpay page for this plan (cards, net banking, UPI, wallets); the app opens it in the browser. */
+  app.post('/v1/businesses/:id/payments/link', { config: { rateLimit: { max: 10, timeWindow: '1 hour' } } }, async (req) => {
+    const { user } = await member(req, req.params.id, 'owner')
+    if (!rzpReady()) fail(503, 'not_configured', 'Card payments are not set up on this server yet.')
+    const plan = (await pool.query('SELECT id, name, price_minor FROM plans WHERE id = $1 AND active AND price_minor > 0', [String(req.body?.planId ?? '')])).rows[0]
+    if (!plan) fail(400, 'bad_plan', 'Choose a plan.')
+    const ref = `F${Date.now().toString(36)}${randomInt(0, 1e6).toString(36)}`.slice(0, 40)
+    const link = await rzp('POST', '/payment_links', {
+      amount: plan.price_minor, currency: 'INR', accept_partial: false, reference_id: ref,
+      description: `Follower ${plan.name} plan`, customer: { email: user.email },
+      notify: { sms: false, email: false }, reminder_enable: false,
+      notes: { business_id: req.params.id, plan_id: plan.id },
+    })
+    if (!link?.id || !link?.short_url) fail(502, 'payment_provider', 'Razorpay did not return a payment page.')
+    await pool.query('INSERT INTO payment_links (business_id, user_id, plan_id, amount_minor, provider_id, short_url) VALUES ($1,$2,$3,$4,$5,$6)',
+      [req.params.id, user.id, plan.id, plan.price_minor, link.id, link.short_url])
+    audit(req.params.id, user.id, 'payment_link_created', { planId: plan.id, link: link.id }, req.ip)
+    return { url: link.short_url, id: link.id }
+  })
+
+  /** Asks Razorpay about this business's open payment pages; a paid one starts the plan (once). */
+  async function checkLinks(businessId) {
+    if (!rzpReady()) return 0
+    const open = (await pool.query("SELECT * FROM payment_links WHERE business_id = $1 AND status = 'created' AND created_at > now() - interval '7 days' ORDER BY created_at DESC LIMIT 5", [businessId])).rows
+    let paid = 0
+    for (const l of open) {
+      let remote
+      try { remote = await rzp('GET', `/payment_links/${encodeURIComponent(l.provider_id)}`) } catch { continue }
+      const st = String(remote?.status ?? '')
+      if (st === 'paid' && Number(remote.amount_paid ?? 0) >= l.amount_minor) {
+        await tx(pool, async (c) => {
+          const claimed = await c.query("UPDATE payment_links SET status = 'paid', paid_at = now() WHERE id = $1 AND status = 'created' RETURNING id", [l.id])
+          if (claimed.rowCount) await activatePlan(c, businessId, l.plan_id, `Razorpay ${l.provider_id}`)
+        })
+        audit(businessId, l.user_id, 'payment_link_paid', { link: l.provider_id }, null)
+        paid++
+      } else if (st === 'expired' || st === 'cancelled') {
+        await pool.query('UPDATE payment_links SET status = $2 WHERE id = $1', [l.id, st])
+      }
+    }
+    return paid
+  }
+
+  app.post('/v1/businesses/:id/payments/check', { config: { rateLimit: { max: 30, timeWindow: '10 minutes' } } }, async (req) => {
+    await member(req, req.params.id, 'owner')
+    const paid = await checkLinks(req.params.id)
+    return { paid, entitlement: await entitlement(req.params.id) }
+  })
+
   const admin = (req) => {
     const h = req.headers.authorization ?? ''
     if (!cfg.adminToken || !sameSecret(h.replace(/^Bearer /, ''), cfg.adminToken)) fail(401, 'unauthorized', 'Admin token required.')
   }
+
+  /** Administrator: a reset code for an owner who has no email access (read it out to them on the phone). */
+  app.post('/admin/password-code', async (req) => {
+    admin(req)
+    const em = String(req.body?.email ?? '').trim().toLowerCase()
+    const u = (await pool.query('SELECT id FROM users WHERE email = $1', [em])).rows[0]
+    if (!u) fail(404, 'not_found', 'No account with this email.')
+    const code = await newResetCode(u.id)
+    audit(null, u.id, 'password_code_by_admin', {}, req.ip)
+    return { email: em, code, validMinutes: 15 }
+  })
 
   /** Administrator: payments waiting to be checked, with who sent them. */
   app.get('/admin/payments', async (req) => {
@@ -532,16 +674,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
       const note = String(req.body?.note ?? '').slice(0, 200)
       await c.query('UPDATE payment_claims SET status = $2, note = $3, decided_at = now() WHERE id = $1', [claim.id, decision === 'approve' ? 'approved' : 'rejected', note])
       let periodEnd = null
-      if (decision === 'approve') {
-        const days = Number((await c.query('SELECT period_days FROM plans WHERE id = $1', [claim.plan_id])).rows[0]?.period_days) || 30
-        const r = await c.query(
-          `UPDATE subscriptions SET plan_id = $2, status = 'active', source = 'manual', external_ref = $4, updated_at = now(),
-              current_period_start = CASE WHEN status = 'active' AND current_period_end > now() THEN current_period_start ELSE now() END,
-              current_period_end = GREATEST(CASE WHEN status = 'active' THEN current_period_end ELSE now() END, now()) + make_interval(days => $3)
-            WHERE business_id = $1 RETURNING current_period_end`, [claim.business_id, claim.plan_id, days, `UPI ${claim.utr}`])
-        if (!r.rowCount) fail(404, 'not_found', 'Business not found.')
-        periodEnd = r.rows[0].current_period_end
-      }
+      if (decision === 'approve') periodEnd = await activatePlan(c, claim.business_id, claim.plan_id, `UPI ${claim.utr}`)
       await c.query('COMMIT')
       audit(claim.business_id, null, decision === 'approve' ? 'payment_approved' : 'payment_rejected', { claimId: Number(claim.id), utr: claim.utr }, req.ip)
       return { ok: true, status: decision === 'approve' ? 'approved' : 'rejected', periodEnd }

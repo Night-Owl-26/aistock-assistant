@@ -23,7 +23,7 @@ data class Usage(val active: Boolean, val status: String, val planName: String, 
 }
 /** A plan the owner can pay for, and where to pay (UPI). */
 data class PaidPlan(val id: String, val name: String, val priceMinor: Int, val periodDays: Int, val aiRequests: Int, val voiceMinutes: Int, val maxStaff: Int)
-data class PayInfo(val plans: List<PaidPlan>, val upiId: String, val payeeName: String, val supportPhone: String, val trialDays: Int)
+data class PayInfo(val plans: List<PaidPlan>, val upiId: String, val payeeName: String, val supportPhone: String, val trialDays: Int, val cards: Boolean = false)
 /** A UPI payment the owner reported; "pending" until the Follower team checks it. */
 data class PaymentClaim(val id: Long, val planId: String, val amountMinor: Int, val utr: String, val status: String, val note: String, val createdAt: String)
 data class Account(val email: String, val businessId: String, val businessName: String, val role: String, val usage: Usage?, val aiConfigured: Boolean, val textModel: String, val liveModel: String, val speechConfigured: Boolean = false)
@@ -123,12 +123,18 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
             PaidPlan(it.getString("id"), it.optString("name"), it.optInt("price_minor"), it.optInt("period_days", 30), it.optInt("ai_requests_month"), it.optInt("live_seconds_month") / 60, it.optInt("max_staff", 1))
         }
         val pay = o.optJSONObject("payment") ?: JSONObject()
-        PayInfo(plans, pay.optString("upiId"), pay.optString("payeeName", "Follower"), pay.optString("supportPhone"), pay.optInt("trialDays", 14))
+        PayInfo(plans, pay.optString("upiId"), pay.optString("payeeName", "Follower"), pay.optString("supportPhone"), pay.optInt("trialDays", 14), pay.optBoolean("cards"))
     }
 
     /** Reports a UPI payment with its transaction ID (UTR); the plan starts when it is approved. */
     suspend fun claimPayment(planId: String, utr: String): PaymentClaim =
         claim(obj("POST", "/v1/businesses/$businessId/payments", JSONObject().put("planId", planId).put("utr", utr)))
+
+    /** A Razorpay page (cards, net banking, UPI) for this plan; open it in the browser. */
+    suspend fun paymentLink(planId: String): String = obj("POST", "/v1/businesses/$businessId/payments/link", JSONObject().put("planId", planId)).getString("url")
+
+    /** Asks the server whether a card / net-banking payment went through; returns how many were paid. */
+    suspend fun checkPayments(): Int = obj("POST", "/v1/businesses/$businessId/payments/check").optInt("paid").also { try { refreshPlan() } catch (e: Exception) { } }
 
     suspend fun payments(): List<PaymentClaim> {
         val arr = obj("GET", "/v1/businesses/$businessId/payments").optJSONArray("payments") ?: JSONArray()
@@ -149,6 +155,21 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
         remember(o)
         if (!settings.setServerSession(url, email.trim().lowercase(), o.getString("businessId"), o.getString("refreshToken"))) throw ServerException(0, "keystore", "This phone could not store the sign-in securely.")
         try { refreshPlan() } catch (e: Exception) { }
+    }
+
+    /** Asks the server to email a password reset code. Returns false when the server cannot send email (ask support). */
+    suspend fun forgotPassword(url: String, email: String): Boolean = withContext(Dispatchers.IO) {
+        settings.setServerUrl(url)
+        send("POST", "/v1/auth/forgot", JSONObject().put("email", email.trim()), null).let { (c, b) -> parse(c, b) }.optBoolean("emailed")
+    }
+
+    /** Sets a new password with the 6-digit code, then signs in with it. */
+    suspend fun resetPassword(url: String, email: String, code: String, password: String) {
+        withContext(Dispatchers.IO) {
+            settings.setServerUrl(url)
+            send("POST", "/v1/auth/reset", JSONObject().put("email", email.trim()).put("code", code.trim()).put("password", password), null).let { (c, b) -> parse(c, b) }
+        }
+        login(url, email, password)
     }
 
     suspend fun login(url: String, email: String, password: String) = withContext(Dispatchers.IO) {

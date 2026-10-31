@@ -139,6 +139,11 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
         if (result[android.Manifest.permission.RECORD_AUDIO] == true) {
             scope.launch { vm.setHandsFree(true) }
             com.aistock.assistant.voice.HandsFree.start(ctx)
+            // Battery saving stops background listening on many phones: ask to leave Follower alone.
+            val pm = ctx.getSystemService(android.os.PowerManager::class.java)
+            if (pm != null && !pm.isIgnoringBatteryOptimizations(ctx.packageName)) try {
+                ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, android.net.Uri.parse("package:" + ctx.packageName)))
+            } catch (e: Exception) { }
         } else toast(ctx.getString(R.string.handsfree_needs_mic))
     }
     var pinDialog by remember { mutableStateOf(false) }
@@ -178,6 +183,17 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
                 listOf("system" to stringResource(R.string.theme_system), "light" to stringResource(R.string.theme_light), "dark" to stringResource(R.string.theme_dark)),
                 prefs.theme, { scope.launch { vm.setTheme(it) } },
             )
+            Spacer(Modifier.height(10.dp))
+            DropdownField(
+                stringResource(R.string.color_theme),
+                buildList {
+                    add("teal" to stringResource(R.string.color_teal)); add("blue" to stringResource(R.string.color_blue))
+                    add("purple" to stringResource(R.string.color_purple)); add("saffron" to stringResource(R.string.color_saffron))
+                    add("rose" to stringResource(R.string.color_rose))
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.S) add("phone" to stringResource(R.string.color_phone))
+                },
+                prefs.colorTheme, { scope.launch { vm.setColorTheme(it) } },
+            )
         }
 
         SectionTitle(stringResource(R.string.voice))
@@ -195,6 +211,7 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
                 }
             }
             Text(stringResource(R.string.handsfree_privacy), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (prefs.handsFree) Text(stringResource(R.string.handsfree_locked_tip), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
 
         SectionTitle(stringResource(R.string.security))

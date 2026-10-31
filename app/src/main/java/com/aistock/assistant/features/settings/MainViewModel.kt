@@ -83,6 +83,7 @@ class MainViewModel @Inject constructor(
     }
 
     suspend fun setTheme(theme: String) = settings.setTheme(theme)
+    suspend fun setColorTheme(c: String) = settings.setColorTheme(c)
     suspend fun setTts(on: Boolean) = settings.setTts(on)
     suspend fun setAllowNegative(on: Boolean) = settings.setAllowNegative(on)
     suspend fun setLowStockAlerts(on: Boolean) = settings.setLowStockAlerts(on)

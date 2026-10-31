@@ -9,7 +9,8 @@ import { sha256 as sha } from '../src/auth.js'
 // Runs against a real PostgreSQL (TEST_DATABASE_URL) and a fake Google.
 const url = process.env.TEST_DATABASE_URL ?? 'postgres://postgres@localhost:55432/aistock_test?host=/srv/pgtest'
 let pool, app
-const google = { calls: [], tokenFails: false, altRejected: false, ttsVoiceMissing: false, sttDown: false, geminiDown: false }
+const sentMail = []
+const google = { calls: [], tokenFails: false, altRejected: false, ttsVoiceMissing: false, sttDown: false, geminiDown: false, rzpStatus: 'created', rzpCalls: [] }
 
 function fakeFetch(u, init) {
   google.calls.push({ url: String(u), body: init?.body ? JSON.parse(init.body) : null, headers: init?.headers })
@@ -29,6 +30,11 @@ function fakeFetch(u, init) {
     if (google.ttsVoiceMissing && b.voice.name) return json(400, { error: { message: 'voice does not exist' } })
     return json(200, { audioContent: Buffer.from('RIFF....WAVEfmt ').toString('base64') })
   }
+  if (String(u).startsWith('https://rzp.test')) {
+    google.rzpCalls.push({ url: String(u), body: init?.body ? JSON.parse(init.body) : null, auth: init?.headers?.authorization })
+    if (init?.method === 'POST') return json(200, { id: 'plink_test1', short_url: 'https://rzp.io/i/test1', status: 'created' })
+    return json(200, { id: 'plink_test1', status: google.rzpStatus, amount_paid: google.rzpStatus === 'paid' ? 49900 : 0 })
+  }
   if (String(u).includes(':generateContent')) {
     if (google.geminiDown) return json(429, { error: { message: 'Resource has been exhausted' } })
     return json(200, { candidates: [{ content: { role: 'model', parts: [{ text: 'Innikku 3 sales.' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 120, candidatesTokenCount: 8 } })
@@ -40,8 +46,8 @@ before(async () => {
   pool = createPool(url)
   await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
   await migrate(pool)
-  const cfg = loadConfig({ DATABASE_URL: url, JWT_SECRET: 'x'.repeat(40), GEMINI_API_KEY: 'server-key', ADMIN_TOKEN: 'admin-secret-token', GEMINI_BASE_URL: 'https://google.test', GOOGLE_CLOUD_API_KEY: 'cloud-key', GOOGLE_STT_BASE_URL: 'https://stt.test', GOOGLE_TTS_BASE_URL: 'https://tts.test', REGISTER_PER_HOUR: '1000', LIVE_MODE: 'token', UPI_ID: 'shop@okaxis', UPI_NAME: 'Follower' })
-  app = await buildApp({ cfg, pool, fetchImpl: fakeFetch })
+  const cfg = loadConfig({ DATABASE_URL: url, JWT_SECRET: 'x'.repeat(40), GEMINI_API_KEY: 'server-key', ADMIN_TOKEN: 'admin-secret-token', GEMINI_BASE_URL: 'https://google.test', GOOGLE_CLOUD_API_KEY: 'cloud-key', GOOGLE_STT_BASE_URL: 'https://stt.test', GOOGLE_TTS_BASE_URL: 'https://tts.test', REGISTER_PER_HOUR: '1000', LIVE_MODE: 'token', UPI_ID: 'shop@okaxis', UPI_NAME: 'Follower', RAZORPAY_KEY_ID: 'rzp_test_key', RAZORPAY_KEY_SECRET: 'rzp-secret', RAZORPAY_BASE_URL: 'https://rzp.test' })
+  app = await buildApp({ cfg, pool, fetchImpl: fakeFetch, mailTransport: { sendMail: async (m) => { sentMail.push(m) } } })
 })
 after(async () => { await app?.close(); await pool?.end() })
 
@@ -355,4 +361,62 @@ test('UPI payment: the owner sends the UTR, the administrator approves, the plan
   assert.equal(rej.json.status, 'rejected')
   const mineList = await call('GET', path, { token: a.accessToken })
   assert.equal(mineList.json.payments.find(p => p.utr === 'FAKE123456').note, 'not received')
+})
+
+test('forgot password: emailed code sets a new password once, signs out other phones; admin can make a code', async () => {
+  const a = await register('forgot@shop.in', 'Forgot Shop')
+  sentMail.length = 0
+  assert.deepEqual((await call('POST', '/v1/auth/forgot', { body: { email: 'nobody@shop.in' } })).json, { ok: true, emailed: true }, 'same answer for unknown emails')
+  assert.equal(sentMail.length, 0)
+  const r = await call('POST', '/v1/auth/forgot', { body: { email: 'Forgot@Shop.in' } })
+  assert.equal(r.status, 200)
+  assert.equal(sentMail.length, 1)
+  assert.equal(sentMail[0].to, 'forgot@shop.in')
+  const code = /\b(\d{6})\b/.exec(sentMail[0].text)[1]
+  assert.equal((await call('POST', '/v1/auth/reset', { body: { email: 'forgot@shop.in', code: '000000', password: 'newpassword1' } })).status, 400)
+  assert.equal((await call('POST', '/v1/auth/reset', { body: { email: 'forgot@shop.in', code, password: 'short' } })).status, 400)
+  assert.equal((await call('POST', '/v1/auth/reset', { body: { email: 'forgot@shop.in', code, password: 'newpassword1' } })).status, 200)
+  assert.equal((await call('POST', '/v1/auth/reset', { body: { email: 'forgot@shop.in', code, password: 'another-one1' } })).status, 400, 'a code works once')
+  assert.equal((await call('POST', '/v1/auth/login', { body: { email: 'forgot@shop.in', password: 'correct horse 1' } })).status, 401, 'old password no longer works')
+  assert.equal((await call('POST', '/v1/auth/login', { body: { email: 'forgot@shop.in', password: 'newpassword1' } })).status, 200)
+  assert.equal((await call('POST', '/v1/auth/refresh', { body: { refreshToken: a.refreshToken } })).status, 401, 'other phones must sign in again')
+
+  assert.equal((await call('POST', '/admin/password-code', { body: { email: 'forgot@shop.in' } })).status, 401)
+  const byAdmin = await call('POST', '/admin/password-code', { headers: { authorization: 'Bearer admin-secret-token' }, body: { email: 'forgot@shop.in' } })
+  assert.match(byAdmin.json.code, /^\d{6}$/)
+  assert.equal((await call('POST', '/v1/auth/reset', { body: { email: 'forgot@shop.in', code: byAdmin.json.code, password: 'fromadmin123' } })).status, 200)
+
+  // Five wrong tries and the code is dead even if guessed later.
+  const c2 = (await call('POST', '/admin/password-code', { headers: { authorization: 'Bearer admin-secret-token' }, body: { email: 'forgot@shop.in' } })).json.code
+  for (let i = 0; i < 5; i++) await call('POST', '/v1/auth/reset', { body: { email: 'forgot@shop.in', code: c2 === '111111' ? '222222' : '111111', password: 'guessing123' } })
+  const last = (await call('POST', '/v1/auth/reset', { body: { email: 'forgot@shop.in', code: c2, password: 'guessing123' } })).status
+  assert.ok(last === 400 || last === 429, `refused after too many tries, got ${last}`)
+})
+
+test('cards and net banking: a Razorpay page per plan; once paid the plan starts, only once; keys stay on the server', async () => {
+  const a = await register('cards@shop.in', 'Card Shop')
+  assert.equal((await call('GET', '/v1/plans')).json.payment.cards, true)
+  const path = `/v1/businesses/${a.businessId}/payments/link`
+  assert.equal((await call('POST', path, { token: a.accessToken, body: { planId: 'trial' } })).status, 400)
+  const link = await call('POST', path, { token: a.accessToken, body: { planId: 'pro' } })
+  assert.equal(link.status, 200, JSON.stringify(link.json))
+  assert.equal(link.json.url, 'https://rzp.io/i/test1')
+  const made = google.rzpCalls.find(c => c.body)
+  assert.equal(made.body.amount, 49900); assert.equal(made.body.currency, 'INR'); assert.equal(made.body.customer.email, 'cards@shop.in')
+  assert.equal(made.auth, 'Basic ' + Buffer.from('rzp_test_key:rzp-secret').toString('base64'))
+  assert.ok(!JSON.stringify(link.json).includes('rzp-secret'))
+
+  google.rzpStatus = 'created'
+  let chk = await call('POST', `/v1/businesses/${a.businessId}/payments/check`, { token: a.accessToken })
+  assert.equal(chk.json.paid, 0); assert.equal(chk.json.entitlement.planId, 'trial')
+  google.rzpStatus = 'paid'
+  // Paid in the browser: the next look by the app (here /v1/me) starts the plan.
+  const me = await call('GET', '/v1/me', { token: a.accessToken })
+  const e = me.json.businesses[0].entitlement
+  assert.equal(e.planId, 'pro'); assert.equal(e.status, 'active')
+  chk = await call('POST', `/v1/businesses/${a.businessId}/payments/check`, { token: a.accessToken })
+  assert.equal(chk.json.paid, 0, 'not counted twice')
+  const days = (new Date(chk.json.entitlement.periodEnd) - Date.now()) / 86400000
+  assert.ok(days > 29 && days < 31, `one month, got ${days}`)
+  google.rzpStatus = 'created'
 })
