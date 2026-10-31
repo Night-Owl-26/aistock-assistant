@@ -1,0 +1,101 @@
+Performing Streamed Install
+Success
+== onboarding
+  shot device-out/01-onboarding-1.png
+  shot device-out/02-onboarding-2.png
+  shot device-out/03-onboarding-3.png
+  shot device-out/04-business-setup.png
+== sign-in gate: email and password only, the server is built in
+  shot device-out/05-signin-gate.png
+  shot device-out/06-signin-filled.png
+  shot device-out/07-import-offer.png
+  shot device-out/08-dashboard.png
+== inventory
+  shot device-out/09-products.png
+  shot device-out/10-stock.png
+  shot device-out/11-history.png
+  shot device-out/12-product-form.png
+== assistant by text
+  shot device-out/13-assistant-empty.png
+  shot device-out/14-assistant-confirm.png
+  shot device-out/15-assistant-done.png
+  shot device-out/16-assistant-answer.png
+  shot device-out/17-assistant-low-stock.png
+  shot device-out/18-assistant-greeting.png
+  shot device-out/19-assistant-chat.png
+  shot device-out/20-assistant-clarify.png
+== assistant by voice
+  shot device-out/21-mic-permission.png
+  shot device-out/22-mic-after-permission.png
+== transactions
+  shot device-out/23-sales.png
+  shot device-out/24-sale-detail.png
+  shot device-out/25-sale-form.png
+  shot device-out/26-expense-form.png
+  shot device-out/27-expenses.png
+== home totals
+  shot device-out/28-dashboard-with-data.png
+== more: parties, reports, export, backup
+  shot device-out/29-more.png
+  shot device-out/30-customers.png
+  shot device-out/31-report-sales.png
+  shot device-out/32-backup.png
+  shot device-out/33-import-export.png
+== excel workbook: import with sizes, keep the owner's file updated, a sale changes it
+  shot device-out/34-picker.png
+  shot device-out/35-workbook-columns.png
+  shot device-out/36-excel-linked.png
+  excel C2 (Polo XL stock) = 8
+  shot device-out/37-excel-links.png
+== business setup: garment manufacturing
+  shot device-out/38-setup-garment.png
+  shot device-out/39-production-empty.png
+  shot device-out/40-production-list.png
+  shot device-out/41-production-detail.png
+== follow-up with reminder
+  shot device-out/42-followups.png
+  shot device-out/43-reminders.png
+== back to a shop
+== Follower account: free trial; Stocky answers through the server
+  shot device-out/44-account-signed-in.png
+  shot device-out/45-settings-cloud-voice.png
+  shot device-out/46-assistant-through-server.png
+== analysis page
+  shot device-out/47-analysis.png
+  shot device-out/48-analysis-year.png
+== calls: call a customer, note afterwards, history
+  shot device-out/49-dialler.png
+  shot device-out/50-call-note.png
+  shot device-out/51-customer-calls.png
+== call Stocky: hands-free call screen
+  shot device-out/52-call-stocky.png
+== trial ends: read-only until a UPI payment is approved
+  sql: UPDATE subscriptions SET current_period_end = now() - interval '1 day' -> UPDATE 1
+  shot device-out/53-plan-ended.png
+  shot device-out/54-read-only-refused.png
+  shot device-out/55-home-read-only.png
+  !! expected waiting for approval at payment pending
+  shot device-out/56-payment-pending.png
+  approve: {'ok': True, 'status': 'approved', 'periodEnd': '2026-11-30T18:47:37.366Z'}
+  shot device-out/57-plan-paid.png
+== settings: dark mode and Tamil
+  shot device-out/58-settings.png
+== AI connection check (network path to Google, no key)
+  shot device-out/59-ai-connection-check.png
+  reached Google AI server
+== hands-free listening service
+  shot device-out/60-settings-handsfree.png
+  hands-free service running
+  shot device-out/61-handsfree-notification.png
+  shot device-out/62-settings-security.png
+  shot device-out/63-settings-dark.png
+  shot device-out/64-dashboard-dark.png
+  shot device-out/65-assistant-dark.png
+  shot device-out/66-settings-tamil.png
+  shot device-out/67-dashboard-tamil.png
+  shot device-out/68-inventory-tamil.png
+  shot device-out/69-assistant-tamil.png
+  shot device-out/70-assistant-tamil-answer.png
+== restart keeps data and skips onboarding
+  shot device-out/71-relaunch.png
+problems: ["payment pending: expected to see 'waiting for approval'"]

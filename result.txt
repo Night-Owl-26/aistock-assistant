@@ -1,0 +1,2 @@
+FAIL
+payment pending: expected to see 'waiting for approval'
