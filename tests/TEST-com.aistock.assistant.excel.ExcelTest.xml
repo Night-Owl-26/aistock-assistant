@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.excel.ExcelTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-31T18:25:15.426Z" hostname="runnervm48cm3" time="0.02">
+  <properties/>
+  <testcase name="previewNeverOverwritesAndReportsBadRows" classname="com.aistock.assistant.excel.ExcelTest" time="0.004"/>
+  <testcase name="headersAreMappedAutomatically" classname="com.aistock.assistant.excel.ExcelTest" time="0.001"/>
+  <testcase name="columnNames" classname="com.aistock.assistant.excel.ExcelTest" time="0.001"/>
+  <testcase name="openingStockNeedsKnownProduct" classname="com.aistock.assistant.excel.ExcelTest" time="0.001"/>
+  <testcase name="missingRequiredColumnIsReported" classname="com.aistock.assistant.excel.ExcelTest" time="0.0"/>
+  <testcase name="csvHandlesQuotesCommasAndBom" classname="com.aistock.assistant.excel.ExcelTest" time="0.002"/>
+  <testcase name="xlsxRoundTripKeepsTextNumbersAndTamil" classname="com.aistock.assistant.excel.ExcelTest" time="0.01"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

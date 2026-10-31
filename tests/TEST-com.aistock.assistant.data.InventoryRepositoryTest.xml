@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.data.InventoryRepositoryTest" tests="13" skipped="0" failures="0" errors="0" timestamp="2026-10-31T18:25:14.258Z" hostname="runnervm48cm3" time="0.582">
+  <properties/>
+  <testcase name="stockInCreatesTransaction" classname="com.aistock.assistant.data.InventoryRepositoryTest" time="0.044"/>
+  <testcase name="productWithoutOpeningStockHasNoMovement" classname="com.aistock.assistant.data.InventoryRepositoryTest" time="0.042"/>
+  <testcase name="zeroAndNegativeQuantitiesAreInvalid" classname="com.aistock.assistant.data.InventoryRepositoryTest" time="0.076"/>
+  <testcase name="negativeStockOnlyWhenTheRuleAllowsIt" classname="com.aistock.assistant.data.InventoryRepositoryTest" time="0.049"/>
+  <testcase name="updateDoesNotTouchStock" classname="com.aistock.assistant.data.InventoryRepositoryTest" time="0.043"/>
+  <testcase name="lowStockDetection" classname="com.aistock.assistant.data.InventoryRepositoryTest" time="0.041"/>
+  <testcase name="productsWithHistoryAreHiddenNotDeleted" classname="com.aistock.assistant.data.InventoryRepositoryTest" time="0.038"/>
+  <testcase name="productCreationRecordsOpeningStock" classname="com.aistock.assistant.data.InventoryRepositoryTest" time="0.04"/>
+  <testcase name="undoAddsAReversingMovementAndKeepsHistory" classname="com.aistock.assistant.data.InventoryRepositoryTest" time="0.047"/>
+  <testcase name="stockAdjustmentRecordsTheDifference" classname="com.aistock.assistant.data.InventoryRepositoryTest" time="0.042"/>
+  <testcase name="stockOutCreatesTransactionAndProtectsAgainstNegativeStock" classname="com.aistock.assistant.data.InventoryRepositoryTest" time="0.041"/>
+  <testcase name="categories" classname="com.aistock.assistant.data.InventoryRepositoryTest" time="0.042"/>
+  <testcase name="duplicateAndInvalidProductsAreRejected" classname="com.aistock.assistant.data.InventoryRepositoryTest" time="0.035"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

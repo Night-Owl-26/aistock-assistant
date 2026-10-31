@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.data.TradeRepositoryTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-31T18:25:15.067Z" hostname="runnervm48cm3" time="0.357">
+  <properties/>
+  <testcase name="expenses" classname="com.aistock.assistant.data.TradeRepositoryTest" time="0.039"/>
+  <testcase name="saleIsAllOrNothing" classname="com.aistock.assistant.data.TradeRepositoryTest" time="0.043"/>
+  <testcase name="totalsAreForTheRequestedPeriodOnly" classname="com.aistock.assistant.data.TradeRepositoryTest" time="0.034"/>
+  <testcase name="creditSaleNeedsACustomer" classname="com.aistock.assistant.data.TradeRepositoryTest" time="0.041"/>
+  <testcase name="saleReducesStockAndCalculatesBalance" classname="com.aistock.assistant.data.TradeRepositoryTest" time="0.034"/>
+  <testcase name="paymentsAndOutstanding" classname="com.aistock.assistant.data.TradeRepositoryTest" time="0.044"/>
+  <testcase name="cancellingASaleReturnsStockAndKeepsTheRecord" classname="com.aistock.assistant.data.TradeRepositoryTest" time="0.049"/>
+  <testcase name="partiesCannotBeDuplicatedAndAreHiddenWhenTheyHaveHistory" classname="com.aistock.assistant.data.TradeRepositoryTest" time="0.039"/>
+  <testcase name="purchaseIncreasesStockAndSupplierBalance" classname="com.aistock.assistant.data.TradeRepositoryTest" time="0.033"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

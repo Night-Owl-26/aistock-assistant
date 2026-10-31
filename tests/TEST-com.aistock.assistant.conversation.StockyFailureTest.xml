@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.conversation.StockyFailureTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-31T18:25:13.749Z" hostname="runnervm48cm3" time="0.003">
+  <properties/>
+  <testcase name="a_failed_model_call_is_explained_instead_of_hidden" classname="com.aistock.assistant.conversation.StockyFailureTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

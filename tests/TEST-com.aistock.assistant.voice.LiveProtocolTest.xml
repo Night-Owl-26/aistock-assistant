@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.voice.LiveProtocolTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-31T18:25:16.176Z" hostname="runnervm48cm3" time="0.068">
+  <properties/>
+  <testcase name="server_messages_become_events" classname="com.aistock.assistant.voice.LiveProtocolTest" time="0.024"/>
+  <testcase name="setup_has_model_audio_transcripts_barge_in_and_tools" classname="com.aistock.assistant.voice.LiveProtocolTest" time="0.022"/>
+  <testcase name="the_same_tool_call_never_runs_twice_and_cancelled_ones_not_at_all" classname="com.aistock.assistant.voice.LiveProtocolTest" time="0.022"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

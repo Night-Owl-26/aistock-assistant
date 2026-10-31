@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.ai.AssistantEngineTest" tests="30" skipped="0" failures="0" errors="0" timestamp="2026-10-31T18:25:13.469Z" hostname="runnervm48cm3" time="0.171">
+  <properties/>
+  <testcase name="expenseAndQueries" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.048"/>
+  <testcase name="clarificationConversation" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.009"/>
+  <testcase name="bareAddAsksWhatKindOfRecord" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.004"/>
+  <testcase name="fuzzyMatchAsksDidYouMean" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.005"/>
+  <testcase name="undoReversesStock" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.002"/>
+  <testcase name="ownerWordsForProductsAreLearnedAndUsed" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.005"/>
+  <testcase name="confidenceBandsAreRespected" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.002"/>
+  <testcase name="everyWriteIsAudited" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.002"/>
+  <testcase name="stockAdjustmentShowsDifferenceAndIsDangerous" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.004"/>
+  <testcase name="tanglishCommandWorks" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.003"/>
+  <testcase name="correctionReplacesTheWaitingQuantityInsteadOfAddingTwice" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.004"/>
+  <testcase name="unknownProductForSaleIsNotInvented" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.002"/>
+  <testcase name="unitMismatchIsRejectedAndKgGramConverted" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.004"/>
+  <testcase name="aSpokenYesIsNotEnoughForAPaymentWhenOwnerCheckIsOn" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.004"/>
+  <testcase name="everyConfirmedActionIsLoggedWithBeforeAndAfter" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.002"/>
+  <testcase name="receivedCreatesPurchaseWithSupplier" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.004"/>
+  <testcase name="offlineGreetingAndProductListAreFriendly" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.009"/>
+  <testcase name="ordinaryStockInStillConfirmsByVoiceWithOwnerCheckOn" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.002"/>
+  <testcase name="paymentInMixedLanguageNeedsConfirmation" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.002"/>
+  <testcase name="partiesAndBalances" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.008"/>
+  <testcase name="sheetsAndColumnsCanBeCreatedOfflineToo" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.016"/>
+  <testcase name="malformedProviderOutputNeverReachesTheBackend" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.001"/>
+  <testcase name="tamilRepliesWhenLanguageIsTamil" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.002"/>
+  <testcase name="undoThatReversesTheLastChangeAfterConfirmation" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.002"/>
+  <testcase name="cancelChangesNothing" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.002"/>
+  <testcase name="addCreatesNewProductOnlyAfterConfirmation" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.002"/>
+  <testcase name="mandatoryEndToEndSequence" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.007"/>
+  <testcase name="negativeStockIsRefused" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.001"/>
+  <testcase name="databaseFailureReportsNothingChanged" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.002"/>
+  <testcase name="providerCrashFallsBackToLocalRules" classname="com.aistock.assistant.ai.AssistantEngineTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.BackupAndImportTest" tests="7" skipped="0" failures="0" errors="0" timestamp="2026-10-31T18:25:04.704Z" hostname="runnervm48cm3" time="8.266">
+  <properties/>
+  <testcase name="damagedOrForeignFilesAreRefusedAndChangeNothing" classname="com.aistock.assistant.BackupAndImportTest" time="7.431"/>
+  <testcase name="backupThenRestoreBringsEverythingBack" classname="com.aistock.assistant.BackupAndImportTest" time="0.235"/>
+  <testcase name="exportProducesARealWorkbookThatCanBeImportedAgain" classname="com.aistock.assistant.BackupAndImportTest" time="0.207"/>
+  <testcase name="modelRequestsAndRepliesUseTheToolCallingFormat" classname="com.aistock.assistant.BackupAndImportTest" time="0.041"/>
+  <testcase name="excelImportAddsProductsWithOpeningStockAndNeverOverwrites" classname="com.aistock.assistant.BackupAndImportTest" time="0.118"/>
+  <testcase name="version1DatabaseUpgradesWithoutLosingData" classname="com.aistock.assistant.BackupAndImportTest" time="0.154"/>
+  <testcase name="backupFilesAreWrittenAndListed" classname="com.aistock.assistant.BackupAndImportTest" time="0.077"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

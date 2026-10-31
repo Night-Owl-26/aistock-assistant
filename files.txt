@@ -1,0 +1,11 @@
+total 79040
+drwxr-xr-x  4 runner runner     4096 Oct 31 18:54 .
+drwxr-xr-x 12 runner runner     4096 Oct 31 18:54 ..
+-rw-r--r--  1 runner runner 80904058 Oct 31 18:54 app-debug.apk
+-rw-r--r--  1 runner runner     2999 Oct 31 18:54 assemble.log
+-rw-r--r--  1 runner runner        0 Oct 31 18:54 files.txt
+drwxr-xr-x  3 runner runner     4096 Oct 31 18:54 schemas
+-rw-r--r--  1 runner runner       41 Oct 31 18:54 sha.txt
+-rw-r--r--  1 runner runner       30 Oct 31 18:54 status.txt
+-rw-r--r--  1 runner runner     2186 Oct 31 18:54 test.log
+drwxr-xr-x  2 runner runner     4096 Oct 31 18:54 tests

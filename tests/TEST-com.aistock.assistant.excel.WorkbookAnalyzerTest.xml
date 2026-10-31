@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.excel.WorkbookAnalyzerTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-31T18:25:15.828Z" hostname="runnervm48cm3" time="0.077">
+  <properties/>
+  <testcase name="unusualColumnNamesStillMapToTheRightFields" classname="com.aistock.assistant.excel.WorkbookAnalyzerTest" time="0.028"/>
+  <testcase name="aStockSheetAloneBecomesTheProductList" classname="com.aistock.assistant.excel.WorkbookAnalyzerTest" time="0.003"/>
+  <testcase name="everySheetIsReadAndUnderstoodWhateverItIsCalled" classname="com.aistock.assistant.excel.WorkbookAnalyzerTest" time="0.023"/>
+  <testcase name="titleRowsAboveTheHeaderAreSkippedAndColumnsAreTyped" classname="com.aistock.assistant.excel.WorkbookAnalyzerTest" time="0.023"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

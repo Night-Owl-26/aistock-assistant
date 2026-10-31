@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.GeminiFormatTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-10-31T18:25:13.367Z" hostname="runnervm48cm3" time="0.096">
+  <properties/>
+  <testcase name="request_uses_gemini_shapes_and_alternating_turns" classname="com.aistock.assistant.GeminiFormatTest" time="0.044"/>
+  <testcase name="a_blocked_reply_is_an_error" classname="com.aistock.assistant.GeminiFormatTest" time="0.028"/>
+  <testcase name="reply_text_and_function_calls_are_read" classname="com.aistock.assistant.GeminiFormatTest" time="0.024"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

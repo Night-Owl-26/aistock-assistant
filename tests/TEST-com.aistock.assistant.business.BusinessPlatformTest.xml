@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.business.BusinessPlatformTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-10-31T18:25:13.653Z" hostname="runnervm48cm3" time="0.087">
+  <properties/>
+  <testcase name="a_message_is_only_drafted_and_a_call_only_offered" classname="com.aistock.assistant.business.BusinessPlatformTest" time="0.058"/>
+  <testcase name="the_model_cannot_confirm_a_business_change_it_just_proposed" classname="com.aistock.assistant.business.BusinessPlatformTest" time="0.002"/>
+  <testcase name="briefing_compares_periods_and_labels_estimates" classname="com.aistock.assistant.business.BusinessPlatformTest" time="0.008"/>
+  <testcase name="with_no_cost_price_profit_is_not_claimed" classname="com.aistock.assistant.business.BusinessPlatformTest" time="0.001"/>
+  <testcase name="a_repeated_request_does_not_create_two_items" classname="com.aistock.assistant.business.BusinessPlatformTest" time="0.001"/>
+  <testcase name="bad_configurations_are_refused" classname="com.aistock.assistant.business.BusinessPlatformTest" time="0.001"/>
+  <testcase name="the_owner_describing_the_business_finds_the_right_template" classname="com.aistock.assistant.business.BusinessPlatformTest" time="0.001"/>
+  <testcase name="setting_up_a_garment_unit_by_talking_needs_the_owners_yes" classname="com.aistock.assistant.business.BusinessPlatformTest" time="0.003"/>
+  <testcase name="every_template_is_a_valid_configuration_and_they_differ" classname="com.aistock.assistant.business.BusinessPlatformTest" time="0.001"/>
+  <testcase name="production_order_created_moved_and_progress_recorded" classname="com.aistock.assistant.business.BusinessPlatformTest" time="0.006"/>
+  <testcase name="a_follow_up_in_the_past_is_refused" classname="com.aistock.assistant.business.BusinessPlatformTest" time="0.001"/>
+  <testcase name="follow_up_created_then_completed_with_the_next_one_booked" classname="com.aistock.assistant.business.BusinessPlatformTest" time="0.004"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

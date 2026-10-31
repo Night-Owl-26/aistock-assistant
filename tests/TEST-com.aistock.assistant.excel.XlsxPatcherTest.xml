@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.excel.XlsxPatcherTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-31T18:25:15.908Z" hostname="runnervm48cm3" time="0.102">
+  <properties/>
+  <testcase name="renamedColumnsStopTheUpdateInsteadOfWritingIntoTheWrongCells" classname="com.aistock.assistant.excel.XlsxPatcherTest" time="0.009"/>
+  <testcase name="salesSheetIsAddedOnceAndRefreshedOnlyWhenItChanges" classname="com.aistock.assistant.excel.XlsxPatcherTest" time="0.041"/>
+  <testcase name="excelFilesKeepFormulasStylesAndEveryOtherPart" classname="com.aistock.assistant.excel.XlsxPatcherTest" time="0.015"/>
+  <testcase name="outcomesSurviveBeingStored" classname="com.aistock.assistant.excel.XlsxPatcherTest" time="0.002"/>
+  <testcase name="anExistingCalcSettingIsKept" classname="com.aistock.assistant.excel.XlsxPatcherTest" time="0.0"/>
+  <testcase name="onlyTheStockCellsThatChangedAreWritten" classname="com.aistock.assistant.excel.XlsxPatcherTest" time="0.015"/>
+  <testcase name="rowsAreFoundByNameEvenAfterTheOwnerSortsThem" classname="com.aistock.assistant.excel.XlsxPatcherTest" time="0.006"/>
+  <testcase name="newProductsAreAddedAtTheBottomOnlyWhenTheOwnerAskedFor" classname="com.aistock.assistant.excel.XlsxPatcherTest" time="0.011"/>
+  <testcase name="anythingThatIsNotAWorkbookIsRefused" classname="com.aistock.assistant.excel.XlsxPatcherTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

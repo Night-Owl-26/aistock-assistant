@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.features.AnalysisTest" tests="4" skipped="0" failures="0" errors="0" timestamp="2026-10-31T18:25:16.016Z" hostname="runnervm48cm3" time="0.123">
+  <properties/>
+  <testcase name="numbers" classname="com.aistock.assistant.features.AnalysisTest" time="0.028"/>
+  <testcase name="upi" classname="com.aistock.assistant.features.AnalysisTest" time="0.025"/>
+  <testcase name="periodsAndBars" classname="com.aistock.assistant.features.AnalysisTest" time="0.024"/>
+  <testcase name="queriesOnTheRealDatabase" classname="com.aistock.assistant.features.AnalysisTest" time="0.045"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

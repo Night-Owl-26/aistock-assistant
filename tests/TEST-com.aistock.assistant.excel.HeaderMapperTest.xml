@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.excel.HeaderMapperTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-10-31T18:25:15.449Z" hostname="runnervm48cm3" time="0.015">
+  <properties/>
+  <testcase name="aSizeColumnMakesEachSizeItsOwnProduct" classname="com.aistock.assistant.excel.HeaderMapperTest" time="0.001"/>
+  <testcase name="stockAndCostMeanTheRightThingForEachKindOfImport" classname="com.aistock.assistant.excel.HeaderMapperTest" time="0.002"/>
+  <testcase name="miniJsonReadsWhatModelsSend" classname="com.aistock.assistant.excel.HeaderMapperTest" time="0.001"/>
+  <testcase name="readsAValidReplyInsideFencesAndChecksEveryColumn" classname="com.aistock.assistant.excel.HeaderMapperTest" time="0.003"/>
+  <testcase name="spokenSizesAndWordOrder" classname="com.aistock.assistant.excel.HeaderMapperTest" time="0.001"/>
+  <testcase name="oneColumnIsNeverUsedTwiceAndBadJsonGivesNothing" classname="com.aistock.assistant.excel.HeaderMapperTest" time="0.0"/>
+  <testcase name="aiChoicesComeFirstAndTheRulesFillTheRest" classname="com.aistock.assistant.excel.HeaderMapperTest" time="0.004"/>
+  <testcase name="theAiPurposeIsOnlyTakenWhenItIsSurerThanTheRules" classname="com.aistock.assistant.excel.HeaderMapperTest" time="0.0"/>
+  <testcase name="promptHidesPhoneNumbersAndEmails" classname="com.aistock.assistant.excel.HeaderMapperTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

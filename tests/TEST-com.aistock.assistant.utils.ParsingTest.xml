@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.utils.ParsingTest" tests="12" skipped="0" failures="0" errors="0" timestamp="2026-10-31T18:25:16.141Z" hostname="runnervm48cm3" time="0.031">
+  <properties/>
+  <testcase name="validatorRejectsMalformedCommands" classname="com.aistock.assistant.utils.ParsingTest" time="0.001"/>
+  <testcase name="moneyParsing" classname="com.aistock.assistant.utils.ParsingTest" time="0.001"/>
+  <testcase name="lineTotalsAreExactIntegers" classname="com.aistock.assistant.utils.ParsingTest" time="0.0"/>
+  <testcase name="moneyFormattingUsesIndianGrouping" classname="com.aistock.assistant.utils.ParsingTest" time="0.0"/>
+  <testcase name="tamilAndTanglish" classname="com.aistock.assistant.utils.ParsingTest" time="0.006"/>
+  <testcase name="datePhrases" classname="com.aistock.assistant.utils.ParsingTest" time="0.001"/>
+  <testcase name="numberWords" classname="com.aistock.assistant.utils.ParsingTest" time="0.0"/>
+  <testcase name="dateRangesUseLocalDayBoundaries" classname="com.aistock.assistant.utils.ParsingTest" time="0.001"/>
+  <testcase name="entitiesAreExtracted" classname="com.aistock.assistant.utils.ParsingTest" time="0.008"/>
+  <testcase name="nameMatching" classname="com.aistock.assistant.utils.ParsingTest" time="0.002"/>
+  <testcase name="specificationExamples" classname="com.aistock.assistant.utils.ParsingTest" time="0.005"/>
+  <testcase name="quantityAndUnitParsing" classname="com.aistock.assistant.utils.ParsingTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

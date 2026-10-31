@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.conversation.StockyOwnerCheckTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-10-31T18:25:13.754Z" hostname="runnervm48cm3" time="0.002">
+  <properties/>
+  <testcase name="the_model_cannot_confirm_a_payment_by_itself" classname="com.aistock.assistant.conversation.StockyOwnerCheckTest" time="0.002"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
