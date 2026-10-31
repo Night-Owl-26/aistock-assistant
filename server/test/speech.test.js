@@ -218,7 +218,10 @@ test('Sarvam out of credit: Gemini hears and speaks instead, and Sarvam rests in
   calls.length = 0
   r = await api.recognize({ audio: 'AAAA', language: 'ta-IN', phrases: [] })
   assert.ok(calls.every(u => !u.startsWith('https://sarvam.test')), 'no time lost on Sarvam while it rests')
-  const t = await api.synthesize({ text: 'Shirt XL 10 இருக்கு', language: 'ta-IN' })
+  let ttsBody = null
+  const f2 = async (url, init) => { ttsBody = JSON.parse(init.body); return f(url, init) }
+  const t = await speechApi(cfg, f2).synthesize({ text: 'Shirt XL 10 இருக்கு', language: 'ta-IN' })
+  assert.equal(ttsBody.contents[0].parts[0].text, 'Shirt XL 10 இருக்கு', 'only the reply is sent to be spoken, no instructions')
   assert.equal(t.status, 200)
   assert.equal(t.provider, 'gemini')
   assert.ok(Buffer.from(t.audio, 'base64').subarray(0, 4).toString() === 'RIFF')

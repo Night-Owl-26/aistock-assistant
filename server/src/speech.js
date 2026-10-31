@@ -110,11 +110,11 @@ export function speechApi(cfg, fetchImpl = fetch) {
   async function synthesizeGemini({ text, language }) {
     const model = await geminiTtsModel()
     if (!model) return { status: 503, error: 'This Gemini key has no text-to-speech model.' }
-    const style = language === 'ta-IN' ? 'Read this aloud the way a friendly shop assistant in Tamil Nadu talks, warm and natural, at a normal pace:' : 'Read this aloud in a friendly Indian English voice, natural pace:'
+    // Only the reply itself: a style note in front of it ("Read this aloud ...") was sometimes spoken out loud too.
     const r = await fetchImpl(`${cfg.geminiBase}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST', headers: gHeaders(), signal: AbortSignal.timeout(20_000),
       body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: `${style}\n${text.slice(0, 2000)}` }] }],
+        contents: [{ role: 'user', parts: [{ text: text.slice(0, 2000) }] }],
         generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: cfg.geminiTtsVoice } } } },
       }),
     })
