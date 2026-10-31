@@ -95,6 +95,20 @@ class BusinessTools(
         return parts.joinToString(" | ")
     }
 
+    /** Anyone the owner may call or message: a customer, else a supplier, else a staff member. Returns name, phone, customer. */
+    private suspend fun contact(who: String): Triple<String, String, PartyRef?> {
+        val (cust, _) = customer(who)
+        if (cust != null) return Triple(cust.name, cust.phone, cust)
+        when (val m = NameMatcher.match(who, backend.parties(PartyKind.SUPPLIER)) { it.name }) {
+            is Match.Exact -> return Triple(m.item.name, m.item.phone, null)
+            is Match.Suggest -> return Triple(m.item.name, m.item.phone, null)
+            is Match.Multiple -> throw Ask("Several suppliers match \"$who\": ${m.items.take(5).joinToString(", ") { it.name }}. Ask the owner which one.")
+            Match.None -> {}
+        }
+        val staff = business.staff().firstOrNull { NameMatcher.key(it.name) == NameMatcher.key(who) }
+        return Triple(staff?.name ?: who.trim(), staff?.phone.orEmpty(), null)
+    }
+
     private suspend fun customer(name: String?): Pair<PartyRef?, String?> {
         if (name == null) return null to null
         return when (val m = NameMatcher.match(name, backend.parties(PartyKind.CUSTOMER)) { it.name }) {
@@ -371,9 +385,7 @@ class BusinessTools(
             "draft_message" -> {
                 val who = a(call, "customer") ?: return "Say who the message is for."
                 val text = a(call, "message") ?: return "Write the message text in the message argument."
-                val (cust, _) = customer(who)
-                val phone = cust?.phone.orEmpty()
-                val name = cust?.name ?: who
+                val (name, phone, cust) = contact(who)
                 if (phone.isBlank()) fx.actions.add(ReplyAction("SHARE", "Share message", text = text.take(1000), person = name, customerId = cust?.id))
                 else {
                     fx.actions.add(ReplyAction("WHATSAPP", "Open in WhatsApp", phone, text.take(1000), name, cust?.id))
@@ -385,10 +397,9 @@ class BusinessTools(
 
             "call_customer" -> {
                 val who = a(call, "customer") ?: return "Say who to call."
-                val (cust, _) = customer(who)
-                val phone = cust?.phone.orEmpty().ifBlank { business.staff().firstOrNull { NameMatcher.key(it.name) == NameMatcher.key(who) }?.phone.orEmpty() }
-                if (phone.isBlank()) return "No phone number is saved for $who. Ask for the number or suggest adding it to the customer."
-                fx.actions.add(ReplyAction("CALL", "Call ${cust?.name ?: who}", phone, person = cust?.name ?: who, customerId = cust?.id))
+                val (name, phone, cust) = contact(who)
+                if (phone.isBlank()) return "No phone number is saved for $name. Ask for the number or suggest adding it to their details."
+                fx.actions.add(ReplyAction("CALL", "Call $name", phone, person = name, customerId = cust?.id))
                 return "CALL BUTTON SHOWN (not dialled): the owner taps it to open the phone's dialler. After the call, ask how it went and offer propose_call_result."
             }
 
@@ -482,9 +493,9 @@ class BusinessTools(
                 s("ref", "Person or topic of the follow-up.", true), s("result", "What happened.", true), s("next_due", WHEN), s("next_note", "Next follow-up about what."))),
             ToolSpec("propose_reminder", "Propose a reminder notification for the owner.", listOf(s("text", "What to remind.", true), s("when", WHEN, true))),
             ToolSpec("customer_history", "A customer's balance, recent purchases and payments, follow-ups and contacts.", listOf(s("customer", "Customer name.", true))),
-            ToolSpec("draft_message", "Prepare a message to a customer. You write the text (in the owner's language). The app shows it with WhatsApp/SMS buttons; it is NOT sent until the owner sends it.", listOf(
+            ToolSpec("draft_message", "Prepare a message to a customer, supplier or staff member, for example asking a supplier for stock or transfer details. You write the text (in the owner's language, polite). The app shows it with WhatsApp/SMS buttons; it is NOT sent until the owner sends it.", listOf(
                 s("customer", "Who.", true), s("message", "The full message text.", true))),
-            ToolSpec("call_customer", "Show a button that opens the phone dialler with the customer's number. It does not dial by itself.", listOf(s("customer", "Who.", true))),
+            ToolSpec("call_customer", "Show a button that opens the phone dialler with a customer's, supplier's or staff member's number. It does not dial by itself.", listOf(s("customer", "Who.", true))),
             ToolSpec("propose_call_result", "Propose saving how a call went; closes that person's pending follow-up and can book the next.", listOf(
                 s("customer", "Who was called.", true), s("result", "What happened.", true), s("next_due", WHEN), s("next_note", "Next follow-up about what."))),
             ToolSpec("propose_expiry_batch", "Propose noting a batch's expiry date (grocery, food, medicine).", listOf(

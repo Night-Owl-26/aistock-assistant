@@ -373,7 +373,11 @@ private fun Bubble(item: ChatItem, busy: Boolean, vm: AssistantViewModel) {
                     Column(verticalArrangement = Arrangement.spacedBy(6.dp), modifier = Modifier.padding(top = 6.dp)) {
                         for (a in item.actions) {
                             if (a.text.isNotBlank() && a.kind != "CALL" && a === item.actions.first()) Text(a.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(bottom = 4.dp))
-                            Button(onClick = { com.aistock.assistant.features.work.handOff(c, a.kind, a.phone, a.text); vm.handedOff(a) }, modifier = Modifier.fillMaxWidth()) { Text(a.label) }
+                            Button(onClick = {
+                                // A call goes through the call tracker, so Follower asks how it went when the owner comes back.
+                                if (a.kind == "CALL") com.aistock.assistant.features.calls.CallTracker.call(c, a.person.ifBlank { a.phone }, a.phone, a.customerId, if (a.customerId != null) com.aistock.assistant.ai.PartyKind.CUSTOMER else null)
+                                else { com.aistock.assistant.features.work.handOff(c, a.kind, a.phone, a.text); vm.handedOff(a) }
+                            }, modifier = Modifier.fillMaxWidth()) { Text(a.label) }
                         }
                         Text(stringResource(R.string.not_sent_note), style = MaterialTheme.typography.labelSmall)
                     }
