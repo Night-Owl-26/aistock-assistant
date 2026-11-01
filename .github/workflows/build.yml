@@ -67,8 +67,11 @@ jobs:
               -storepass "$KS_PW" -keypass "$KS_PW" -dname "CN=Follower throwaway test key" >/dev/null 2>&1
             echo "signed=throwaway" >> "$GITHUB_OUTPUT"
           fi
-          RELEASE_STORE_FILE="$KS" RELEASE_STORE_PASSWORD="$KS_PW" RELEASE_KEY_ALIAS="${KS_ALIAS:-follower}" \
-            ./gradlew assembleRelease bundleRelease --console=plain 2>&1 | tee release.log
+          export RELEASE_STORE_FILE="$KS" RELEASE_STORE_PASSWORD="$KS_PW" RELEASE_KEY_ALIAS="${KS_ALIAS:-follower}"
+          # The same release build with x86_64 added, only to run it on the CI emulator; never published.
+          ./gradlew assembleRelease -PwithX86 --console=plain 2>&1 | tee release.log
+          mkdir -p ciapk/release && cp app/build/outputs/apk/release/app-release.apk ciapk/release/app-release-emulator.apk
+          ./gradlew assembleRelease bundleRelease --console=plain 2>&1 | tee -a release.log
           rm -f "$KS"
 
       - name: Verify the release APK (not debuggable, HTTPS only, properly signed, no AI key)
@@ -101,12 +104,13 @@ jobs:
 
       - name: Upload APKs
         if: steps.assemble.outcome == 'success'
+        run: mkdir -p ciapk/debug && cp app/build/outputs/apk/debug/app-debug.apk ciapk/debug/
+      - name: Upload test APKs for the emulator
+        if: steps.assemble.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: AIStockAssistant-debug-apk
-          path: |
-            app/build/outputs/apk/debug/*.apk
-            app/build/outputs/apk/release/*.apk
+          path: ciapk/
 
       - name: Publish results branch
         if: always()
@@ -195,7 +199,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: python3 tools/smoke.py apk/debug/app-debug.apk device-out; python3 tools/release_smoke.py apk/release/app-release.apk device-out/release
+          script: python3 tools/smoke.py apk/debug/app-debug.apk device-out; python3 tools/release_smoke.py apk/release/app-release-emulator.apk device-out/release
       - name: Publish device results branch
         if: always()
         env:

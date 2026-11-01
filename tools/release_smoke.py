@@ -84,12 +84,16 @@ def shot(name):
     open(os.path.join(OUT, f"{n_shot[0]:02d}-{name}.png"), "wb").write(adb("exec-out", "screencap", "-p", binary=True))
 
 say("uninstall test build:", adb("uninstall", PKG).strip())
-say("install release:", adb("install", "-r", APK, timeout=240).strip())
+inst = adb("install", "-r", APK, timeout=240).strip()
+say("install release:", inst)
+if "Success" not in inst:
+    problems.append("release APK did not install: " + inst[-160:])
+    open(os.path.join(OUT, "result.txt"), "w").write("FAIL\n" + "\n".join(problems) + "\n"); sys.exit(0)
 adb("logcat", "-c")
 # Android itself must refuse to treat the release app as debuggable.
 runas = adb("shell", "run-as", PKG, "ls")
 say("run-as:", runas.strip()[:120])
-if "not debuggable" not in runas: problems.append("release app is debuggable (run-as worked)")
+if "not debuggable" not in runas: problems.append("release app is debuggable (run-as answered: " + runas.strip()[:80] + ")")
 flags = adb("shell", "dumpsys", "package", PKG)
 if re.search(r"flags=\[[^\]]*DEBUGGABLE", flags): problems.append("package flags show DEBUGGABLE")
 

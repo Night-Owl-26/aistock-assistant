@@ -12,7 +12,11 @@ android {
 
     defaultConfig {
         // Phones are ARM. The emulator test build adds x86_64 (see the debug build type); the release app does not carry it.
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+        ndk {
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a")
+            // Only for the release check on the x86_64 emulator in CI (-PwithX86); the published release never has it.
+            if (project.hasProperty("withX86")) abiFilters += "x86_64"
+        }
         applicationId = "com.aistock.assistant"
         minSdk = 26
         targetSdk = 36
