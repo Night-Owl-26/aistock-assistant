@@ -424,28 +424,25 @@ check("payment")
 step("settings: dark mode and Tamil")
 tap("More", exact=True); scroll_to("Settings"); tap("Settings"); expect("Language", "settings"); shot("settings")
 if not scroll_to("AI Provider"): problems.append("settings: AI Provider section missing")
-step("AI connection check (network path to Google, no key)")
-if scroll_to("My Follower account"):
-    tap("My Follower account"); time.sleep(1); tap("My own Gemini key on this phone (testing)"); time.sleep(2)
-if scroll_to("On this phone (works offline)"):
-    tap("On this phone (works offline)"); time.sleep(1); tap("Gemini AI when online"); time.sleep(2)
+step("AI connection check: only through the Follower server; no own-key option")
+if find("My own Gemini key") or find("Paste your Gemini"): problems.append("own AI key option still in Settings")
 scroll_to("Check the AI connection"); tap("Check the AI connection")
-time.sleep(25); scroll_to("AI key", 4); shot("ai-connection-check")
-if not find("AI key"):
-    problems.append("AI connection check did not finish")
-if not find("✓ Secure connection to Google"):
-    problems.append("AI connection check: could not reach Google from the emulator"); say("  !! no secure connection to Google")
-else:
-    say("  reached Google AI server")
-if scroll_to("My own Gemini key on this phone"):
-    tap("My own Gemini key on this phone"); time.sleep(1); tap("My Follower account (recommended)"); time.sleep(1)
+time.sleep(15); scroll_to("Account and plan", 4); shot("ai-connection-check")
+if not find("✓ Follower server answers"): problems.append("AI connection check: Follower server not reached"); say("  !! server check failed")
+if not find("✓ Account and plan"): problems.append("AI connection check: account and plan not confirmed")
 for _ in range(10): adb("shell", "input", "swipe", "540", "700", "540", "1700", "200")
 time.sleep(1)
 step("hands-free listening service")
 for perm in ("android.permission.RECORD_AUDIO", "android.permission.POST_NOTIFICATIONS"):
     adb("shell", "pm", "grant", PKG, perm)
 scroll_to("hands-free"); shot("settings-handsfree")
-tap("hands-free"); time.sleep(6)
+tap("hands-free"); time.sleep(2)
+if expect("Turn on \"Hey Stocky\"?", "microphone explanation before hands-free", 8): shot("handsfree-consent")
+tap("Turn on", exact=True, required=False); time.sleep(4)
+# Android's own "run in background" question after the explanation.
+for label in ("Allow", "ALLOW"):
+    if tap(label, exact=True, secs=4, required=False): break
+time.sleep(3)
 svc = adb("shell", "dumpsys", "activity", "services", PKG)
 if "HandsFreeService" not in svc:
     problems.append("hands-free service did not start"); say("  !! hands-free service not running")

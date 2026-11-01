@@ -36,7 +36,7 @@ object LlmProblem {
             val d = e.detail.replace("\n", " ").trim().take(160)
             val tail = if (d.isNotBlank()) " ($d)" else ""
             return when (e.status) {
-                400, 401, 403 -> if (d.contains("key", true) || e.status != 400) t("Google did not accept the AI key. Please check the key in More > Settings > AI Provider.", "AI key-ஐ Google ஏற்கவில்லை. மேலும் > அமைப்புகள் > AI வழங்குநர்-ல் key-ஐ சரிபார்க்கவும்.") + tail
+                400, 401, 403 -> if (d.contains("key", true) || e.status != 400) t("The Follower server's AI key was not accepted by Google. The on-device rules are used meanwhile; please tell Follower support.", "Follower server-ன் AI key-ஐ Google ஏற்கல. அதுவரை phone-லயே இருக்கிற rules வேலை செய்யும்; Follower support-க்கு சொல்லுங்க.") + tail
                     else t("The AI service rejected the request.", "AI சேவை கோரிக்கையை நிராகரித்தது.") + tail
                 402 -> d.ifBlank { t("Your Follower plan has ended.", "உங்கள் Follower திட்டம் முடிந்தது.") }
                 404 -> t("The AI model name was not found.", "AI model பெயர் கிடைக்கவில்லை.") + tail
@@ -46,8 +46,8 @@ object LlmProblem {
         }
         if (!online) return t("There is no internet connection, so the AI could not be reached.", "இணைய இணைப்பு இல்லை; AI-ஐ அணுக முடியவில்லை.")
         if (e is java.net.UnknownHostException) return t(
-            "The phone is online but could not find Google's AI server (generativelanguage.googleapis.com). This is usually Private DNS, an ad-blocker or a VPN blocking Google. Set Settings > Network > Private DNS to Automatic or Off, turn off ad-blocker/VPN apps, or switch between Wi-Fi and mobile data, then try again.",
-            "போன் இணையத்தில் உள்ளது, ஆனால் Google AI சர்வரை (generativelanguage.googleapis.com) கண்டுபிடிக்க முடியவில்லை. பொதுவாக Private DNS, ad-blocker அல்லது VPN Google-ஐ தடுக்கிறது. Settings > Network > Private DNS-ஐ Automatic அல்லது Off ஆக்குங்கள், ad-blocker/VPN-ஐ நிறுத்துங்கள், அல்லது Wi-Fi/மொபைல் டேட்டா மாற்றி மீண்டும் முயற்சிக்கவும்.")
+            "The phone is online but could not find the Follower server. This is usually Private DNS, an ad-blocker or a VPN blocking it. Set Settings > Network > Private DNS to Automatic or Off, turn off ad-blocker/VPN apps, or switch between Wi-Fi and mobile data, then try again.",
+            "போன் இணையத்தில் உள்ளது, ஆனால் Follower சர்வரை கண்டுபிடிக்க முடியவில்லை. பொதுவாக Private DNS, ad-blocker அல்லது VPN அதைத் தடுக்கிறது. Settings > Network > Private DNS-ஐ Automatic அல்லது Off ஆக்குங்கள், ad-blocker/VPN-ஐ நிறுத்துங்கள், அல்லது Wi-Fi/மொபைல் டேட்டா மாற்றி மீண்டும் முயற்சிக்கவும்.")
         if (e is java.net.ConnectException || e is javax.net.ssl.SSLException) return t("Google's AI server could not be connected", "Google AI சர்வருடன் இணைக்க முடியவில்லை") + " (" + (e.message ?: e.javaClass.simpleName).take(120) + "). " + t("A Wi-Fi login page, firewall or VPN may be blocking it.", "Wi-Fi login பக்கம், firewall அல்லது VPN தடுக்கலாம்.")
         if (e is java.net.SocketTimeoutException) return t("The AI took too long to answer. Please try again.", "AI பதில் தர தாமதமானது. மீண்டும் முயற்சிக்கவும்.")
         return t("The AI could not be reached", "AI-ஐ அணுக முடியவில்லை") + " (" + (e.message ?: e.javaClass.simpleName).take(120) + ")."

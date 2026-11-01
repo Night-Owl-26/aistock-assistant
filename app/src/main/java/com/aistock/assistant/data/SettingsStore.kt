@@ -38,8 +38,6 @@ import javax.inject.Singleton
 private val Context.dataStore by preferencesDataStore(name = "settings")
 
 /** Google Gemini through its chat-completions compatible address. Both can be changed in Settings. */
-const val GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions"
-const val GEMINI_MODEL = "gemini-flash-latest"
 
 data class Prefs(
     val loaded: Boolean = false,
@@ -49,11 +47,6 @@ data class Prefs(
     /** Colour of the app: teal, blue, purple, saffron, rose, or "phone" (Android 12+ wallpaper colours). */
     val colorTheme: String = "teal",
     val ttsEnabled: Boolean = true,
-    /** local = on-device rules only, cloud = use the configured AI service when online */
-    val aiMode: String = "local",
-    val cloudEndpoint: String = "",
-    val cloudModel: String = "",
-    val cloudKeySaved: Boolean = false,
     val allowNegativeStock: Boolean = false,
     val lowStockAlerts: Boolean = true,
     val currencyCode: String = "INR",
@@ -84,7 +77,6 @@ data class Prefs(
     val planPending: Int = 0,
 ) {
     val tamil: Boolean get() = language == "ta"
-    val cloudReady: Boolean get() = cloudEndpoint.startsWith("https://") && cloudModel.isNotBlank() && cloudKeySaved
 }
 
 /** App preferences (DataStore). Nothing here is secret except the AI key, which is encrypted with the Android Keystore. */
@@ -132,10 +124,6 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
             theme = p[K.theme] ?: "system",
             colorTheme = p[K.colorTheme] ?: "teal",
             ttsEnabled = p[K.tts] ?: true,
-            aiMode = p[K.aiMode] ?: "local",
-            cloudEndpoint = p[K.endpoint]?.ifBlank { null } ?: GEMINI_ENDPOINT,
-            cloudModel = p[K.model]?.ifBlank { null } ?: GEMINI_MODEL,
-            cloudKeySaved = !p[K.key].isNullOrEmpty(),
             allowNegativeStock = p[K.negative] ?: false,
             lowStockAlerts = p[K.alerts] ?: true,
             currencyCode = p[K.currencyCode] ?: "INR",
@@ -147,8 +135,7 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
             serverUrl = p[K.serverUrl].orEmpty(),
             serverEmail = p[K.serverEmail].orEmpty(),
             serverBusinessId = p[K.serverBusiness].orEmpty(),
-            // Phones that already used their own key keep doing so until they sign in.
-            aiSource = p[K.aiSource] ?: (if (!p[K.key].isNullOrEmpty()) "key" else "server"),
+            aiSource = "server",
             liveVoice = p[K.liveVoice] ?: false,
             cloudSpeech = p[K.cloudSpeech] ?: true,
             planStatus = p[K.planStatus].orEmpty(),
@@ -162,7 +149,15 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
     /** Latest preferences for code that cannot suspend. */
     val current: StateFlow<Prefs> = flow.stateIn(scope, SharingStarted.Eagerly, Prefs())
 
-    init { scope.launch { current.collect { Access.follow(it) } } }
+    init {
+        scope.launch { current.collect { Access.follow(it) } }
+        // Older versions could keep the owner's own AI key on the phone. That option is gone: remove what they saved.
+        scope.launch {
+            try {
+                context.dataStore.edit { if (it.contains(K.key) || it.contains(K.endpoint) || it.contains(K.model) || it.contains(K.aiMode)) { it.remove(K.key); it.remove(K.endpoint); it.remove(K.model); it.remove(K.aiMode); it[K.aiSource] = "server" } }
+            } catch (e: Exception) { }
+        }
+    }
 
     override fun allowNegativeStock(): Boolean = current.value.allowNegativeStock
 
@@ -187,7 +182,6 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
 
     suspend fun setOwnerCheck(on: Boolean) = context.dataStore.edit { it[K.ownerCheck] = on }.let { }
     suspend fun setBriefingHour(h: Int) = context.dataStore.edit { it[K.briefing] = h }.let { }
-    suspend fun setAiSource(s: String) = context.dataStore.edit { it[K.aiSource] = s }.let { }
     suspend fun setLiveVoice(on: Boolean) = context.dataStore.edit { it[K.liveVoice] = on }.let { }
     suspend fun setCloudSpeech(on: Boolean) = context.dataStore.edit { it[K.cloudSpeech] = on }.let { }
 
@@ -226,26 +220,6 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
     suspend fun clearServerSession() { context.dataStore.edit { it.remove(K.session); it.remove(K.serverBusiness); it.remove(K.serverEmail); it.remove(K.planEnd); it.remove(K.planActive); it.remove(K.planStatus); it.remove(K.planPending) }; settle { it.serverBusinessId.isBlank() } }
 
     suspend fun setHandsFree(on: Boolean) = context.dataStore.edit { it[K.handsFree] = on }.let { }
-
-    suspend fun setAiMode(mode: String) = context.dataStore.edit { it[K.aiMode] = mode }.let { }
-
-    /** Saves the cloud AI settings. A blank key keeps the key that is already stored. Returns false if the key could not be protected. */
-    suspend fun setCloud(endpoint: String, model: String, apiKey: String): Boolean {
-        val enc = if (apiKey.isBlank()) null else (SecretBox.encrypt(apiKey.trim()) ?: return false)
-        context.dataStore.edit {
-            it[K.endpoint] = endpoint.trim()
-            it[K.model] = model.trim()
-            if (enc != null) { it[K.key] = enc; it[K.aiMode] = "cloud" }
-        }
-        return true
-    }
-
-    suspend fun clearCloudKey() = context.dataStore.edit { it.remove(K.key) }.let { }
-
-    suspend fun cloudKey(): String? {
-        val enc = context.dataStore.data.catch { emit(emptyPreferences()) }.first()[K.key] ?: return null
-        return SecretBox.decrypt(enc)
-    }
 
     suspend fun reset() {
         context.dataStore.edit { it.clear() }

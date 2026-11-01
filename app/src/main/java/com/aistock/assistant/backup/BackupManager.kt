@@ -156,6 +156,21 @@ class BackupManager @Inject constructor(
         return bos.toByteArray()
     }
 
+    /** Reads one zip entry, refusing anything that unpacks larger than [limit] (a "zip bomb"). */
+    private fun ZipInputStream.capped(limit: Long): ByteArray {
+        val bos = ByteArrayOutputStream()
+        val buf = ByteArray(64 * 1024)
+        var total = 0L
+        while (true) {
+            val n = read(buf)
+            if (n < 0) break
+            total += n
+            if (total > limit) throw BackupException(BackupException.TOO_LARGE)
+            bos.write(buf, 0, n)
+        }
+        return bos.toByteArray()
+    }
+
     private fun parse(bytes: ByteArray): Parsed {
         var manifestBytes: ByteArray? = null
         var dataBytes: ByteArray? = null
@@ -164,11 +179,13 @@ class BackupManager @Inject constructor(
                 while (true) {
                     val e = zip.nextEntry ?: break
                     when (e.name) {
-                        "manifest.json" -> manifestBytes = zip.readBytes()
-                        "data.json" -> dataBytes = zip.readBytes()
+                        "manifest.json" -> manifestBytes = zip.capped(1L * 1024 * 1024)
+                        "data.json" -> dataBytes = zip.capped(MAX_UNPACKED)
                     }
                 }
             }
+        } catch (e: BackupException) {
+            throw e
         } catch (e: Exception) {
             throw BackupException(BackupException.NOT_A_BACKUP)
         }
@@ -236,5 +253,6 @@ class BackupManager @Inject constructor(
         private const val FORMAT = 1
         private const val KEEP = 15
         private const val MAX_BYTES = 200L * 1024 * 1024
+        private const val MAX_UNPACKED = 400L * 1024 * 1024
     }
 }

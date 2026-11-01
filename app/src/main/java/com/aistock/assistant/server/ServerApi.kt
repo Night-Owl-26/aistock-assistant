@@ -52,7 +52,7 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
 
     private fun url(path: String): String {
         val b = server
-        if (!b.startsWith("https://") && !b.startsWith("http://10.0.2.2")) throw ServerException(0, "bad_url", "The server address must start with https://")
+        if (!secureAddress(b)) throw ServerException(0, "bad_url", "The server address must start with https://")
         return b + path
     }
 
@@ -101,6 +101,9 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
 
     // ---------------------------------------------------------------- account
 
+    /** HTTPS only; plain http only to the emulator's test server (10.0.2.2) in the test build, never in the release app. */
+    private fun secureAddress(u: String): Boolean = u.startsWith("https://") || (BuildConfig.DEBUG && u.startsWith("http://10.0.2.2"))
+
     /** The server this phone talks to: the one signed in to, else the one built into the app. */
     val server: String get() = base.ifBlank { BuildConfig.DEFAULT_SERVER }.trimEnd('/')
 
@@ -144,6 +147,7 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
     private fun claim(o: JSONObject) = PaymentClaim(o.optLong("id"), o.optString("planId"), o.optInt("amountMinor"), o.optString("utr"), o.optString("status"), o.optString("note"), o.optString("createdAt"))
 
     suspend fun health(url: String): JSONObject = withContext(Dispatchers.IO) {
+        if (!secureAddress(url.trim())) throw ServerException(0, "bad_url", "The server address must start with https://")
         val r = Http.get(url.trimEnd('/') + "/healthz")
         if (r.code != 200) throw ServerException(r.code, "unhealthy", "The server did not answer correctly (${r.code}).")
         JSONObject(r.body)

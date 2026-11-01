@@ -11,13 +11,13 @@ android {
     compileSdk = 36
 
     defaultConfig {
-        // Phones are ARM; x86_64 stays for the emulator test. Leaving out 32-bit x86 keeps the APK smaller.
-        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") }
+        // Phones are ARM. The emulator test build adds x86_64 (see the debug build type); the release app does not carry it.
+        ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
         applicationId = "com.aistock.assistant"
         minSdk = 26
         targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 2
+        versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // The Follower server the app signs in to. Not a secret (owners only type email and password);
         // another build can point elsewhere with -PfollowerServer=https://...
@@ -35,12 +35,28 @@ android {
         }
     }
 
+    // The release key is never in the repository: CI writes it from encrypted GitHub secrets to a temporary file
+    // and passes its path and passwords through these environment variables.
+    val releaseStore = System.getenv("RELEASE_STORE_FILE")?.let { file(it) }?.takeIf { it.exists() }
+    if (releaseStore != null) signingConfigs.create("release") {
+        storeFile = releaseStore
+        storePassword = System.getenv("RELEASE_STORE_PASSWORD")
+        keyAlias = System.getenv("RELEASE_KEY_ALIAS") ?: "follower"
+        keyPassword = System.getenv("RELEASE_KEY_PASSWORD") ?: System.getenv("RELEASE_STORE_PASSWORD")
+    }
+
     buildTypes {
         debug {
+            // Test build only: the emulator test needs x86_64 and a plain-http test server (src/debug).
             signingConfig = signingConfigs.getByName("debug")
+            ndk { abiFilters += "x86_64" }
         }
         release {
-            isMinifyEnabled = false
+            isDebuggable = false
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            if (releaseStore != null) signingConfig = signingConfigs.getByName("release")
         }
     }
 

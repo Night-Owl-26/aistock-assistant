@@ -6,8 +6,6 @@ import android.net.NetworkCapabilities
 import androidx.room.Room
 import com.aistock.assistant.ai.AssistantBackend
 import com.aistock.assistant.ai.llm.LlmClient
-import com.aistock.assistant.ai.llm.GeminiClient
-import com.aistock.assistant.ai.llm.OpenAiCompatClient
 import com.aistock.assistant.data.RoomAssistantBackend
 import com.aistock.assistant.data.SettingsStore
 import com.aistock.assistant.data.StockRules
@@ -85,25 +83,15 @@ class LlmSource(private val settings: SettingsStore, private val connectivity: C
     /** The step-by-step connection check shown in Settings. */
     suspend fun diagnose(): List<Check> {
         val p = settings.current.value
-        if (p.aiSource == "server") return diagnostics.runServer(server, p.serverUrl, p.tamil) { serverModel = it }
-        return diagnostics.run(settings.cloudKey(), p.cloudModel, p.tamil)
+        return diagnostics.runServer(server, p.serverUrl, p.tamil) { serverModel = it }
     }
 
-    suspend fun client(): LlmClient? {
-        val p = settings.current.value
-        // Signed in to the owner's AIStock server: the key stays on the server.
-        if (p.aiSource == "server" && server.signedIn) return com.aistock.assistant.ai.llm.ServerLlmClient(server, serverModel)
-        if (p.aiSource == "server") return null
-        if (p.aiMode != "cloud" || !p.cloudReady) return null
-        val key = settings.cloudKey()?.trim()?.takeIf { it.isNotEmpty() } ?: return null
-        // Google's own address gets Google's own API; anything else is treated as a chat-completions service.
-        return if (p.cloudEndpoint.contains("generativelanguage.googleapis.com")) GeminiClient(p.cloudModel.removePrefix("models/"), key)
-        else OpenAiCompatClient(p.cloudEndpoint, p.cloudModel, key)
-    }
+    /** Stocky's model: only through the signed-in Follower server, which holds the AI keys. No key ever lives on the phone. */
+    suspend fun client(): LlmClient? = if (server.signedIn) com.aistock.assistant.ai.llm.ServerLlmClient(server, serverModel) else null
 
     /** Sends one tiny message and reports what happened, in words the owner can act on. null = it works. */
     suspend fun test(): String? {
-        val c = client() ?: return "No key is saved yet."
+        val c = client() ?: return "Sign in to your Follower account first."
         return try {
             c.chat(listOf(com.aistock.assistant.ai.llm.LlmMessage.User("Say OK")), emptyList()); null
         } catch (e: kotlinx.coroutines.CancellationException) {

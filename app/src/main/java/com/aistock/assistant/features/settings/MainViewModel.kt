@@ -87,22 +87,15 @@ class MainViewModel @Inject constructor(
     suspend fun setTts(on: Boolean) = settings.setTts(on)
     suspend fun setAllowNegative(on: Boolean) = settings.setAllowNegative(on)
     suspend fun setLowStockAlerts(on: Boolean) = settings.setLowStockAlerts(on)
-    suspend fun setAiSource(s: String) = settings.setAiSource(s)
     suspend fun setLiveVoice(on: Boolean) = settings.setLiveVoice(on)
     suspend fun setCloudSpeech(on: Boolean) = settings.setCloudSpeech(on)
     suspend fun setBriefingHour(h: Int) { settings.setBriefingHour(h); alarms.scheduleBriefing(h) }
     suspend fun setOwnerCheck(on: Boolean) = settings.setOwnerCheck(on)
     suspend fun setHandsFree(on: Boolean) = settings.setHandsFree(on)
-    suspend fun setAiMode(mode: String) = settings.setAiMode(mode)
     suspend fun setImportOffered() = settings.setImportOffered()
-    suspend fun saveCloud(endpoint: String, model: String, key: String): Boolean {
-        com.aistock.assistant.ai.llm.GeminiClient.forget()
-        return settings.setCloud(endpoint, model, key)
-    }
     /** null = the AI answered; otherwise the reason it did not. */
     suspend fun testAi(): String? = llm.test()
     suspend fun diagnoseAi(): List<com.aistock.assistant.di.Check> = llm.diagnose()
-    suspend fun clearCloudKey() = settings.clearCloudKey()
 
     /** @return false when the PIN is not valid */
     suspend fun setPin(pin: String): Boolean {

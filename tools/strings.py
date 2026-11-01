@@ -354,7 +354,7 @@ S.update({
 "ai_requests_used": ("AI replies this period", "இந்தக் காலத்தில் AI பதில்கள்"),
 "voice_minutes_used": ("Voice minutes this period", "இந்தக் காலத்தில் குரல் நிமிடங்கள்"),
 "plan_inactive": ("Your plan has ended. Stocky AI is paused; everything else works.", "உங்கள் திட்டம் முடிந்தது. Stocky AI நிறுத்தப்பட்டுள்ளது; மற்றவை வேலை செய்யும்."),
-"server_no_key": ("The server has no Gemini key yet.", "சர்வரில் Gemini key இல்லை."),
+"server_no_key": ("The Follower server is not set up for AI yet. Please tell Follower support.", "Follower server-ல AI இன்னும் set up ஆகல. Follower support-க்கு சொல்லுங்க."),
 "plan_how_to_pay": ("To start or renew a plan, pay the person who runs your Follower server; they activate it. In-app payment is not available yet.", "திட்டத்தைத் தொடங்க அல்லது புதுப்பிக்க, உங்கள் Follower சர்வர் நடத்துபவருக்குப் பணம் செலுத்துங்கள். ஆப்பில் பணம் செலுத்துதல் இன்னும் இல்லை."),
 "refresh": ("Refresh", "புதுப்பி"),
 "backup_to_server": ("Back up to server", "சர்வரில் backup"),
@@ -519,6 +519,10 @@ S.update({
 "upi_qr": ("UPI QR code for this plan", "இந்த plan-க்கான UPI QR code"),
 "upi_qr_help": ("Scan with GPay, PhonePe, Paytm or any UPI app; the amount is filled in. Then send the transaction ID below.", "GPay, PhonePe, Paytm அல்லது எந்த UPI app-லயும் scan பண்ணுங்க; தொகை தானா வரும். அப்புறம் கீழே transaction ID அனுப்புங்க."),
 "payment_card_done": ("Payment received. Your plan is active.", "பணம் வந்துருச்சு. உங்க plan ஆரம்பிச்சாச்சு."),
+"handsfree_consent_title": ("Turn on \"Hey Stocky\"?", "\"Hey Stocky\"-ஐ on பண்ணட்டுமா?"),
+"handsfree_consent_body": ("The microphone stays on in the background, also with the phone locked, while a notification shows it. Until you say \"Hey Stocky\" nothing leaves the phone: the name is recognised on the phone itself and no sound is kept. After \"Hey Stocky\", your request is sent to the Follower server to understand it (with Server voice on, as a short recording), then the recording is discarded. Turn it off any time from the notification or here.\n\nNext, Android asks for the microphone, notifications, and to let Follower run without battery limits (otherwise many phones stop it).", "Notification காட்டிக்கிட்டே, phone lock ஆனாலும் mic background-ல on-ஆ இருக்கும். \"Hey Stocky\" சொல்லும் வரை எதுவும் phone-ஐ விட்டு போகாது: பெயரை phone-லயே கண்டுபிடிக்கும், சத்தம் எதுவும் சேமிக்காது. \"Hey Stocky\"-க்கு அப்புறம் உங்க request Follower server-க்கு புரிஞ்சுக்க அனுப்பப்படும் (Server voice on-ஆ இருந்தா சின்ன recording-ஆ), அப்புறம் அந்த recording அழிக்கப்படும். Notification-ல இருந்தோ இங்கிருந்தோ எப்போ வேணும்னாலும் off பண்ணலாம்.\n\nஅடுத்து Android mic, notification, battery limit இல்லாம ஓட அனுமதி கேட்கும் (இல்லன்னா நிறைய phone-ல நின்னுடும்)."),
+"handsfree_consent_ok": ("Turn on", "On பண்ணு"),
+"cloud_speech_privacy": ("With Server voice, each spoken request is sent as a short recording to your Follower server, which turns it into text with Gemini, Sarvam AI or Google Cloud and does not keep it. Turn it off to use the phone's own speech recognition.", "Server voice on-ஆ இருந்தா, ஒவ்வொரு request-ம் சின்ன recording-ஆ Follower server-க்கு போகும்; அது Gemini, Sarvam AI அல்லது Google Cloud மூலம் எழுத்தா மாத்தும், recording-ஐ வெச்சுக்காது. Phone-ன் சொந்த speech recognition வேணும்னா off பண்ணுங்க."),
 "plan_state_plan_ended": ("Your plan has ended: read-only", "உங்க plan முடிஞ்சுருச்சு: பார்க்க மட்டும்"),
 "plan_state_trial": ("Free trial: %1$d days left", "Free trial: இன்னும் %1$d நாள்"),
 "plan_state_paid": ("%1$s plan until %2$s", "%1$s plan %2$s வரை"),
@@ -608,6 +612,7 @@ missing = sorted(used - set(S))
 used |= {"shortcut_talk_short", "shortcut_talk_long"}
 unused = sorted(set(S) - used)
 bad = [k for k, (en, ta) in S.items() if sorted(re.findall(r"%\d\$[sd]", en)) != sorted(re.findall(r"%\d\$[sd]", ta))]
+for k in unused: del S[k]  # texts no screen uses are left out of the app
 write(os.path.join(ROOT, "app/src/main/res/values/strings.xml"), 0)
 write(os.path.join(ROOT, "app/src/main/res/values-ta/strings.xml"), 1)
 print(f"strings: {len(S)}  used: {len(used)}  missing: {missing}  placeholder mismatch: {bad}  unused: {unused}")

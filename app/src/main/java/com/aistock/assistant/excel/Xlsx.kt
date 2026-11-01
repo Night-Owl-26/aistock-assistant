@@ -345,8 +345,12 @@ object Tables {
 }
 
 object Csv {
+    /** Larger files are refused instead of filling the phone's memory. */
+    const val MAX_FILE = 40 * 1024 * 1024
     fun read(input: InputStream): List<List<String>> {
-        var text = input.readBytes().toString(Charsets.UTF_8)
+        val bytes = input.readBytes()
+        require(bytes.size <= MAX_FILE) { "File is too large" }
+        var text = bytes.toString(Charsets.UTF_8)
         if (text.startsWith("﻿")) text = text.substring(1)
         return Tables.rectangular(parse(text))
     }
@@ -382,7 +386,10 @@ object Csv {
         val sb = StringBuilder("﻿")
         for (r in rows) {
             sb.append(r.joinToString(",") { c ->
-                val s = when (c) { null -> ""; is BigDecimal -> c.toPlainString(); else -> c.toString() }
+                val raw = when (c) { null -> ""; is BigDecimal -> c.toPlainString(); else -> c.toString() }
+                // A text cell that starts like a formula (=, +, -, @) would run as one when the file is opened in
+                // Excel or Sheets ("CSV injection"): it is written with a leading apostrophe so it stays text.
+                val s = if (c is String && raw.isNotEmpty() && raw[0] in "=+-@\t\r") "'" + raw else raw
                 if (s.any { it == ',' || it == '"' || it == '\n' || it == '\r' }) "\"" + s.replace("\"", "\"\"") + "\"" else s
             })
             sb.append("\r\n")

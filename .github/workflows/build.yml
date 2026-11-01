@@ -47,12 +47,66 @@ jobs:
           set -o pipefail
           ./gradlew testDebugUnitTest --continue --console=plain 2>&1 | tee test.log
 
-      - name: Upload APK
+      - name: Build release APK and bundle (not debuggable, minified)
+        id: release
+        continue-on-error: true
+        env:
+          KS_B64: ${{ secrets.RELEASE_KEYSTORE_B64 }}
+          KS_PW: ${{ secrets.RELEASE_STORE_PASSWORD }}
+          KS_ALIAS: ${{ secrets.RELEASE_KEY_ALIAS }}
+        run: |
+          set -o pipefail
+          KS="$RUNNER_TEMP/release.jks"
+          if [ -n "$KS_B64" ] && [ -n "$KS_PW" ]; then
+            echo "$KS_B64" | base64 -d > "$KS"; echo "signed=real" >> "$GITHUB_OUTPUT"
+          else
+            # No release key in the secrets yet: sign with a throwaway key so the emulator can still test this
+            # exact build. A build signed this way is never published.
+            KS_PW=throwaway-$RANDOM$RANDOM; KS_ALIAS=follower
+            keytool -genkeypair -keystore "$KS" -storetype PKCS12 -alias follower -keyalg RSA -keysize 2048 -validity 30 \
+              -storepass "$KS_PW" -keypass "$KS_PW" -dname "CN=Follower throwaway test key" >/dev/null 2>&1
+            echo "signed=throwaway" >> "$GITHUB_OUTPUT"
+          fi
+          RELEASE_STORE_FILE="$KS" RELEASE_STORE_PASSWORD="$KS_PW" RELEASE_KEY_ALIAS="${KS_ALIAS:-follower}" \
+            ./gradlew assembleRelease bundleRelease --console=plain 2>&1 | tee release.log
+          rm -f "$KS"
+
+      - name: Verify the release APK (not debuggable, HTTPS only, properly signed, no AI key)
+        id: verify
+        if: steps.release.outcome == 'success'
+        continue-on-error: true
+        run: |
+          set -eo pipefail
+          BT=$(ls -d "$ANDROID_HOME"/build-tools/* | sort -V | tail -1)
+          APK=app/build/outputs/apk/release/app-release.apk
+          {
+            echo "== badging"; "$BT/aapt2" dump badging "$APK"
+            echo "== manifest"; "$BT/aapt2" dump xmltree --file AndroidManifest.xml "$APK"
+            echo "== signature"; "$BT/apksigner" verify --verbose --print-certs "$APK"
+          } > release-check.txt 2>&1
+          fail() { echo "RELEASE CHECK FAILED: $1" | tee -a release-check.txt; exit 1; }
+          grep -q "application-debuggable" release-check.txt && fail "debuggable"
+          grep -q 'usesCleartextTraffic.*=false' release-check.txt || fail "cleartext traffic not switched off"
+          grep -q "networkSecurityConfig" release-check.txt && fail "test network config inside the release"
+          grep -qi "PreviewActivity" release-check.txt && fail "debug preview activity inside the release"
+          grep -q "Verified using v2 scheme (APK Signature Scheme v2): true" release-check.txt || fail "no v2 signature"
+          grep -q "CN=Android Debug" release-check.txt && fail "signed with the debug key"
+          unzip -l "$APK" > apk-files.txt
+          grep -q "lib/x86_64/" apk-files.txt && fail "emulator-only native code inside the release"
+          unzip -p "$APK" 'classes*.dex' > dex.bin
+          grep -aqE 'AIza[0-9A-Za-z_-]{30}|sk-or-v1-[0-9a-f]{20}|cloud_key_enc' dex.bin && fail "an AI key or key storage in the app"
+          grep -aq 'http://10.0.2.2' dex.bin && fail "test server address inside the release"
+          rm -f dex.bin
+          echo "RELEASE CHECK PASSED" | tee -a release-check.txt
+
+      - name: Upload APKs
         if: steps.assemble.outcome == 'success'
         uses: actions/upload-artifact@v4
         with:
           name: AIStockAssistant-debug-apk
-          path: app/build/outputs/apk/debug/*.apk
+          path: |
+            app/build/outputs/apk/debug/*.apk
+            app/build/outputs/apk/release/*.apk
 
       - name: Publish results branch
         if: always()
@@ -60,12 +114,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           mkdir -p out/tests
-          cp assemble.log test.log out/ 2>/dev/null || true
+          cp assemble.log test.log release.log release-check.txt out/ 2>/dev/null || true
           cp app/build/outputs/apk/debug/*.apk out/ 2>/dev/null || true
+          if [ "${{ steps.release.outputs.signed }}" = real ]; then
+            cp app/build/outputs/apk/release/app-release.apk app/build/outputs/bundle/release/app-release.aab out/ 2>/dev/null || true
+            cp app/build/outputs/mapping/release/mapping.txt out/ 2>/dev/null || true
+          fi
           cp app/build/test-results/testDebugUnitTest/*.xml out/tests/ 2>/dev/null || true
           cp -r app/schemas out/schemas 2>/dev/null || true
           echo "$GITHUB_SHA" > out/sha.txt
-          echo "assemble=${{ steps.assemble.outcome }} test=${{ steps.test.outcome }}" > out/status.txt
+          echo "assemble=${{ steps.assemble.outcome }} test=${{ steps.test.outcome }} release=${{ steps.release.outcome }} verify=${{ steps.verify.outcome }} signed=${{ steps.release.outputs.signed }}" > out/status.txt
           ls -la out > out/files.txt
           cd out
           git init -q -b ci-results
@@ -74,19 +132,20 @@ jobs:
           git push -f "https://x-access-token:${GITHUB_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" ci-results
 
       - name: Publish downloadable APK (release "latest")
-        if: steps.assemble.outcome == 'success' && steps.test.outcome == 'success'
+        if: steps.assemble.outcome == 'success' && steps.test.outcome == 'success' && steps.verify.outcome == 'success' && steps.release.outputs.signed == 'real'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cp app/build/outputs/apk/debug/app-debug.apk Follower.apk
+          cp app/build/outputs/apk/release/app-release.apk Follower.apk
+          cp app/build/outputs/bundle/release/app-release.aab Follower.aab
           gh release delete latest --yes --cleanup-tag || true
           sleep 3
-          gh release create latest Follower.apk --target "$GITHUB_SHA" \
-            --title "Follower - latest build" \
-            --notes "Debug build of commit $GITHUB_SHA. All unit tests passed. Download Follower.apk and open it on your Android phone to install."
+          gh release create latest Follower.apk Follower.aab --target "$GITHUB_SHA" \
+            --title "Follower - latest release build" \
+            --notes "Release build of commit $GITHUB_SHA: not debuggable, minified, signed with the Follower release key. Follower.apk installs on phones; Follower.aab is for Google Play."
 
       - name: Fail if build or tests failed
-        if: steps.assemble.outcome != 'success' || steps.test.outcome != 'success'
+        if: steps.assemble.outcome != 'success' || steps.test.outcome != 'success' || steps.release.outcome != 'success' || steps.verify.outcome != 'success'
         run: exit 1
 
   device-test:
@@ -136,7 +195,7 @@ jobs:
           profile: pixel_6
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -no-snapshot
-          script: python3 tools/smoke.py apk/app-debug.apk device-out
+          script: python3 tools/smoke.py apk/debug/app-debug.apk device-out; python3 tools/release_smoke.py apk/release/app-release.apk device-out/release
       - name: Publish device results branch
         if: always()
         env:

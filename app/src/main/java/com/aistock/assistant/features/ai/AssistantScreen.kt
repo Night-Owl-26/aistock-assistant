@@ -245,8 +245,6 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
                 Tag(
                     when {
                         prefs.aiSource == "server" && prefs.serverBusinessId.isNotBlank() && online -> stringResource(if (liveState != null) R.string.ai_live_on else R.string.ai_server_on)
-                        prefs.aiSource == "key" && prefs.aiMode == "cloud" && prefs.cloudReady && online -> stringResource(if (source == "cloud") R.string.ai_cloud_active else R.string.ai_cloud_ready)
-                        prefs.aiMode == "cloud" && prefs.cloudReady -> stringResource(R.string.ai_offline_local)
                         !online -> stringResource(R.string.ai_offline_local)
                         else -> stringResource(R.string.ai_local)
                     }

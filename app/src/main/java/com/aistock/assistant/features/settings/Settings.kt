@@ -147,12 +147,10 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
         } else toast(ctx.getString(R.string.handsfree_needs_mic))
     }
     var pinDialog by remember { mutableStateOf(false) }
+    // What "Hey Stocky" does with the microphone, shown before it is switched on.
+    var handsFreeConsent by remember { mutableStateOf(false) }
     var confirmSample by remember { mutableStateOf(false) }
     var confirmReset by remember { mutableStateOf(false) }
-    var endpoint by remember(prefs.cloudEndpoint) { mutableStateOf(prefs.cloudEndpoint) }
-    var model by remember(prefs.cloudModel) { mutableStateOf(prefs.cloudModel) }
-    var apiKey by remember { mutableStateOf("") }
-    var advanced by remember { mutableStateOf(false) }
     var testing by remember { mutableStateOf(false) }
     var testResult by remember { mutableStateOf("") }
     var testOk by remember { mutableStateOf(false) }
@@ -202,17 +200,28 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
             SwitchRow(stringResource(R.string.spoken_replies), stringResource(R.string.spoken_replies_sub), prefs.ttsEnabled) { scope.launch { vm.setTts(it) } }
             SwitchRow(stringResource(R.string.handsfree_setting), stringResource(R.string.handsfree_setting_sub), prefs.handsFree) { on ->
                 if (!on) { scope.launch { vm.setHandsFree(false) }; com.aistock.assistant.voice.HandsFree.stop(ctx) }
-                else {
+                else handsFreeConsent = true
+            }
+            Text(stringResource(R.string.handsfree_privacy), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (prefs.handsFree) Text(stringResource(R.string.handsfree_locked_tip), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+
+        if (handsFreeConsent) androidx.compose.material3.AlertDialog(
+            onDismissRequest = { handsFreeConsent = false },
+            title = { Text(stringResource(R.string.handsfree_consent_title)) },
+            text = { Text(stringResource(R.string.handsfree_consent_body)) },
+            confirmButton = {
+                Button(onClick = {
+                    handsFreeConsent = false
                     val perms = buildList {
                         add(android.Manifest.permission.RECORD_AUDIO)
                         if (android.os.Build.VERSION.SDK_INT >= 33) add(android.Manifest.permission.POST_NOTIFICATIONS)
                     }
                     handsFreePerms.launch(perms.toTypedArray())
-                }
-            }
-            Text(stringResource(R.string.handsfree_privacy), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            if (prefs.handsFree) Text(stringResource(R.string.handsfree_locked_tip), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+                }) { Text(stringResource(R.string.handsfree_consent_ok)) }
+            },
+            dismissButton = { TextButton(onClick = { handsFreeConsent = false }) { Text(stringResource(R.string.cancel)) } },
+        )
 
         SectionTitle(stringResource(R.string.security))
         AppCard(Modifier.fillMaxWidth()) {
@@ -225,88 +234,35 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
 
         SectionTitle(stringResource(R.string.ai_provider))
         AppCard(Modifier.fillMaxWidth()) {
-            DropdownField(
-                stringResource(R.string.ai_source), listOf("server" to stringResource(R.string.ai_source_server), "key" to stringResource(R.string.ai_source_key)),
-                prefs.aiSource, { scope.launch { vm.setAiSource(it) } },
-            )
+            // Stocky's AI always goes through the Follower server, which holds the AI keys: no key is ever kept on the phone.
+            Text(stringResource(if (prefs.serverBusinessId.isNotBlank()) R.string.ai_server_signed_in else R.string.ai_server_help, prefs.serverEmail), style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(8.dp))
-            if (prefs.aiSource == "server") {
-                Text(stringResource(if (prefs.serverBusinessId.isNotBlank()) R.string.ai_server_signed_in else R.string.ai_server_help, prefs.serverEmail), style = MaterialTheme.typography.bodyMedium)
-                Spacer(Modifier.height(8.dp))
-                Button(onClick = { nav.go("account") }) { Text(stringResource(R.string.aistock_account)) }
-                SwitchRow(stringResource(R.string.cloud_speech), stringResource(R.string.cloud_speech_sub), prefs.cloudSpeech) { scope.launch { vm.setCloudSpeech(it) } }
-                if (!prefs.cloudSpeech) SwitchRow(stringResource(R.string.live_voice), stringResource(R.string.live_voice_sub), prefs.liveVoice) { scope.launch { vm.setLiveVoice(it) } }
-            }
-            if (prefs.aiSource == "key") {
-            Text(
-                stringResource(
-                    when {
-                        prefs.aiMode == "cloud" && prefs.cloudReady -> R.string.ai_status_cloud
-                        prefs.aiMode == "cloud" -> R.string.ai_status_cloud_missing
-                        else -> R.string.ai_status_local
-                    }
-                ),
-                style = MaterialTheme.typography.bodyMedium,
-            )
-            Spacer(Modifier.height(10.dp))
-            DropdownField(
-                stringResource(R.string.ai_mode), listOf("local" to stringResource(R.string.ai_mode_local), "cloud" to stringResource(R.string.ai_mode_cloud)),
-                prefs.aiMode, { scope.launch { vm.setAiMode(it) } },
-            )
-            if (prefs.aiMode == "cloud") {
-                Spacer(Modifier.height(10.dp))
-                Text(stringResource(R.string.ai_cloud_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(
-                    value = apiKey, onValueChange = { apiKey = it.trim() }, singleLine = true, modifier = Modifier.fillMaxWidth(),
-                    label = { Text(stringResource(if (prefs.cloudKeySaved) R.string.ai_key_saved else R.string.ai_key)) },
-                    visualTransformation = PasswordVisualTransformation(), keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            Button(onClick = { nav.go("account") }) { Text(stringResource(R.string.aistock_account)) }
+            SwitchRow(stringResource(R.string.cloud_speech), stringResource(R.string.cloud_speech_sub), prefs.cloudSpeech) { scope.launch { vm.setCloudSpeech(it) } }
+            Text(stringResource(R.string.cloud_speech_privacy), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (!prefs.cloudSpeech) SwitchRow(stringResource(R.string.live_voice), stringResource(R.string.live_voice_sub), prefs.liveVoice) { scope.launch { vm.setLiveVoice(it) } }
+            Spacer(Modifier.height(8.dp))
+            OutlinedButton(enabled = !testing, onClick = {
+                testing = true; testResult = ""; checks = emptyList()
+                scope.launch {
+                    checks = try { vm.diagnoseAi() } catch (e: Exception) { listOf(com.aistock.assistant.di.Check("Check", false, e.toString().take(200))) }
+                    testOk = checks.isNotEmpty() && checks.none { it.ok == false }
+                    testResult = if (testOk) ctx.getString(R.string.ai_test_ok) else ""
+                    testing = false
+                }
+            }) { Text(stringResource(if (testing) R.string.ai_testing else R.string.ai_test)) }
+            for (c in checks) {
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    (when (c.ok) { true -> "✓ "; false -> "✗ "; null -> "• " }) + c.title,
+                    style = MaterialTheme.typography.titleSmall,
+                    color = when (c.ok) { true -> MaterialTheme.colorScheme.primary; false -> MaterialTheme.colorScheme.error; null -> MaterialTheme.colorScheme.onSurfaceVariant },
                 )
-                Spacer(Modifier.height(8.dp))
-                TextButton(onClick = { advanced = !advanced }) { Text(stringResource(R.string.ai_advanced)) }
-                if (advanced) {
-                    TextInput(stringResource(R.string.ai_endpoint), endpoint, { endpoint = it.trim() }, keyboard = KeyboardType.Uri, capitalize = false)
-                    Spacer(Modifier.height(8.dp))
-                    TextInput(stringResource(R.string.ai_model), model, { model = it.trim() }, capitalize = false)
-                }
-                Spacer(Modifier.height(10.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(onClick = {
-                        if (!endpoint.startsWith("https://")) { toast(ctx.getString(R.string.ai_endpoint_https)); return@Button }
-                        scope.launch {
-                            val ok = vm.saveCloud(endpoint, model, apiKey)
-                            apiKey = ""
-                            toast(ctx.getString(if (ok) R.string.saved else R.string.ai_key_not_saved))
-                        }
-                    }) { Text(stringResource(R.string.save)) }
-                    if (prefs.cloudKeySaved) OutlinedButton(onClick = { ownerCheck(ctx.getString(R.string.owner_check_key)) { scope.launch { vm.clearCloudKey(); toast(ctx.getString(R.string.ai_key_removed)) } } }) { Text(stringResource(R.string.remove_key)) }
-                }
+                if (c.detail.isNotBlank()) Text(c.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
-                run {
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(enabled = !testing, onClick = {
-                        testing = true; testResult = ""; checks = emptyList()
-                        scope.launch {
-                            checks = try { vm.diagnoseAi() } catch (e: Exception) { listOf(com.aistock.assistant.di.Check("Check", false, e.toString().take(200))) }
-                            testOk = checks.isNotEmpty() && checks.none { it.ok == false }
-                            testResult = if (testOk) ctx.getString(R.string.ai_test_ok) else ""
-                            testing = false
-                        }
-                    }) { Text(stringResource(if (testing) R.string.ai_testing else R.string.ai_test)) }
-                    for (c in checks) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(
-                            (when (c.ok) { true -> "✓ "; false -> "✗ "; null -> "• " }) + c.title,
-                            style = MaterialTheme.typography.titleSmall,
-                            color = when (c.ok) { true -> MaterialTheme.colorScheme.primary; false -> MaterialTheme.colorScheme.error; null -> MaterialTheme.colorScheme.onSurfaceVariant },
-                        )
-                        if (c.detail.isNotBlank()) Text(c.detail, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                    if (testResult.isNotEmpty()) {
-                        Spacer(Modifier.height(6.dp))
-                        Text(testResult, style = MaterialTheme.typography.bodyMedium, color = if (testOk) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
-                    }
-                }
+            if (testResult.isNotEmpty()) {
+                Spacer(Modifier.height(6.dp))
+                Text(testResult, style = MaterialTheme.typography.bodyMedium, color = if (testOk) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error)
             }
         }
 

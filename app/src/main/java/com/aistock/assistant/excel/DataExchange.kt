@@ -97,6 +97,7 @@ class DataExchange @Inject constructor(
             else -> {
                 // Unknown name (some file pickers hide it): look at the first bytes. Zip files start with "PK".
                 val bytes = input.readBytes()
+                require(bytes.size <= Csv.MAX_FILE) { "File is too large" }
                 if (bytes.size > 2 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte()) XlsxReader.read(bytes.inputStream())
                 else Csv.read(bytes.inputStream())
             }
@@ -120,6 +121,7 @@ class DataExchange @Inject constructor(
     /** Reads every sheet of a workbook (or a single CSV) and works out what each one holds. */
     suspend fun analyzeWorkbook(name: String, input: InputStream): List<SheetProfile> = withContext(Dispatchers.IO) {
         val bytes = input.readBytes()
+        require(bytes.size <= Csv.MAX_FILE) { "File is too large" }
         val isZip = bytes.size > 2 && bytes[0] == 'P'.code.toByte() && bytes[1] == 'K'.code.toByte()
         val raw = if (isZip) XlsxReader.readAll(bytes.inputStream())
         else listOf(RawSheet(name.substringBeforeLast('.').ifBlank { "Sheet1" }, false, Csv.read(bytes.inputStream())))

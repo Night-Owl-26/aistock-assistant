@@ -7,40 +7,7 @@ import org.json.JSONObject
 import java.net.HttpURLConnection
 import java.net.URL
 
-/**
- * Talks to any service that speaks the "chat completions" format with tool calling.
- * Google Gemini offers that format, so the default settings point there; the address, model and key
- * all come from Settings and are never built into the app.
- */
-class OpenAiCompatClient(private val endpoint: String, private val model: String, private val apiKey: String) : LlmClient {
-    override val name: String = model
-
-    override suspend fun chat(messages: List<LlmMessage>, tools: List<ToolSpec>): LlmReply = withContext(Dispatchers.IO) {
-        if (!endpoint.startsWith("https://")) throw IllegalStateException("The AI address must use https")
-        val body = OpenAiCompat.request(model, messages, tools)
-        val conn = URL(endpoint).openConnection() as HttpURLConnection
-        try {
-            conn.requestMethod = "POST"
-            conn.connectTimeout = 10_000
-            conn.readTimeout = 40_000
-            conn.doOutput = true
-            conn.setRequestProperty("Content-Type", "application/json")
-            conn.setRequestProperty("Authorization", "Bearer $apiKey")
-            conn.outputStream.use { it.write(body.toByteArray(Charsets.UTF_8)) }
-            val code = conn.responseCode
-            if (code !in 200..299) {
-                val err = try { conn.errorStream?.bufferedReader(Charsets.UTF_8)?.use { it.readText() }.orEmpty() } catch (e: Exception) { "" }
-                throw LlmException(code, OpenAiCompat.errorMessage(err))
-            }
-            OpenAiCompat.parse(conn.inputStream.bufferedReader(Charsets.UTF_8).use { it.readText() })
-        } finally {
-            conn.disconnect()
-        }
-    }
-}
-
-
-/** Building and reading the chat-completions JSON. Kept separate so it can be tested without a network. */
+/** Building and reading OpenAI-style chat JSON (kept for its error-message reader and tests). The app never calls an AI service with its own key. */
 object OpenAiCompat {
     fun request(model: String, messages: List<LlmMessage>, tools: List<ToolSpec>): String {
         val arr = JSONArray()
