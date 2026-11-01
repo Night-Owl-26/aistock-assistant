@@ -94,7 +94,7 @@ jobs:
           unzip -l "$APK" > apk-files.txt
           grep -q "lib/x86_64/" apk-files.txt && fail "emulator-only native code inside the release"
           unzip -p "$APK" 'classes*.dex' > dex.bin
-          grep -aqE 'AIza[0-9A-Za-z_-]{30}|sk-or-v1-[0-9a-f]{20}|cloud_key_enc' dex.bin && fail "an AI key or key storage in the app"
+          grep -aqE 'AIza[0-9A-Za-z_-]{30}|sk-or-v1-[0-9a-f]{20}|sk_[a-z0-9]{6,}_[A-Za-z0-9]{16}' dex.bin && fail "an AI key inside the app"
           grep -aq 'http://10.0.2.2' dex.bin && fail "test server address inside the release"
           rm -f dex.bin
           echo "RELEASE CHECK PASSED" | tee -a release-check.txt

@@ -218,7 +218,7 @@ class StockyFailureTest {
         val s = Stocky(b, AssistantEngine(b, LocalFallbackAIProvider()), { failing })
         val r = s.handle("how is business going these days")
         org.junit.Assert.assertEquals(com.aistock.assistant.ai.ReplyKind.ERROR, r.kind)
-        org.junit.Assert.assertTrue(r.text, r.text.contains("did not accept the AI key"))
+        org.junit.Assert.assertTrue(r.text, r.text.contains("AI key was not accepted"))
         org.junit.Assert.assertTrue(s.lastError != null)
     }
 }
