@@ -394,10 +394,19 @@ sql("INSERT INTO sync_rows (business_id, tbl, row_id, data, deleted, seq) SELECT
     "'unitCost',null,'referenceType','MANUAL','referenceId','','notes','Added on staff phone','createdAt',(extract(epoch from now())*1000)::bigint), "
     "false, nextval('sync_seq') FROM sync_rows WHERE tbl = 'products' AND data->>'name' = 'Blue Shirt' LIMIT 1")
 tap("Inventory", exact=True); tap("History", exact=True)
-expect("Added on staff phone", "movement from another phone arrives", 70); shot("staff-sync-movement")
+# The list shows the product and "+7 pieces"; the movement is the newest, so it is at the top.
+arrived = False
+for _ in range(10):
+    to_top()  # a record that arrives while the list is open is added above the visible rows
+    if find("+7 pieces"): arrived = True; break
+    time.sleep(8)
+if not arrived: problems.append("staff sync: a stock movement from another phone did not arrive")
+shot("staff-sync-movement")
+say("  sync log:", adb("logcat", "-d", "-s", "ThodarSync").strip()[-1500:])
 tap("Products", exact=True); tap("Home", exact=True)
 tap("More", exact=True); scroll_to("Staff & logins"); tap("Staff & logins"); expect("Add a person", "staff & logins screen", 30)
 expect("Staff can record purchases", "staff money switch"); shot("staff-logins"); back()
+to_top(); tap("Home", exact=True)
 check("staff sync")
 
 step("calls: call a customer, note afterwards, history")

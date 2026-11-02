@@ -59,6 +59,11 @@ class SyncEngine(
     private val kicks = Channel<Unit>(Channel.CONFLATED)
     private var started = false
     private val columnsCache = HashMap<String, Map<String, Col>>()
+    /** Records from the server that could not be written here (should stay 0), and the last reason. */
+    @Volatile var skipped = 0; private set
+    @Volatile var lastSkip: String? = null; private set
+
+    private fun log(msg: String) { try { android.util.Log.w("ThodarSync", msg) } catch (e: Throwable) { } }
 
     private data class Col(val type: String, val notNull: Boolean, val hasDefault: Boolean)
 
@@ -101,6 +106,7 @@ class SyncEngine(
         } catch (e: kotlinx.coroutines.CancellationException) {
             throw e
         } catch (e: Exception) {
+            log("sync failed: $e")
             _status.value = _status.value.copy(waiting = try { waiting() } catch (x: Exception) { 0 }, problem = e.message ?: e.toString(), running = false)
             false
         }
@@ -228,6 +234,7 @@ class SyncEngine(
                 putMeta(CURSOR, next.toString())
             }
             since = next
+            log("pulled ${rows.length()} after $since")
             if (!page.optBoolean("more")) { applyInbox(); return }
         }
         // Still more to fetch: apply when the next round has the rest, so a bill never arrives without its lines.
@@ -244,7 +251,12 @@ class SyncEngine(
                         while (c.moveToNext()) rows.add(Triple(c.getString(0), if (c.isNull(1)) null else c.getString(1), c.getInt(2) == 1))
                     }
                     for ((id, data, deleted) in rows) {
-                        try { applyRow(t, id, data?.let { JSONObject(it) }, deleted, force = false) } catch (e: Exception) { /* a record that no longer fits is skipped */ }
+                        try { applyRow(t, id, data?.let { JSONObject(it) }, deleted, force = false) } catch (e: Exception) {
+                            // A record that no longer fits is skipped; the reason is kept for the status line and the log.
+                            skipped++
+                            lastSkip = "$t/$id: ${e.message}"
+                            log("skipped $t/$id: $e")
+                        }
                     }
                 }
                 sdb.execSQL("DELETE FROM sync_inbox")
