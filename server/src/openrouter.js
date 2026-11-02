@@ -84,7 +84,7 @@ export function openRouterApi(cfg, fetchImpl = fetch) {
     async generate(model, request) {
       const r = await fetchImpl(`${cfg.openRouterBase}/chat/completions`, {
         method: 'POST', signal: AbortSignal.timeout(90_000),
-        headers: { 'content-type': 'application/json', authorization: `Bearer ${cfg.openRouterKey}`, 'x-title': 'Follower', 'http-referer': 'https://github.com/Night-Owl-26/aistock-assistant' },
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${cfg.openRouterKey}`, 'x-title': 'Thodar', 'http-referer': 'https://github.com/Night-Owl-26/aistock-assistant' },
         body: JSON.stringify(toChat(request, model)),
       })
       const text = await r.text()

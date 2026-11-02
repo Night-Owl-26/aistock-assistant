@@ -65,7 +65,7 @@ class AccountViewModel @Inject constructor(val api: ServerApi, val settings: Set
 }
 
 /**
- * Email and password only: the Follower server is built into the app. The address can still be changed under
+ * Email and password only: the Thodar server is built into the app. The address can still be changed under
  * "Change server" (for a test server or your own deployment).
  */
 @Composable
@@ -153,7 +153,7 @@ fun SignInForm(vm: AccountViewModel, p: Prefs, startMode: String, defaultBusines
     }
 }
 
-/** Shown after setup until the owner has a Follower account: the 14-day free trial starts with it. */
+/** Shown after setup until the owner has a Thodar account: the 14-day free trial starts with it. */
 @Composable
 fun SignInGate(businessName: String, vm: AccountViewModel = hiltViewModel()) {
     val prefs by vm.prefs.collectAsStateWithLifecycle(initialValue = null)
@@ -172,7 +172,7 @@ fun SignInGate(businessName: String, vm: AccountViewModel = hiltViewModel()) {
 }
 
 /**
- * The owner's Follower account. Once signed in, Stocky's AI and voice go through the Follower server,
+ * The owner's Thodar account. Once signed in, Stocky's AI and voice go through the Thodar server,
  * which holds the AI keys, counts usage and checks the plan. Business records stay on this phone.
  */
 @Composable

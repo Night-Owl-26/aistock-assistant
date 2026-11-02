@@ -46,7 +46,7 @@ before(async () => {
   pool = createPool(url)
   await pool.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;')
   await migrate(pool)
-  const cfg = loadConfig({ DATABASE_URL: url, JWT_SECRET: 'x'.repeat(40), GEMINI_API_KEY: 'server-key', ADMIN_TOKEN: 'admin-secret-token', GEMINI_BASE_URL: 'https://google.test', GOOGLE_CLOUD_API_KEY: 'cloud-key', GOOGLE_STT_BASE_URL: 'https://stt.test', GOOGLE_TTS_BASE_URL: 'https://tts.test', REGISTER_PER_HOUR: '1000', LIVE_MODE: 'token', UPI_ID: 'shop@okaxis', UPI_NAME: 'Follower', RAZORPAY_KEY_ID: 'rzp_test_key', RAZORPAY_KEY_SECRET: 'rzp-secret', RAZORPAY_BASE_URL: 'https://rzp.test' })
+  const cfg = loadConfig({ DATABASE_URL: url, JWT_SECRET: 'x'.repeat(40), GEMINI_API_KEY: 'server-key', ADMIN_TOKEN: 'admin-secret-token', GEMINI_BASE_URL: 'https://google.test', GOOGLE_CLOUD_API_KEY: 'cloud-key', GOOGLE_STT_BASE_URL: 'https://stt.test', GOOGLE_TTS_BASE_URL: 'https://tts.test', REGISTER_PER_HOUR: '1000', LIVE_MODE: 'token', UPI_ID: 'shop@okaxis', UPI_NAME: 'Thodar', RAZORPAY_KEY_ID: 'rzp_test_key', RAZORPAY_KEY_SECRET: 'rzp-secret', RAZORPAY_BASE_URL: 'https://rzp.test' })
   app = await buildApp({ cfg, pool, fetchImpl: fakeFetch, mailTransport: { sendMail: async (m) => { sentMail.push(m) } } })
 })
 after(async () => { await app?.close(); await pool?.end() })

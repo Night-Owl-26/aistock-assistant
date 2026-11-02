@@ -103,11 +103,11 @@ class XlsxPatcherTest {
 
     @Test
     fun salesSheetIsAddedOnceAndRefreshedOnlyWhenItChanges() {
-        val sales = Sheet("Follower Sales", listOf(listOf("Total revenue", BigDecimal("1250.50")), listOf("Date", "Bill no", "Total"), listOf("01-10-2026", "S-1", BigDecimal("1250.5"))))
+        val sales = Sheet("Thodar Sales", listOf(listOf("Total revenue", BigDecimal("1250.50")), listOf("Date", "Bill no", "Total"), listOf("01-10-2026", "S-1", BigDecimal("1250.5"))))
         val first = ExcelSyncPlan.update(workbook(), link(), products, sales)
         val bytes = assertNotNullBytes(first.bytes)
         val all = XlsxReader.readAll(ByteArrayInputStream(bytes))
-        assertEquals(listOf("Notes", "Items", "Follower Sales"), all.map { it.name })
+        assertEquals(listOf("Notes", "Items", "Thodar Sales"), all.map { it.name })
         assertEquals(listOf("Total revenue", "1250.5", ""), all[2].rows[0])
         val parts = XlsxPatcher.parts(bytes)
         assertTrue(String(parts.getValue("[Content_Types].xml")).contains("/xl/worksheets/aistock_sales.xml"))
@@ -118,7 +118,18 @@ class XlsxPatcherTest {
         val more = sales.copy(rows = sales.rows + listOf(listOf("02-10-2026", "S-2", BigDecimal(10))))
         val second = assertNotNullBytes(ExcelSyncPlan.update(bytes, link(), products, more).bytes)
         val names = XlsxReader.readAll(ByteArrayInputStream(second)).map { it.name }
-        assertEquals(listOf("Notes", "Items", "Follower Sales"), names)
+        assertEquals(listOf("Notes", "Items", "Thodar Sales"), names)
+    }
+
+    @Test
+    fun aSalesSheetFromTheOldAppNameIsUpdatedNotDuplicated() {
+        val rows = listOf(listOf<Any?>("Total revenue", BigDecimal(100)), listOf<Any?>("Date", "Bill no", "Total"))
+        val old = assertNotNullBytes(ExcelSyncPlan.update(workbook(), link(), products, Sheet("Follower Sales", rows)).bytes)
+        val renamed = Sheet("Thodar Sales", rows + listOf(listOf<Any?>("03-10-2026", "S-3", BigDecimal(5))))
+        val after = assertNotNullBytes(ExcelSyncPlan.update(old, link(), products, renamed).bytes)
+        val all = XlsxReader.readAll(ByteArrayInputStream(after))
+        assertEquals("one sales sheet, under its old name", listOf("Notes", "Items", "Follower Sales"), all.map { it.name })
+        assertEquals("S-3", all[2].rows[2][1])
     }
 
     /** A file written the way Excel writes it: shared strings, styles, a formula, a prefixed namespace, a dimension. */

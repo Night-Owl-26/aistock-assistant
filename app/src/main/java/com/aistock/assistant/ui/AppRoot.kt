@@ -95,7 +95,7 @@ fun AppRoot(startTalking: Boolean = false, openChat: Boolean = false, vm: MainVi
                 !prefs.loaded || (prefs.onboardingDone && hasPin == null) -> Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background))
                 !prefs.onboardingDone -> OnboardingScreen(vm)
                 hasPin == true && !unlocked -> LockScreen(vm)
-                // A Follower account is needed: it starts the free trial and carries the plan afterwards.
+                // A Thodar account is needed: it starts the free trial and carries the plan afterwards.
                 prefs.serverBusinessId.isBlank() || prefs.serverBusinessId == "pending" -> {
                     val profile by vm.businessProfile.collectAsStateWithLifecycle()
                     com.aistock.assistant.features.account.SignInGate(profile?.name.orEmpty())

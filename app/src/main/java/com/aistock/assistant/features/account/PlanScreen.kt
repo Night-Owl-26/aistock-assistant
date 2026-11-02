@@ -70,7 +70,7 @@ fun cleanUtr(s: String): String = s.filter { it.isLetterOrDigit() }.take(30)
 
 /**
  * Plan & payment: how long the trial or plan lasts, and paying after it by UPI. The owner pays from any UPI app, then
- * types the transaction ID from that app; the plan starts when the Follower team has checked the payment.
+ * types the transaction ID from that app; the plan starts when the Thodar team has checked the payment.
  */
 @Composable
 fun PlanScreen(nav: AppNav, vm: AccountViewModel = hiltViewModel()) {
@@ -159,7 +159,7 @@ fun PlanScreen(nav: AppNav, vm: AccountViewModel = hiltViewModel()) {
                 Text(stringResource(R.string.pay_card_help), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             if (plan != null && i.upiId.isNotBlank()) {
-                val uri = upiLink(i.upiId, i.payeeName, plan.priceMinor / 100L, "Follower ${plan.name} ${p.serverEmail}")
+                val uri = upiLink(i.upiId, i.payeeName, plan.priceMinor / 100L, "Thodar ${plan.name} ${p.serverEmail}")
                 SectionTitle(stringResource(if (i.cards) R.string.pay_upi_title_or else R.string.pay_step1))
                 // The UPI ID itself is not shown: the QR code and the UPI app button carry it.
                 val qr = remember(uri.toString()) { qrBitmap(uri.toString(), 640) }

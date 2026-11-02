@@ -20,6 +20,8 @@ import java.util.zip.ZipOutputStream
  * depend on the changed cells are correct.
  */
 object XlsxPatcher {
+    /** Earlier names of sheets this app writes, so renaming the app never leaves a second copy in the owner's file. */
+    private val OLD_SHEET_NAMES = mapOf("Thodar Sales" to setOf("Follower Sales", "AIStock Sales"))
     private const val MAX_ENTRY = 40L * 1024 * 1024
     private const val MAX_TOTAL = 120L * 1024 * 1024
     private const val WS_TYPE = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet"
@@ -325,7 +327,8 @@ object XlsxPatcher {
 
     private fun putSheet(parts: LinkedHashMap<String, ByteArray>, refs: List<SheetRef>, sheet: Sheet) {
         val body = sheetXml(sheet)
-        val existing = refs.firstOrNull { it.name == sheet.name }
+        // A sheet the app made under an earlier name (the app was called AIStock, then Follower) is kept and updated.
+        val existing = refs.firstOrNull { it.name == sheet.name } ?: OLD_SHEET_NAMES[sheet.name]?.let { old -> refs.firstOrNull { it.name in old } }
         if (existing != null) { parts[existing.path] = body.toByteArray(Charsets.UTF_8); return }
 
         var path = "xl/worksheets/aistock_sales.xml"

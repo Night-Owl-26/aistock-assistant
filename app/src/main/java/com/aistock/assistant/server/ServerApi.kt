@@ -24,16 +24,16 @@ data class Usage(val active: Boolean, val status: String, val planName: String, 
 /** A plan the owner can pay for, and where to pay (UPI). */
 data class PaidPlan(val id: String, val name: String, val priceMinor: Int, val periodDays: Int, val aiRequests: Int, val voiceMinutes: Int, val maxStaff: Int)
 data class PayInfo(val plans: List<PaidPlan>, val upiId: String, val payeeName: String, val supportPhone: String, val trialDays: Int, val cards: Boolean = false)
-/** A UPI payment the owner reported; "pending" until the Follower team checks it. */
+/** A UPI payment the owner reported; "pending" until the Thodar team checks it. */
 data class PaymentClaim(val id: Long, val planId: String, val amountMinor: Int, val utr: String, val status: String, val note: String, val createdAt: String)
 data class Account(val email: String, val businessId: String, val businessName: String, val role: String, val usage: Usage?, val aiConfigured: Boolean, val textModel: String, val liveModel: String, val speechConfigured: Boolean = false)
 /** What Google Cloud Speech-to-Text heard. */
 data class Heard(val text: String, val language: String, val confidence: Double?)
-/** mode "relay": voice goes through the Follower server (signed in with the bearer token); "token": straight to Google with a one-use token. */
+/** mode "relay": voice goes through the Thodar server (signed in with the bearer token); "token": straight to Google with a one-use token. */
 data class LiveTicket(val mode: String, val sessionId: String, val token: String, val wsUrl: String, val model: String, val maxSeconds: Int)
 
 /**
- * Talks to the Follower server (your own deployment). The app keeps only a refresh token, encrypted with the Android
+ * Talks to the Thodar server (your own deployment). The app keeps only a refresh token, encrypted with the Android
  * Keystore; access tokens live in memory and are renewed automatically. No AI key is ever on the phone in this mode.
  */
 @Singleton
@@ -78,7 +78,7 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
 
     private suspend fun accessToken(): String = lock.withLock {
         access?.takeIf { System.currentTimeMillis() < accessUntil }?.let { return it }
-        val refresh = settings.refreshToken() ?: throw ServerException(401, "unauthorized", "Sign in to your Follower account.")
+        val refresh = settings.refreshToken() ?: throw ServerException(401, "unauthorized", "Sign in to your Thodar account.")
         val o = withContext(Dispatchers.IO) { send("POST", "/v1/auth/refresh", JSONObject().put("refreshToken", refresh), null).let { (c, b) -> parse(c, b) } }
         remember(o)
         settings.updateRefreshToken(o.getString("refreshToken"))
@@ -126,7 +126,7 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
             PaidPlan(it.getString("id"), it.optString("name"), it.optInt("price_minor"), it.optInt("period_days", 30), it.optInt("ai_requests_month"), it.optInt("live_seconds_month") / 60, it.optInt("max_staff", 1))
         }
         val pay = o.optJSONObject("payment") ?: JSONObject()
-        PayInfo(plans, pay.optString("upiId"), pay.optString("payeeName", "Follower"), pay.optString("supportPhone"), pay.optInt("trialDays", 14), pay.optBoolean("cards"))
+        PayInfo(plans, pay.optString("upiId"), pay.optString("payeeName", "Thodar"), pay.optString("supportPhone"), pay.optInt("trialDays", 14), pay.optBoolean("cards"))
     }
 
     /** Reports a UPI payment with its transaction ID (UTR); the plan starts when it is approved. */

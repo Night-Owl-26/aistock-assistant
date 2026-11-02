@@ -23,7 +23,7 @@ android {
         versionCode = 2
         versionName = "1.1.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
-        // The Follower server the app signs in to. Not a secret (owners only type email and password);
+        // The Thodar server the app signs in to. Not a secret (owners only type email and password);
         // another build can point elsewhere with -PfollowerServer=https://...
         val server = (project.findProperty("followerServer") as String?) ?: "https://140.245.15.146.sslip.io"
         buildConfigField("String", "DEFAULT_SERVER", "\"$server\"")

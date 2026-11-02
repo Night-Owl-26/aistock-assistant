@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# One-command setup of the Follower server on a fresh Ubuntu machine (Oracle Cloud Always Free works).
+# One-command setup of the Thodar server on a fresh Ubuntu machine (Oracle Cloud Always Free works).
 #
 #   curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github.raw" \
 #     https://api.github.com/repos/Night-Owl-26/aistock-assistant/contents/server/install.sh | \
@@ -121,12 +121,12 @@ MODE=caddy
 if echo "$busy_names" | grep -qw nginx; then
   MODE=nginx
 elif [ -n "$busy_names" ]; then
-  warn "Ports 80/443 are used by:$busy_names. Follower needs them (or nginx in front). Stop that program and run this again."
+  warn "Ports 80/443 are used by:$busy_names. Thodar needs them (or nginx in front). Stop that program and run this again."
   exit 1
 fi
 
 if [ "$MODE" = nginx ]; then
-  say "nginx already runs here: Follower goes behind it (your other sites are not touched)"
+  say "nginx already runs here: Thodar goes behind it (your other sites are not touched)"
   $SUDO docker compose rm -sf caddy >/dev/null 2>&1 || true
   extra=""; grep -qE '^COMPOSE_PROFILES=.*whisper' .env && extra="whisper"
   $SUDO docker compose -f docker-compose.yml -f docker-compose.nginx.yml up -d --build db api $extra
@@ -134,7 +134,7 @@ if [ "$MODE" = nginx ]; then
   conf="$conf_dir/follower.conf"
   if [ ! -f "$conf" ] || ! grep -q "server_name $DOMAIN_NOW;" "$conf"; then
     $SUDO tee "$conf" >/dev/null <<NGINX
-# Follower API ($DIR/server). Written by install.sh.
+# Thodar API ($DIR/server). Written by install.sh.
 map \$http_upgrade \$follower_connection { default upgrade; '' close; }
 server {
     listen 80;
@@ -178,7 +178,7 @@ for i in $(seq 1 60); do
 done
 if [ -n "$ok" ]; then
   echo "  $ok"
-  say "Done. In the Follower app: More > Follower account > Server address: https://$DOMAIN_NOW > Create account"
+  say "Done. In the Thodar app: More > Thodar account > Server address: https://$DOMAIN_NOW > Create account"
 else
   warn "The server did not answer over HTTPS yet. Most often ports 80/443 are still closed in Oracle Cloud:"
   warn "Networking > Virtual cloud networks > your VCN > Security Lists > Default > Add Ingress Rules:"

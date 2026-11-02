@@ -69,7 +69,7 @@ data class Prefs(
     val liveVoice: Boolean = false,
     /** Google Cloud Speech-to-Text and Text-to-Speech through the server, turn by turn (instead of Gemini Live). */
     val cloudSpeech: Boolean = true,
-    /** The Follower plan as the server last reported it (kept for offline use). planEnd 0 = not known yet. */
+    /** The Thodar plan as the server last reported it (kept for offline use). planEnd 0 = not known yet. */
     val planStatus: String = "",
     val planName: String = "",
     val planEnd: Long = 0L,

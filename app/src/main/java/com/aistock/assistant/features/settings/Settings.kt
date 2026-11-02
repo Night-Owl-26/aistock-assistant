@@ -139,7 +139,7 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
         if (result[android.Manifest.permission.RECORD_AUDIO] == true) {
             scope.launch { vm.setHandsFree(true) }
             com.aistock.assistant.voice.HandsFree.start(ctx)
-            // Battery saving stops background listening on many phones: ask to leave Follower alone.
+            // Battery saving stops background listening on many phones: ask to leave Thodar alone.
             val pm = ctx.getSystemService(android.os.PowerManager::class.java)
             if (pm != null && !pm.isIgnoringBatteryOptimizations(ctx.packageName)) try {
                 ctx.startActivity(android.content.Intent(android.provider.Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, android.net.Uri.parse("package:" + ctx.packageName)))
@@ -234,7 +234,7 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
 
         SectionTitle(stringResource(R.string.ai_provider))
         AppCard(Modifier.fillMaxWidth()) {
-            // Stocky's AI always goes through the Follower server, which holds the AI keys: no key is ever kept on the phone.
+            // Stocky's AI always goes through the Thodar server, which holds the AI keys: no key is ever kept on the phone.
             Text(stringResource(if (prefs.serverBusinessId.isNotBlank()) R.string.ai_server_signed_in else R.string.ai_server_help, prefs.serverEmail), style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(8.dp))
             Button(onClick = { nav.go("account") }) { Text(stringResource(R.string.aistock_account)) }

@@ -79,7 +79,7 @@ class AnalysisTest {
 
     @Test
     fun upi() {
-        val u = upiLink("shop@okaxis", "Follower", 199, "Follower Basic owner@shop.in")
+        val u = upiLink("shop@okaxis", "Thodar", 199, "Thodar Basic owner@shop.in")
         assertEquals("upi", u.scheme); assertEquals("pay", u.authority)
         assertEquals("shop@okaxis", u.getQueryParameter("pa"))
         assertEquals("199.00", u.getQueryParameter("am"))

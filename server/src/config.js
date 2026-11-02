@@ -59,7 +59,7 @@ export function loadConfig(env = process.env) {
     trialDays: Number(get('TRIAL_DAYS', 14)),
     // Where owners pay after the trial (shown in the app, never a secret). Empty: the app says to contact you.
     upiId: get('UPI_ID', ''),
-    upiName: get('UPI_NAME', 'Follower'),
+    upiName: get('UPI_NAME', 'Thodar'),
     supportPhone: get('SUPPORT_PHONE', ''),
     // Razorpay (cards, net banking, UPI) for paying after the trial: Dashboard > Account & Settings > API Keys.
     razorpayKeyId: get('RAZORPAY_KEY_ID', ''),

@@ -48,7 +48,7 @@ import javax.inject.Inject
 
 /**
  * Calls to customers and suppliers. The app only opens the phone's dialler (no call permission is needed and nothing
- * is dialled without the owner pressing call). When the owner comes back to Follower, it asks how the call went and
+ * is dialled without the owner pressing call). When the owner comes back to Thodar, it asks how the call went and
  * keeps that note in the person's history.
  */
 object CallTracker {

@@ -64,7 +64,7 @@ jobs:
             # exact build. A build signed this way is never published.
             KS_PW=throwaway-$RANDOM$RANDOM; KS_ALIAS=follower
             keytool -genkeypair -keystore "$KS" -storetype PKCS12 -alias follower -keyalg RSA -keysize 2048 -validity 30 \
-              -storepass "$KS_PW" -keypass "$KS_PW" -dname "CN=Follower throwaway test key" >/dev/null 2>&1
+              -storepass "$KS_PW" -keypass "$KS_PW" -dname "CN=Thodar throwaway test key" >/dev/null 2>&1
             echo "signed=throwaway" >> "$GITHUB_OUTPUT"
           fi
           export RELEASE_STORE_FILE="$KS" RELEASE_STORE_PASSWORD="$KS_PW" RELEASE_KEY_ALIAS="${KS_ALIAS:-follower}"
@@ -140,13 +140,13 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          cp app/build/outputs/apk/release/app-release.apk Follower.apk
-          cp app/build/outputs/bundle/release/app-release.aab Follower.aab
+          cp app/build/outputs/apk/release/app-release.apk Thodar.apk
+          cp app/build/outputs/bundle/release/app-release.aab Thodar.aab
           gh release delete latest --yes --cleanup-tag || true
           sleep 3
-          gh release create latest Follower.apk Follower.aab --target "$GITHUB_SHA" \
-            --title "Follower - latest release build" \
-            --notes "Release build of commit $GITHUB_SHA: not debuggable, minified, signed with the Follower release key. Follower.apk installs on phones; Follower.aab is for Google Play."
+          gh release create latest Thodar.apk Thodar.aab --target "$GITHUB_SHA" \
+            --title "Thodar - latest release build" \
+            --notes "Release build of commit $GITHUB_SHA: not debuggable, minified, signed with the Thodar release key. Thodar.apk installs on phones; Thodar.aab is for Google Play."
 
       - name: Fail if build or tests failed
         if: steps.assemble.outcome != 'success' || steps.test.outcome != 'success' || steps.release.outcome != 'success' || steps.verify.outcome != 'success'

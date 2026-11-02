@@ -1,4 +1,4 @@
-# R8 rules for the Follower release build.
+# R8 rules for the Thodar release build.
 
 # Vosk ("Hey Stocky" offline wake word) talks to its native library through JNA, which finds classes,
 # methods and fields by name at run time: keep them exactly as they are.

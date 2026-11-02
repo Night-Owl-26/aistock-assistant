@@ -1,5 +1,5 @@
 """Tiny HTTP service: POST /transcribe {audio: base64 16 kHz mono 16-bit PCM, language: "ta-IN"|"en-IN", prompt} -> {text}.
-GET /health -> {ok, model}. Only reachable inside the Docker network (the Follower API calls it)."""
+GET /health -> {ok, model}. Only reachable inside the Docker network (the Thodar API calls it)."""
 import base64, json, os, threading, time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
 

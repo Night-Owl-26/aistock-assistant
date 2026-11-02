@@ -126,7 +126,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
   }
 
   function requireActive(e) {
-    if (!e.active) fail(402, 'subscription_inactive', 'Your Follower plan has ended. Renew it to keep using Stocky AI.')
+    if (!e.active) fail(402, 'subscription_inactive', 'Your Thodar plan has ended. Renew it to keep using Stocky AI.')
   }
 
   // ---------------------------------------------------------------- public
@@ -192,7 +192,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     if (u && mail.configured()) {
       const code = await newResetCode(u.id)
       try {
-        await mail.send(em, 'Your Follower password reset code', `Your code is ${code}\n\nType it in the Follower app within 15 minutes to choose a new password. If you did not ask for this, ignore this email.`)
+        await mail.send(em, 'Your Thodar password reset code', `Your code is ${code}\n\nType it in the Thodar app within 15 minutes to choose a new password. If you did not ask for this, ignore this email.`)
       } catch (err) { req.log?.warn?.({ err: String(err) }, 'reset email failed') }
       audit(null, u.id, 'password_reset_requested', {}, req.ip)
     }
@@ -325,7 +325,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     if (!['manager', 'staff'].includes(role)) fail(400, 'bad_role', 'Role must be manager or staff.')
     const em = String(req.body?.email ?? '').trim().toLowerCase()
     const target = (await pool.query('SELECT id FROM users WHERE email = $1', [em])).rows[0]
-    if (!target) fail(404, 'user_not_found', 'Ask this person to create a Follower account first.')
+    if (!target) fail(404, 'user_not_found', 'Ask this person to create a Thodar account first.')
     if (target.id === user.id) fail(400, 'bad_request', 'You are already the owner.')
     const existing = (await pool.query('SELECT role FROM memberships WHERE user_id = $1 AND business_id = $2', [target.id, req.params.id])).rows[0]
     if (existing?.role === 'owner') fail(400, 'bad_request', 'An owner cannot be changed to another role here.')
@@ -591,7 +591,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     const ref = `F${Date.now().toString(36)}${randomInt(0, 1e6).toString(36)}`.slice(0, 40)
     const link = await rzp('POST', '/payment_links', {
       amount: plan.price_minor, currency: 'INR', accept_partial: false, reference_id: ref,
-      description: `Follower ${plan.name} plan`, customer: { email: user.email },
+      description: `Thodar ${plan.name} plan`, customer: { email: user.email },
       notify: { sms: false, email: false }, reminder_enable: false,
       notes: { business_id: req.params.id, plan_id: plan.id },
     })

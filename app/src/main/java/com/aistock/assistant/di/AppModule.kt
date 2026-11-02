@@ -86,12 +86,12 @@ class LlmSource(private val settings: SettingsStore, private val connectivity: C
         return diagnostics.runServer(server, p.serverUrl, p.tamil) { serverModel = it }
     }
 
-    /** Stocky's model: only through the signed-in Follower server, which holds the AI keys. No key ever lives on the phone. */
+    /** Stocky's model: only through the signed-in Thodar server, which holds the AI keys. No key ever lives on the phone. */
     suspend fun client(): LlmClient? = if (server.signedIn) com.aistock.assistant.ai.llm.ServerLlmClient(server, serverModel) else null
 
     /** Sends one tiny message and reports what happened, in words the owner can act on. null = it works. */
     suspend fun test(): String? {
-        val c = client() ?: return "Sign in to your Follower account first."
+        val c = client() ?: return "Sign in to your Thodar account first."
         return try {
             c.chat(listOf(com.aistock.assistant.ai.llm.LlmMessage.User("Say OK")), emptyList()); null
         } catch (e: kotlinx.coroutines.CancellationException) {

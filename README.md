@@ -1,4 +1,4 @@
-# AIStock Assistant
+# Thodar (formerly AIStock Assistant / Follower)
 
 **Your inventory. Just talk.**
 

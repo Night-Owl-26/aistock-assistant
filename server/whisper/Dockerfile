@@ -1,4 +1,4 @@
-# Whisper speech-to-text for Follower, on the server's own CPU (no GPU, no API key, nothing leaves the server).
+# Whisper speech-to-text for Thodar, on the server's own CPU (no GPU, no API key, nothing leaves the server).
 # Uses OpenAI's Whisper models through faster-whisper (the same models, 4x faster on CPU with 8-bit weights).
 FROM python:3.11-slim
 ENV PYTHONUNBUFFERED=1 HF_HOME=/models
