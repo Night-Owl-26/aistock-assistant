@@ -382,6 +382,24 @@ tap("12 months", exact=True); time.sleep(2); expect("Busiest days", "analysis ye
 back()
 check("analysis")
 
+step("staff sync: this phone's data reaches the server; another phone's stock movement reaches this phone")
+for _ in range(12):
+    if (sql("SELECT COUNT(*) FROM sync_rows WHERE tbl = 'products'") or "0").strip() not in ("", "0"): break
+    time.sleep(5)
+else:
+    problems.append("staff sync: products did not reach the server")
+# A movement made on a staff phone (written straight into the server's shared record).
+sql("INSERT INTO sync_rows (business_id, tbl, row_id, data, deleted, seq) SELECT business_id, 'inventory_transactions', 'smoke-move-1', "
+    "jsonb_build_object('id','smoke-move-1','productId',row_id,'type','ADJUSTMENT_IN','quantity',7000,'unit','PCS','beforeQuantity',0,'afterQuantity',7000,"
+    "'unitCost',null,'referenceType','MANUAL','referenceId','','notes','Added on staff phone','createdAt',(extract(epoch from now())*1000)::bigint), "
+    "false, nextval('sync_seq') FROM sync_rows WHERE tbl = 'products' AND data->>'name' = 'Blue Shirt' LIMIT 1")
+tap("Inventory", exact=True); tap("History", exact=True)
+expect("Added on staff phone", "movement from another phone arrives", 70); shot("staff-sync-movement")
+tap("Products", exact=True); tap("Home", exact=True)
+tap("More", exact=True); scroll_to("Staff & logins"); tap("Staff & logins"); expect("Add a person", "staff & logins screen", 30)
+expect("Staff can record purchases", "staff money switch"); shot("staff-logins"); back()
+check("staff sync")
+
 step("calls: call a customer, note afterwards, history")
 tap("More", exact=True); tap("Customers"); expect("Kumar Traders", "customers")
 tap("Call Kumar Traders"); time.sleep(6); shot("dialler")

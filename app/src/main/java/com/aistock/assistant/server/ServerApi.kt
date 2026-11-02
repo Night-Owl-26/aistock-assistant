@@ -185,8 +185,9 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
         if (!settings.setServerSession(url, email.trim().lowercase(), "pending", o.getString("refreshToken"))) throw ServerException(0, "keystore", "This phone could not store the sign-in securely.")
         val me = obj("GET", "/v1/me")
         val first = me.getJSONArray("businesses").optJSONObject(0) ?: throw ServerException(0, "no_business", "This account has no business.")
-        settings.setServerBusiness(first.getString("id"))
+        // Role first: sync starts as soon as the business is set, and must already know this is a staff login.
         rememberMember(me, first)
+        settings.setServerBusiness(first.getString("id"))
         try { refreshPlan() } catch (e: Exception) { }
     }
 
