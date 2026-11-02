@@ -106,7 +106,7 @@ class AssistantEngineTest {
     fun stockFromANamedSupplierIsAlwaysAPurchase(): Unit = runBlocking {
         // No price said: the product's last purchase price is used, and it is still saved as a purchase from the supplier.
         val b = FakeBackend()
-        b.addProduct("Blue Shirt", stock = 10_000, buy = 30_000)
+        b.addProduct("Blue Shirt", stock = 10, buy = 300)
         val e = engine(b)
         val r = e.handle("Received 20 Blue Shirt from Kumar Traders")
         assertEquals(ReplyKind.CONFIRM, r.kind)
