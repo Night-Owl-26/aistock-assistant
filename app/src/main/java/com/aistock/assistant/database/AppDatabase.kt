@@ -96,7 +96,10 @@ abstract class AppDatabase : RoomDatabase() {
         /** V5 (staff sync): who entered each bill, payment and expense, and the change-recording tables. Nothing is removed. */
         val MIGRATION_4_5 = object : Migration(4, 5) {
             override fun migrate(db: SupportSQLiteDatabase) {
-                for (t in listOf("sales", "purchases", "expenses", "payments")) db.execSQL("ALTER TABLE `$t` ADD COLUMN `createdBy` TEXT NOT NULL DEFAULT ''")
+                for (t in listOf("sales", "purchases", "expenses", "payments")) {
+                    val has = db.query("PRAGMA table_info(`$t`)").use { c -> var found = false; while (c.moveToNext()) if (c.getString(c.getColumnIndexOrThrow("name")) == "createdBy") found = true; found }
+                    if (!has) db.execSQL("ALTER TABLE `$t` ADD COLUMN `createdBy` TEXT NOT NULL DEFAULT ''")
+                }
                 com.aistock.assistant.sync.SyncSchema.install(db)
             }
         }

@@ -33,16 +33,19 @@ object SyncSchema {
         db.execSQL("INSERT OR IGNORE INTO sync_flags (k, v) VALUES ('applying', 0)")
         // A crash in the middle of applying must not leave the flag on (that would stop recording changes).
         db.execSQL("UPDATE sync_flags SET v = 0 WHERE k = 'applying'")
+        // Inside a trigger, the outer statement's conflict rule (Room's UPDATE OR ABORT) would turn INSERT OR REPLACE
+        // into an error when a record changes twice before it is sent: delete the old entry, then insert.
         val idle = "(SELECT v FROM sync_flags WHERE k = 'applying') = 0"
         val now = "CAST(strftime('%s','now') AS INTEGER) * 1000"
         for (t in TABLES) {
-            db.execSQL("CREATE TRIGGER IF NOT EXISTS sync_ins_$t AFTER INSERT ON `$t` WHEN $idle BEGIN " +
-                "INSERT OR REPLACE INTO sync_outbox (tbl, id, deleted, at) VALUES ('$t', NEW.id, 0, $now); END")
+            for (k in listOf("ins", "upd", "del")) db.execSQL("DROP TRIGGER IF EXISTS sync_${k}_$t") // first test builds' triggers
+            db.execSQL("CREATE TRIGGER IF NOT EXISTS sync2_ins_$t AFTER INSERT ON `$t` WHEN $idle BEGIN " +
+                "DELETE FROM sync_outbox WHERE tbl = '$t' AND id = NEW.id; INSERT INTO sync_outbox (tbl, id, deleted, at) VALUES ('$t', NEW.id, 0, $now); END")
             val changed = if (t == "products") " AND (" + PRODUCT_DETAILS.joinToString(" OR ") { "OLD.`$it` IS NOT NEW.`$it`" } + ")" else ""
-            db.execSQL("CREATE TRIGGER IF NOT EXISTS sync_upd_$t AFTER UPDATE ON `$t` WHEN $idle$changed BEGIN " +
-                "INSERT OR REPLACE INTO sync_outbox (tbl, id, deleted, at) VALUES ('$t', NEW.id, 0, $now); END")
-            db.execSQL("CREATE TRIGGER IF NOT EXISTS sync_del_$t AFTER DELETE ON `$t` WHEN $idle BEGIN " +
-                "INSERT OR REPLACE INTO sync_outbox (tbl, id, deleted, at) VALUES ('$t', OLD.id, 1, $now); END")
+            db.execSQL("CREATE TRIGGER IF NOT EXISTS sync2_upd_$t AFTER UPDATE ON `$t` WHEN $idle$changed BEGIN " +
+                "DELETE FROM sync_outbox WHERE tbl = '$t' AND id = NEW.id; INSERT INTO sync_outbox (tbl, id, deleted, at) VALUES ('$t', NEW.id, 0, $now); END")
+            db.execSQL("CREATE TRIGGER IF NOT EXISTS sync2_del_$t AFTER DELETE ON `$t` WHEN $idle BEGIN " +
+                "DELETE FROM sync_outbox WHERE tbl = '$t' AND id = OLD.id; INSERT INTO sync_outbox (tbl, id, deleted, at) VALUES ('$t', OLD.id, 1, $now); END")
         }
     }
 }
