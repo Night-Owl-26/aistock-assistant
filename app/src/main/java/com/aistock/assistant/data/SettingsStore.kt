@@ -69,6 +69,8 @@ data class Prefs(
     val liveVoice: Boolean = false,
     /** Google Cloud Speech-to-Text and Text-to-Speech through the server, turn by turn (instead of Gemini Live). */
     val cloudSpeech: Boolean = true,
+    /** Stocky's Gemini voice, picked by the owner; kept until they pick another. */
+    val voiceName: String = com.aistock.assistant.voice.StockyVoices.DEFAULT,
     /** The Thodar plan as the server last reported it (kept for offline use). planEnd 0 = not known yet. */
     val planStatus: String = "",
     val planName: String = "",
@@ -106,6 +108,7 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
         val aiSource = stringPreferencesKey("ai_source")
         val liveVoice = booleanPreferencesKey("live_voice")
         val cloudSpeech = booleanPreferencesKey("cloud_speech")
+        val voiceName = stringPreferencesKey("voice_name")
         val session = stringPreferencesKey("server_session_enc")
         val planStatus = stringPreferencesKey("plan_status")
         val planName = stringPreferencesKey("plan_name")
@@ -138,6 +141,7 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
             aiSource = "server",
             liveVoice = p[K.liveVoice] ?: false,
             cloudSpeech = p[K.cloudSpeech] ?: true,
+            voiceName = com.aistock.assistant.voice.StockyVoices.valid(p[K.voiceName]),
             planStatus = p[K.planStatus].orEmpty(),
             planName = p[K.planName].orEmpty(),
             planEnd = p[K.planEnd] ?: 0L,
@@ -184,6 +188,7 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
     suspend fun setBriefingHour(h: Int) = context.dataStore.edit { it[K.briefing] = h }.let { }
     suspend fun setLiveVoice(on: Boolean) = context.dataStore.edit { it[K.liveVoice] = on }.let { }
     suspend fun setCloudSpeech(on: Boolean) = context.dataStore.edit { it[K.cloudSpeech] = on }.let { }
+    suspend fun setVoiceName(name: String) = context.dataStore.edit { it[K.voiceName] = com.aistock.assistant.voice.StockyVoices.valid(name) }.let { }
 
     /** Saves the signed-in session. The refresh token is encrypted with the Android Keystore. */
     suspend fun setServerSession(url: String, email: String, businessId: String, refreshToken: String): Boolean {

@@ -123,7 +123,7 @@ class CloudRecognizer(
  * Replies read aloud by Google Cloud Text-to-Speech (a Tamil voice for Tamil text, an Indian English voice otherwise),
  * through the owner's server. If the server or Google cannot be reached, the phone's own voice reads it instead.
  */
-class CloudSpeaker(private val server: ServerApi, private val fallback: SpeechOutput) : SpeechOutput {
+class CloudSpeaker(private val server: ServerApi, private val fallback: SpeechOutput, private val voice: () -> String? = { null }) : SpeechOutput {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var job: Job? = null
     @Volatile private var talking = false
@@ -139,7 +139,7 @@ class CloudSpeaker(private val server: ServerApi, private val fallback: SpeechOu
         talking = true
         job = scope.launch {
             try {
-                val wav = server.textToSpeech(t.take(2000), null)
+                val wav = server.textToSpeech(t.take(2000), null, voice())
                 val pcm = Wav.parse(wav) ?: throw IllegalStateException("not a WAV file")
                 withContext(Dispatchers.IO) { play(pcm) }
             } catch (e: CancellationException) {
@@ -186,8 +186,28 @@ class CloudSpeaker(private val server: ServerApi, private val fallback: SpeechOu
 
     override fun isSpeaking(): Boolean = talking || fallback.isSpeaking()
 
+    /** Plays [text] in [voiceName] with no phone fallback (the voice sample in Settings). @return false if it could not. */
+    suspend fun sample(text: String, voiceName: String): Boolean {
+        stop()
+        return try {
+            val pcm = Wav.parse(server.textToSpeech(text, null, voiceName)) ?: return false
+            talking = true
+            withContext(Dispatchers.IO) { play(pcm) }
+            phoneUntil = 0L // the server voice works again
+            true
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            false
+        } finally {
+            talking = false
+        }
+    }
+
     companion object {
         private const val PHONE_VOICE_MS = 20 * 60_000L
+        /** A newly picked voice is tried straight away, even if the server voice failed a moment ago. */
+        fun voiceChanged() { phoneUntil = 0L }
         /** Shared by every screen, so the voice stays the same when the owner moves between screens. */
         @Volatile private var phoneUntil = 0L
     }

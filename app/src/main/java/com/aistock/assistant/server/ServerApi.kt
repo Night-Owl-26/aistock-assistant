@@ -246,9 +246,10 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
     }
 
     /** Google Cloud Text-to-Speech through the server: a WAV file (16-bit PCM, 24 kHz). */
-    suspend fun textToSpeech(text: String, language: String?): ByteArray {
+    suspend fun textToSpeech(text: String, language: String?, voice: String? = null): ByteArray {
         val body = JSONObject().put("text", text)
         language?.let { body.put("language", it) }
+        voice?.let { body.put("voice", it) }
         val o = obj("POST", "/v1/businesses/$businessId/ai/tts", body)
         return android.util.Base64.decode(o.getString("audio"), android.util.Base64.DEFAULT)
     }

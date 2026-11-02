@@ -1,4 +1,4 @@
-// Speech for Stocky: Sarvam AI, Google Cloud, or Gemini itself, called with the server's keys only.
+// Speech for Stocky: Gemini (hearing and speaking) and self-hosted Whisper (hearing), with the server's keys only.
 // The app sends recorded audio or reply text here; the key never reaches the phone.
 
 export const SPEECH_LANGS = ['ta-IN', 'en-IN']
@@ -19,7 +19,7 @@ export function ttsSeconds(text) {
   return Math.max(1, Math.ceil([...text].length / 14))
 }
 
-/** 16 kHz mono 16-bit PCM wrapped in a WAV header, the format Sarvam reads best. */
+/** 16 kHz mono 16-bit PCM wrapped in a WAV header. */
 export function wavFromPcm(pcm, rate = 16000) {
   const h = Buffer.alloc(44)
   h.write('RIFF', 0); h.writeUInt32LE(36 + pcm.length, 4); h.write('WAVE', 8)
@@ -29,12 +29,16 @@ export function wavFromPcm(pcm, rate = 16000) {
   return Buffer.concat([h, pcm])
 }
 
+/** Gemini's prebuilt voices (the same names work for spoken replies and live voice). The owner picks one in the app. */
+export const GEMINI_VOICES = ['Zephyr', 'Puck', 'Charon', 'Kore', 'Fenrir', 'Leda', 'Orus', 'Aoede', 'Callirrhoe', 'Autonoe', 'Enceladus', 'Iapetus',
+  'Umbriel', 'Algieba', 'Despina', 'Erinome', 'Algenib', 'Rasalgethi', 'Laomedeia', 'Achernar', 'Alnilam', 'Schedar', 'Gacrux', 'Pulcherrima',
+  'Achird', 'Zubenelgenubi', 'Vindemiatrix', 'Sadachbia', 'Sadaltager', 'Sulafat']
+
 export function speechApi(cfg, fetchImpl = fetch) {
-  const headers = () => ({ 'content-type': 'application/json', 'x-goog-api-key': cfg.speechKey })
-  const has = { whisper: () => !!cfg.whisperUrl, sarvam: () => !!cfg.sarvamKey, google: () => !!cfg.speechKey, gemini: () => !!cfg.geminiKey }
-  // auto: Sarvam if its key is set, else Google Cloud, else Gemini with the Gemini key; Whisper (unlimited, on this
-  // server) is the last resort. A provider that fails is skipped for a while and the next one answers instead, so a
-  // used-up Sarvam balance or a Gemini rate limit does not stop Stocky from hearing and speaking.
+  const has = { whisper: () => !!cfg.whisperUrl, gemini: () => !!cfg.geminiKey }
+  // Only Gemini (with the Gemini key) and Whisper (free, unlimited, on this server) are used. Gemini hears first unless
+  // STT_PROVIDER=whisper; if it fails (rate limit) Whisper hears instead and Gemini rests for a while. Replies are
+  // always spoken by Gemini, in the voice the owner picked in the app.
   const down = new Map() // provider -> { until, reason }
   const isDown = (p) => { const d = down.get(p); if (d && d.until > Date.now()) return true; if (d) down.delete(p); return false }
   const chain = (wanted, order) => {
@@ -43,8 +47,8 @@ export function speechApi(cfg, fetchImpl = fetch) {
     const up = first.filter(p => !isDown(p))
     return up.length ? up : first // all resting: try them anyway
   }
-  const STT_ORDER = ['sarvam', 'google', 'gemini', 'whisper']
-  const TTS_ORDER = ['sarvam', 'google', 'gemini']
+  const STT_ORDER = ['gemini', 'whisper']
+  const TTS_ORDER = ['gemini']
   /**
    * Out of credit: rest 6 hours (a balance does not come back by itself). Wrong key or rate limited: 30 minutes.
    * Server error or timeout: 2 minutes.
@@ -114,7 +118,8 @@ export function speechApi(cfg, fetchImpl = fetch) {
   }
 
   /** Gemini speaks the reply in a natural voice; returns a WAV (its audio comes as raw 16-bit PCM). */
-  async function synthesizeGemini({ text, language }) {
+  async function synthesizeGemini({ text, language, voice }) {
+    const voiceName = GEMINI_VOICES.includes(voice) ? voice : (GEMINI_VOICES.includes(cfg.geminiTtsVoice) ? cfg.geminiTtsVoice : 'Kore')
     const model = await geminiTtsModel()
     if (!model) return { status: 503, error: 'This Gemini key has no text-to-speech model.' }
     // Only the reply itself: a style note in front of it ("Read this aloud ...") was sometimes spoken out loud too.
@@ -122,12 +127,12 @@ export function speechApi(cfg, fetchImpl = fetch) {
       method: 'POST', headers: gHeaders(), signal: AbortSignal.timeout(20_000),
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: text.slice(0, 2000) }] }],
-        generationConfig: { responseModalities: ['AUDIO'], ...steady, speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: cfg.geminiTtsVoice } } } },
+        generationConfig: { responseModalities: ['AUDIO'], ...steady, speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } } },
       }),
     })
     const b = await parse(r)
     // A model that does not take the steadiness settings says 400: ask again without them, and stop sending them.
-    if (r.status === 400 && Object.keys(steady).length) { steady = {}; return synthesizeGemini({ text, language }) }
+    if (r.status === 400 && Object.keys(steady).length) { steady = {}; return synthesizeGemini({ text, language, voice }) }
     if (!r.ok) {
       if (r.status === 404) ttsModelFound = null // the model went away: look again next time
       return { status: r.status, error: b?.error?.message || `text-to-speech failed (${r.status})` }
@@ -141,95 +146,14 @@ export function speechApi(cfg, fetchImpl = fetch) {
     return { status: 200, audio: wavFromPcm(pcm, rate).toString('base64') }
   }
 
-  /** Sarvam AI speech-to-text: one short clip (under about 30 seconds) per request. */
-  async function recognizeSarvam({ audio, language, phrases }) {
-    const form = new FormData()
-    form.append('file', new Blob([wavFromPcm(Buffer.from(audio, 'base64'))], { type: 'audio/wav' }), 'speech.wav')
-    form.append('model', cfg.sarvamModel)
-    form.append('language_code', language)
-    if (cfg.sarvamMode) form.append('mode', cfg.sarvamMode)
-    // Product and customer names help it spell them the way the shop does (at most 50, 64 characters each).
-    const terms = phrases.filter(p => [...p].length <= 64).slice(0, 50)
-    if (terms.length && cfg.sarvamModel.startsWith('saaras:v4')) form.append('keyterms', JSON.stringify(terms))
-    const r = await fetchImpl(`${cfg.sarvamBase}/speech-to-text`, {
-      method: 'POST', headers: { 'api-subscription-key': cfg.sarvamKey }, body: form, signal: AbortSignal.timeout(20_000),
-    })
-    const body = await parse(r)
-    if (!r.ok) return { status: r.status, error: body?.error?.message || body?.message || `speech-to-text failed (${r.status})` }
-    return { status: 200, text: String(body.transcript ?? '').replace(/\s+/g, ' ').trim(), language: body.language_code || language, confidence: null }
-  }
-
   const ttsProvider = () => ttsChain()[0] ?? null
 
-  /** Sarvam AI Bulbul: one WAV for the reply. Tries the chosen voice, then the model's own default voice. */
-  async function synthesizeSarvam({ text, language }) {
-    // One voice for both languages: English replies use the Tamil voice too unless an English one is chosen.
-    const speaker = language === 'ta-IN' ? cfg.sarvamSpeakerTa : (cfg.sarvamSpeakerEn || cfg.sarvamSpeakerTa)
-    const send = (body) => fetchImpl(`${cfg.sarvamBase}/text-to-speech`, {
-      method: 'POST', signal: AbortSignal.timeout(15_000),
-      headers: { 'content-type': 'application/json', 'api-subscription-key': cfg.sarvamKey },
-      body: JSON.stringify(body),
-    })
-    const base = { text: text.slice(0, 2500), language_code: language, model: cfg.sarvamTtsModel, pace: cfg.sarvamTtsPace, speech_sample_rate: 24000, output_audio_codec: 'wav' }
-    const tries = speaker ? [{ ...base, speaker }, base, { ...base, model: 'bulbul:v3' }] : [base, { ...base, model: 'bulbul:v3' }]
-    let last = { status: 502, error: 'text-to-speech failed' }
-    for (const body of tries) {
-      const r = await send(body)
-      const b = await parse(r)
-      const audio = Array.isArray(b?.audios) ? b.audios[0] : null
-      if (r.ok && typeof audio === 'string' && audio.length > 0) return { status: 200, audio }
-      last = { status: r.ok ? 502 : r.status, error: b?.error?.message || b?.message || `text-to-speech failed (${r.status})` }
-      if ([401, 402, 403, 429].includes(r.status)) break // key or quota: another voice will not help
-    }
-    return last
-  }
-
-  async function recognizeGoogle({ audio, language, phrases }) {
-    const other = SPEECH_LANGS.find(l => l !== language)
-    const config = {
-      encoding: 'LINEAR16', sampleRateHertz: 16000, audioChannelCount: 1, languageCode: language,
-      model: cfg.sttModel, maxAlternatives: 1, profanityFilter: false,
-      ...(phrases.length ? { speechContexts: [{ phrases, boost: 8 }] } : {}),
-    }
-    const send = (withAlt) => fetchImpl(`${cfg.sttBase}/v1p1beta1/speech:recognize`, {
-      method: 'POST', headers: headers(), signal: AbortSignal.timeout(20_000),
-      body: JSON.stringify({ config: withAlt ? { ...config, alternativeLanguageCodes: [other] } : config, audio: { content: audio } }),
-    })
-    let r = await send(true)
-    let body = await parse(r)
-    // Some models do not accept a second language: ask again with one.
-    if (r.status === 400) { r = await send(false); body = await parse(r) }
-    if (!r.ok) return { status: r.status, error: body?.error?.message || `speech-to-text failed (${r.status})` }
-    const results = Array.isArray(body.results) ? body.results : []
-    const text = results.map(x => x?.alternatives?.[0]?.transcript ?? '').join(' ').replace(/\s+/g, ' ').trim()
-    const conf = results.map(x => x?.alternatives?.[0]?.confidence).filter(n => typeof n === 'number')
-    return {
-      status: 200, text,
-      language: (results.find(x => x.languageCode)?.languageCode || language),
-      confidence: conf.length ? conf.reduce((a, b) => a + b, 0) / conf.length : null,
-    }
-  }
-
-  /** Google Cloud Text-to-Speech. Falls back to Google's default voice for the language. */
-  async function synthesizeGoogle({ text, language }) {
-    const name = language === 'ta-IN' ? cfg.ttsVoiceTa : cfg.ttsVoiceEn
-    const send = (voice) => fetchImpl(`${cfg.ttsBase}/v1/text:synthesize`, {
-      method: 'POST', headers: headers(), signal: AbortSignal.timeout(15_000),
-      body: JSON.stringify({ input: { text }, voice, audioConfig: { audioEncoding: 'LINEAR16', sampleRateHertz: 24000, speakingRate: cfg.ttsRate } }),
-    })
-    let r = await send(name ? { languageCode: language, name } : { languageCode: language })
-    let body = await parse(r)
-    if (!r.ok && name) { r = await send({ languageCode: language }); body = await parse(r) }
-    if (!r.ok || typeof body.audioContent !== 'string') return { status: r.ok ? 502 : r.status, error: body?.error?.message || `text-to-speech failed (${r.status})` }
-    return { status: 200, audio: body.audioContent }
-  }
-
-  const hear = { whisper: recognizeWhisper, sarvam: recognizeSarvam, google: recognizeGoogle, gemini: recognizeGemini }
-  const speak = { sarvam: synthesizeSarvam, google: synthesizeGoogle, gemini: synthesizeGemini }
+  const hear = { whisper: recognizeWhisper, gemini: recognizeGemini }
+  const speak = { gemini: synthesizeGemini }
 
   /**
    * The voice that answered last keeps answering while it works, so replies do not switch between voices (for
-   * example back to Sarvam each time its rest ends while its balance is still empty).
+   * example back to a provider each time its rest ends while it still fails).
    */
   let lastVoice = null
   const ttsChain = () => {
@@ -252,11 +176,11 @@ export function speechApi(cfg, fetchImpl = fetch) {
   return {
     ttsProvider,
     sttProvider,
-    sttModel: () => ({ whisper: 'whisper', sarvam: cfg.sarvamModel, google: cfg.sttModel, gemini: cfg.geminiSttModel || cfg.textModel })[sttProvider()] ?? '',
+    sttModel: () => ({ whisper: 'whisper', gemini: cfg.geminiSttModel || cfg.textModel })[sttProvider()] ?? '',
     sttConfigured: () => sttProvider() !== null,
     ttsConfigured: () => ttsProvider() !== null,
     configured: () => sttProvider() !== null || ttsProvider() !== null,
-    /** Providers resting after a failure, with the reason (shown on /healthz so the owner sees "Sarvam: 402 ..."). */
+    /** Providers resting after a failure, with the reason (shown on /healthz so the owner sees "gemini: 429 ..."). */
     resting: () => Object.fromEntries([...down.entries()].filter(([p]) => isDown(p)).map(([p, d]) => [p, d.reason])),
 
     /**

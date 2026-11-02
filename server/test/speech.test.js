@@ -15,44 +15,6 @@ function fake(reply) {
   return f
 }
 
-test('Sarvam AI hears the owner when its key is set; key, model, language and names are sent', async () => {
-  const cfg = loadConfig({ ...base, SARVAM_API_KEY: 'sarvam-key', SARVAM_BASE_URL: 'https://sarvam.test', GOOGLE_CLOUD_API_KEY: 'g' })
-  const f = fake(() => ({ request_id: 'r1', transcript: 'Raju-க்கு  2 XL shirt  cash', language_code: 'ta-IN' }))
-  const api = speechApi(cfg, f)
-  assert.equal(api.sttProvider(), 'sarvam')
-  assert.equal(api.sttModel(), 'saaras:v4')
-  const pcm = Buffer.alloc(32000, 1)
-  const r = await api.recognize({ audio: pcm.toString('base64'), language: 'ta-IN', phrases: ['Shirt XL', 'x'.repeat(65), 'Raju'] })
-  assert.equal(r.status, 200)
-  assert.equal(r.text, 'Raju-க்கு 2 XL shirt cash')
-  assert.equal(r.language, 'ta-IN')
-  const c = f.calls[0]
-  assert.equal(c.url, 'https://sarvam.test/speech-to-text')
-  assert.equal(c.init.headers['api-subscription-key'], 'sarvam-key')
-  const form = c.init.body
-  assert.equal(form.get('model'), 'saaras:v4')
-  assert.equal(form.get('language_code'), 'ta-IN')
-  assert.equal(form.get('mode'), 'codemix')
-  assert.deepEqual(JSON.parse(form.get('keyterms')), ['Shirt XL', 'Raju'])
-  const file = Buffer.from(await form.get('file').arrayBuffer())
-  assert.equal(file.subarray(0, 4).toString(), 'RIFF')
-  assert.equal(file.readUInt32LE(24), 16000)
-  assert.equal(file.length, 44 + pcm.length)
-})
-
-test('Sarvam errors are reported, and STT_PROVIDER=google keeps Google', async () => {
-  const cfg = loadConfig({ ...base, SARVAM_API_KEY: 'k', SARVAM_BASE_URL: 'https://sarvam.test' })
-  const bad = async () => new Response(JSON.stringify({ error: { message: 'Invalid API key' } }), { status: 403 })
-  const r = await speechApi(cfg, bad).recognize({ audio: 'AAAA', language: 'ta-IN', phrases: [] })
-  assert.equal(r.status, 403)
-  assert.equal(r.error, 'Invalid API key')
-  assert.equal(speechApi(cfg).ttsProvider(), 'sarvam', 'a Sarvam key also reads replies aloud')
-
-  const g = loadConfig({ ...base, SARVAM_API_KEY: 'k', GOOGLE_CLOUD_API_KEY: 'g', STT_PROVIDER: 'google' })
-  assert.equal(speechApi(g).sttProvider(), 'google')
-  assert.equal(speechApi(loadConfig(base)).sttConfigured(), false)
-})
-
 test('WAV header is valid 16 kHz mono 16-bit', () => {
   const w = wavFromPcm(Buffer.alloc(10))
   assert.equal(w.length, 54)
@@ -112,34 +74,7 @@ test('OpenRouter: key in the header only, errors passed on', async () => {
   assert.equal((await openRouterApi(cfg, busy).generate('m', { contents: [] })).status, 429)
 })
 
-test('Sarvam reads replies aloud in a Tamil voice, falling back to the default voice', async () => {
-  const cfg = loadConfig({ ...base, SARVAM_API_KEY: 'sk', SARVAM_BASE_URL: 'https://sarvam.test', GOOGLE_CLOUD_API_KEY: 'g' })
-  const calls = []
-  const f = async (url, init) => {
-    const body = JSON.parse(init.body)
-    calls.push({ url, body, key: init.headers['api-subscription-key'] })
-    if (body.speaker === 'gokul_ta_narration') return new Response(JSON.stringify({ error: { message: 'speaker not found' } }), { status: 400 })
-    return new Response(JSON.stringify({ request_id: 'x', audios: [Buffer.from('RIFFdata').toString('base64')] }), { status: 200 })
-  }
-  const api = speechApi(cfg, f)
-  assert.equal(api.ttsProvider(), 'sarvam')
-  const r = await api.synthesize({ text: 'Shirt XL இப்போ 10 பீஸ் இருக்கு.', language: 'ta-IN' })
-  assert.equal(r.status, 200)
-  assert.equal(Buffer.from(r.audio, 'base64').toString(), 'RIFFdata')
-  assert.equal(calls[0].url, 'https://sarvam.test/text-to-speech')
-  assert.equal(calls[0].key, 'sk')
-  assert.equal(calls[0].body.language_code, 'ta-IN')
-  assert.equal(calls[0].body.model, 'bulbul:v4-flash')
-  assert.equal(calls[0].body.output_audio_codec, 'wav')
-  assert.equal(calls[1].body.speaker, undefined)
-  const denied = async () => new Response(JSON.stringify({ error: { message: 'Invalid API key' } }), { status: 403 })
-  const d = await speechApi(cfg, denied).synthesize({ text: 'x', language: 'ta-IN' })
-  assert.equal(d.status, 403)
-  const g = loadConfig({ ...base, SARVAM_API_KEY: 'sk', GOOGLE_CLOUD_API_KEY: 'g', TTS_PROVIDER: 'google' })
-  assert.equal(speechApi(g).ttsProvider(), 'google')
-})
-
-test('Without Sarvam or Google Cloud, Gemini hears and speaks with the Gemini key', async () => {
+test('Gemini hears and speaks with the Gemini key, in the voice the owner picked', async () => {
   const cfg = loadConfig({ ...base, GEMINI_API_KEY: 'gk', GEMINI_BASE_URL: 'https://gem.test', GEMINI_TEXT_MODEL: 'gemini-flash-lite-latest' })
   const calls = []
   const pcmOut = Buffer.alloc(4800, 2)
@@ -174,19 +109,23 @@ test('Without Sarvam or Google Cloud, Gemini hears and speaks with the Gemini ke
   const ttsCall = calls.find(c => c.url.includes('gemini-flash-tts'))
   assert.deepEqual(ttsCall.body.generationConfig.responseModalities, ['AUDIO'])
   assert.equal(ttsCall.body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, 'Kore')
-  // Sarvam still wins when its key is set; STT_PROVIDER=gemini keeps Gemini even then.
-  assert.equal(speechApi(loadConfig({ ...base, GEMINI_API_KEY: 'g', SARVAM_API_KEY: 's' })).sttProvider(), 'sarvam')
-  assert.equal(speechApi(loadConfig({ ...base, GEMINI_API_KEY: 'g', SARVAM_API_KEY: 's', STT_PROVIDER: 'gemini', TTS_PROVIDER: 'gemini' })).ttsProvider(), 'gemini')
+  // The voice the owner picked is used; a name Gemini does not have falls back to the default.
+  await api.synthesize({ text: 'Hello', language: 'en-IN', voice: 'Puck' })
+  assert.equal(calls.filter(c => c.url.includes('gemini-flash-tts')).at(-1).body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, 'Puck')
+  await api.synthesize({ text: 'Hello', language: 'en-IN', voice: 'NotAVoice' })
+  assert.equal(calls.filter(c => c.url.includes('gemini-flash-tts')).at(-1).body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, 'Kore')
 })
 
-test('Whisper on the server hears when it is running; replies are still spoken by Sarvam or Gemini', async () => {
-  const cfg = loadConfig({ ...base, WHISPER_URL: 'http://whisper:9000/', SARVAM_API_KEY: 's', GEMINI_API_KEY: 'g', STT_PROVIDER: 'whisper', TTS_PROVIDER: 'whisper' })
+test('Whisper on the server hears when it is running; replies are still spoken by Gemini', async () => {
+  const cfg = loadConfig({ ...base, WHISPER_URL: 'http://whisper:9000/', SARVAM_API_KEY: 's', GEMINI_API_KEY: 'g', STT_PROVIDER: 'whisper' })
   const calls = []
   const f = async (url, init) => { calls.push({ url: String(url), body: JSON.parse(init.body) }); return new Response(JSON.stringify({ text: ' சரி  2 XL shirt ', took: 1.2 }), { status: 200 }) }
   const api = speechApi(cfg, f)
   assert.equal(api.sttProvider(), 'whisper')
-  assert.equal(api.ttsProvider(), 'sarvam', 'Whisper does not speak: replies use the next voice')
-  assert.equal(speechApi(loadConfig({ ...base, WHISPER_URL: 'http://whisper:9000', SARVAM_API_KEY: 's' })).ttsProvider(), 'sarvam')
+  assert.equal(api.ttsProvider(), 'gemini', 'Whisper does not speak: Gemini does')
+  // A Sarvam key left in an old .env is ignored: only Gemini and Whisper are used.
+  assert.equal(speechApi(loadConfig({ ...base, GEMINI_API_KEY: 'g', SARVAM_API_KEY: 's', GOOGLE_CLOUD_API_KEY: 'c' })).sttProvider(), 'gemini')
+  assert.equal(speechApi(loadConfig({ ...base, SARVAM_API_KEY: 's' })).ttsConfigured(), false)
   const r = await api.recognize({ audio: 'AAAA', language: 'ta-IN', phrases: ['Shirt XL', 'Raju'] })
   assert.equal(r.text, 'சரி 2 XL shirt')
   assert.equal(calls[0].url, 'http://whisper:9000/transcribe')
@@ -195,36 +134,6 @@ test('Whisper on the server hears when it is running; replies are still spoken b
   assert.equal((await speechApi(cfg, down).recognize({ audio: 'AAAA', language: 'ta-IN', phrases: [] })).error, 'audio too long', 'the chosen provider\'s own error is reported')
   // Without WHISPER_URL, asking for whisper gives nothing rather than a broken provider.
   assert.equal(speechApi(loadConfig({ ...base, STT_PROVIDER: 'whisper' })).sttProvider(), null)
-})
-
-test('Sarvam out of credit: Gemini hears and speaks instead, and Sarvam rests instead of slowing every request', async () => {
-  const cfg = loadConfig({ ...base, SARVAM_API_KEY: 's', SARVAM_BASE_URL: 'https://sarvam.test', GEMINI_API_KEY: 'g', GEMINI_BASE_URL: 'https://gemini.test', GEMINI_TTS_MODEL: 'gemini-3.8-flash-lite-tts' })
-  const calls = []
-  const f = async (url, init) => {
-    url = String(url); calls.push(url)
-    const json = (status, body) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
-    if (url.startsWith('https://sarvam.test')) return json(402, { error: { message: 'Insufficient credits' } })
-    if (url.includes('flash-lite-tts')) return json(200, { candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/L16;rate=24000', data: Buffer.alloc(480).toString('base64') } }] } }] })
-    return json(200, { candidates: [{ content: { parts: [{ text: 'Shirt XL evlo irukku' }] } }] })
-  }
-  const api = speechApi(cfg, f)
-  assert.equal(api.sttProvider(), 'sarvam')
-  let r = await api.recognize({ audio: 'AAAA', language: 'ta-IN', phrases: [] })
-  assert.equal(r.status, 200)
-  assert.equal(r.text, 'Shirt XL evlo irukku')
-  assert.equal(r.provider, 'gemini')
-  assert.match(api.resting().sarvam, /402: Insufficient credits/)
-  assert.equal(api.sttProvider(), 'gemini', 'Sarvam rests')
-  calls.length = 0
-  r = await api.recognize({ audio: 'AAAA', language: 'ta-IN', phrases: [] })
-  assert.ok(calls.every(u => !u.startsWith('https://sarvam.test')), 'no time lost on Sarvam while it rests')
-  let ttsBody = null
-  const f2 = async (url, init) => { ttsBody = JSON.parse(init.body); return f(url, init) }
-  const t = await speechApi(cfg, f2).synthesize({ text: 'Shirt XL 10 இருக்கு', language: 'ta-IN' })
-  assert.equal(ttsBody.contents[0].parts[0].text, 'Shirt XL 10 இருக்கு', 'only the reply is sent to be spoken, no instructions')
-  assert.equal(t.status, 200)
-  assert.equal(t.provider, 'gemini')
-  assert.ok(Buffer.from(t.audio, 'base64').subarray(0, 4).toString() === 'RIFF')
 })
 
 test('Gemini voice is kept steady, and a model that refuses the steadiness settings still speaks', async () => {
@@ -245,19 +154,22 @@ test('Gemini voice is kept steady, and a model that refuses the steadiness setti
   assert.equal(bodies.length, 3, 'not sent again after the model refused them')
 })
 
-test('the voice that answered keeps answering; a used-up Sarvam balance rests for hours', async () => {
-  const cfg = loadConfig({ ...base, SARVAM_API_KEY: 'k', SARVAM_BASE_URL: 'https://sarvam.test', GEMINI_API_KEY: 'gk', GEMINI_BASE_URL: 'https://gem.test', GEMINI_TTS_MODEL: 'tts-model' })
-  const hits = []
+
+test('Gemini rate limited: Whisper hears instead, and Gemini rests instead of slowing every request', async () => {
+  const cfg = loadConfig({ ...base, WHISPER_URL: 'http://whisper:9000', GEMINI_API_KEY: 'g', GEMINI_BASE_URL: 'https://gemini.test' })
+  const calls = []
   const f = async (url) => {
-    hits.push(String(url))
-    if (String(url).includes('sarvam')) return new Response(JSON.stringify({ error: { message: 'Insufficient credits' } }), { status: 402 })
-    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/L16;rate=24000', data: Buffer.alloc(8).toString('base64') } }] } }] }), { status: 200 })
+    url = String(url); calls.push(url)
+    if (url.startsWith('https://gemini.test')) return new Response(JSON.stringify({ error: { message: 'Resource has been exhausted' } }), { status: 429 })
+    return new Response(JSON.stringify({ text: 'Shirt XL evlo irukku' }), { status: 200 })
   }
   const api = speechApi(cfg, f)
-  assert.equal((await api.synthesize({ text: 'one', language: 'en-IN' })).provider, 'gemini')
-  assert.match(api.resting().sarvam, /402/)
-  hits.length = 0
-  assert.equal((await api.synthesize({ text: 'two', language: 'ta-IN' })).provider, 'gemini')
-  assert.equal(hits.filter(h => h.includes('sarvam')).length, 0, 'Sarvam is not tried again while Gemini works')
-  assert.equal(api.ttsProvider(), 'gemini')
+  assert.equal(api.sttProvider(), 'gemini')
+  let r = await api.recognize({ audio: 'AAAA', language: 'ta-IN', phrases: [] })
+  assert.equal(r.provider, 'whisper')
+  assert.equal(r.text, 'Shirt XL evlo irukku')
+  assert.match(api.resting().gemini, /429/)
+  calls.length = 0
+  r = await api.recognize({ audio: 'AAAA', language: 'ta-IN', phrases: [] })
+  assert.ok(calls.every(u => !u.startsWith('https://gemini.test')), 'no time lost on Gemini while it rests')
 })

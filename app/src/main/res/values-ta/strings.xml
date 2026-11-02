@@ -140,9 +140,9 @@
     <string name="chosen">தேர்வு</string>
     <string name="clear">அழி</string>
     <string name="close">மூடு</string>
-    <string name="cloud_speech">Server குரல் (Sarvam AI / Google Cloud)</string>
-    <string name="cloud_speech_privacy">Server voice on-ஆ இருந்தா, ஒவ்வொரு request-ம் சின்ன recording-ஆ Thodar server-க்கு போகும்; அது Gemini, Sarvam AI அல்லது Google Cloud மூலம் எழுத்தா மாத்தும், recording-ஐ வெச்சுக்காது. Phone-ன் சொந்த speech recognition வேணும்னா off பண்ணுங்க.</string>
-    <string name="cloud_speech_sub">உங்கள் குரலை Thodar server வழியாக Sarvam AI (தமிழுக்காக உருவானது) அல்லது Google Cloud எழுத்தாக மாற்றும்; ஒவ்வொரு கோரிக்கையாக. பதில்களை Google Cloud படிக்கும், server-ல் Google key இல்லையென்றால் phone படிக்கும். Plan-ன் voice நிமிடங்களைப் பயன்படுத்தும்.</string>
+    <string name="cloud_speech">Server குரல் (Gemini / Whisper)</string>
+    <string name="cloud_speech_privacy">Server voice on-ஆ இருந்தா, ஒவ்வொரு request-ம் சின்ன recording-ஆ Thodar server-க்கு போகும்; அது Gemini அல்லது Whisper மூலம் எழுத்தா மாத்தும், recording-ஐ வெச்சுக்காது. Phone-ன் சொந்த speech recognition வேணும்னா off பண்ணுங்க.</string>
+    <string name="cloud_speech_sub">உங்கள் குரலை Thodar server வழியாக Gemini (அல்லது உங்கள் server-ல் Whisper) எழுத்தாக மாற்றும்; ஒவ்வொரு கோரிக்கையாக. பதில்களை கீழே நீங்கள் தேர்ந்தெடுக்கும் Gemini குரல் படிக்கும். Plan-ன் voice நிமிடங்களைப் பயன்படுத்தும்.</string>
     <string name="cn_call_back">அப்புறம் call பண்ணணும்</string>
     <string name="cn_no_answer">எடுக்கல</string>
     <string name="cn_ordered">Order கொடுத்தாங்க</string>
@@ -811,4 +811,13 @@
     <string name="cat_by_ai">உங்கள் கோப்பில் %1$d பொருட்களுக்கு வகை இல்லை. AI இவற்றை இப்படி பிரித்தது (வகை இல்லாத பொருட்களுக்கு மட்டும்; பின்னர் Inventory › Categories-ல் மாற்றலாம்):</string>
     <string name="cat_by_rules">உங்கள் கோப்பில் %1$d பொருட்களுக்கு வகை இல்லை. பெயரை வைத்து இப்படி பிரிக்கப்படும் (வகை இல்லாத பொருட்களுக்கு மட்டும்; பின்னர் Inventory › Categories-ல் மாற்றலாம்):</string>
     <string name="cat_filled">வகை சேர்க்கப்பட்ட பொருட்கள்</string>
+    <string name="voice_pick">Stocky-ன் குரல்</string>
+    <string name="voice_pick_sub">ஒரு குரலைத் தேர்ந்தெடுத்து, கேட்டுப் பார்த்து, "இந்த குரல்" அழுத்துங்கள். நீங்கள் இங்கே மாற்றும் வரை Stocky எப்போதும் இதே குரலில் பேசும்.</string>
+    <string name="voice_label">குரல்</string>
+    <string name="voice_play">கேளுங்கள்</string>
+    <string name="voice_playing">ஒலிக்கிறது…</string>
+    <string name="voice_use">இந்த குரல்</string>
+    <string name="voice_saved">இனி Stocky எப்போதும் %1$s குரலில் பேசும்.</string>
+    <string name="voice_sample_text">வணக்கம்! நான் Stocky. Shirt XL stock 12 பீஸ் இருக்கு. இன்னைக்கு sales 4,500 ரூபாய்.</string>
+    <string name="voice_sample_failed">இப்போது குரலை இயக்க முடியவில்லை. இணையத்தை சரிபார்த்து மீண்டும் முயற்சிக்கவும்.</string>
 </resources>

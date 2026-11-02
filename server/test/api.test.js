@@ -35,6 +35,8 @@ function fakeFetch(u, init) {
     if (init?.method === 'POST') return json(200, { id: 'plink_test1', short_url: 'https://rzp.io/i/test1', status: 'created' })
     return json(200, { id: 'plink_test1', status: google.rzpStatus, amount_paid: google.rzpStatus === 'paid' ? 49900 : 0 })
   }
+  if (String(u).includes('/models?')) return json(200, { models: [{ name: 'models/gemini-flash-tts', supportedGenerationMethods: ['generateContent'] }] })
+  if (String(u).includes('tts:generateContent')) return json(200, { candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/L16;rate=24000', data: Buffer.alloc(480).toString('base64') } }] } }] })
   if (String(u).includes(':generateContent')) {
     if (google.geminiDown) return json(429, { error: { message: 'Resource has been exhausted' } })
     return json(200, { candidates: [{ content: { role: 'model', parts: [{ text: 'Innikku 3 sales.' }] }, finishReason: 'STOP' }], usageMetadata: { promptTokenCount: 120, candidatesTokenCount: 8 } })
@@ -253,55 +255,43 @@ test('owners cannot be demoted by mistake; bad admin input is refused', async ()
   assert.equal((await call('POST', '/admin/subscriptions', { headers: { authorization: 'Bearer admin-secret-token' }, body: { businessId: o.businessId, planId: 'pro', days: -5 } })).status, 400)
 })
 
-test('Google Cloud speech: key stays on the server, phrases passed, minutes metered and refunded on failure', async () => {
+test('Gemini speech: key stays on the server, the picked voice is used, minutes metered and refunded on failure', async () => {
   const a = await register('speech@shop.in', 'Speech Shop')
   const pcm = Buffer.alloc(32000 * 3) // three seconds of silence
   google.calls.length = 0
-  google.altRejected = true
   let r = await call('POST', `/v1/businesses/${a.businessId}/ai/stt`, { token: a.accessToken, body: { audio: pcm.toString('base64'), language: 'ta-IN', phrases: ['Shirt XL', 'Raju', 42, 'Shirt XL'] } })
   assert.equal(r.status, 200, JSON.stringify(r.json))
-  assert.equal(r.json.text, 'Raju-ku rendu XL shirt cash')
+  assert.equal(r.json.text, 'Innikku 3 sales.')
   assert.equal(r.json.seconds, 3)
-  const stt = google.calls.filter(c => c.url.includes('speech:recognize'))
-  assert.equal(stt.length, 2, 'retried without the second language')
-  assert.equal(stt[0].headers['x-goog-api-key'], 'cloud-key')
-  assert.equal(stt[0].body.config.languageCode, 'ta-IN')
-  assert.deepEqual(stt[0].body.config.speechContexts[0].phrases, ['Shirt XL', 'Raju'])
-  assert.equal(stt[1].body.config.alternativeLanguageCodes, undefined)
-  google.altRejected = false
+  const stt = google.calls.filter(c => c.url.includes(':generateContent'))
+  assert.equal(stt[0].headers['x-goog-api-key'], 'server-key')
+  assert.match(stt[0].body.contents[0].parts[1].text, /Shirt XL, Raju/)
+  assert.ok(google.calls.every(c => !c.url.includes('speech:recognize') && !c.url.includes('text:synthesize')), 'Google Cloud speech is not used')
 
-  google.ttsVoiceMissing = true
-  r = await call('POST', `/v1/businesses/${a.businessId}/ai/tts`, { token: a.accessToken, body: { text: 'Raju-க்கு 2 XL shirt bill போட்டாச்சு.' } })
+  r = await call('POST', `/v1/businesses/${a.businessId}/ai/tts`, { token: a.accessToken, body: { text: 'Raju-க்கு 2 XL shirt bill போட்டாச்சு.', voice: 'Charon' } })
   assert.equal(r.status, 200, JSON.stringify(r.json))
   assert.equal(r.json.language, 'ta-IN')
+  assert.equal(r.json.voice, 'Charon')
   assert.ok(Buffer.from(r.json.audio, 'base64').toString().startsWith('RIFF'))
-  const tts = google.calls.filter(c => c.url.includes('text:synthesize'))
-  assert.equal(tts[0].body.voice.name, 'ta-IN-Chirp3-HD-Aoede')
-  assert.equal(tts[1].body.voice.name, undefined, 'falls back to the default voice')
-  google.ttsVoiceMissing = false
-  r = await call('POST', `/v1/businesses/${a.businessId}/ai/tts`, { token: a.accessToken, body: { text: 'Shirt XL stock 10 irukku' } })
+  const tts = google.calls.filter(c => c.url.includes('tts:generateContent'))
+  assert.equal(tts.at(-1).body.generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, 'Charon')
+  r = await call('POST', `/v1/businesses/${a.businessId}/ai/tts`, { token: a.accessToken, body: { text: 'Shirt XL stock 10 irukku', voice: '../etc' } })
   assert.equal(r.json.language, 'en-IN')
+  assert.equal(r.json.voice, 'Kore', 'an unknown voice falls back to the default')
 
   const used = Number((await pool.query("SELECT COALESCE(SUM(quantity),0) AS n FROM usage_events WHERE business_id = $1 AND kind IN ('stt_seconds','tts_seconds')", [a.businessId])).rows[0].n)
   assert.ok(used >= 5)
   const usage = await call('GET', `/v1/businesses/${a.businessId}/usage`, { token: a.accessToken })
   assert.ok(JSON.stringify(usage.json).includes(`"used":${used}`), 'speech counts against the voice minutes')
 
-  // Google failing: Gemini hears instead, and the health check says Google is resting.
-  google.sttDown = true
-  r = await call('POST', `/v1/businesses/${a.businessId}/ai/stt`, { token: a.accessToken, body: { audio: pcm.toString('base64') } })
-  assert.equal(r.status, 200, JSON.stringify(r.json))
-  assert.equal(r.json.text, 'Innikku 3 sales.')
-  assert.match(JSON.stringify((await call('GET', '/healthz')).json.speechResting), /google/)
-  const afterFallback = Number((await pool.query("SELECT COALESCE(SUM(quantity),0) AS n FROM usage_events WHERE business_id = $1 AND kind IN ('stt_seconds','tts_seconds')", [a.businessId])).rows[0].n)
-  // Every provider failing gives the time back.
+  // Gemini failing (and no Whisper here): busy, and the time is given back.
   google.geminiDown = true
   r = await call('POST', `/v1/businesses/${a.businessId}/ai/stt`, { token: a.accessToken, body: { audio: pcm.toString('base64') } })
-  assert.equal(r.status, 503, 'Google is resting, so Gemini alone was asked and is rate limited: busy, try again')
-  google.sttDown = false; google.geminiDown = false
+  assert.equal(r.status, 503)
+  assert.match(JSON.stringify((await call('GET', '/healthz')).json.speechResting), /gemini/)
+  google.geminiDown = false
   const after = Number((await pool.query("SELECT COALESCE(SUM(quantity),0) AS n FROM usage_events WHERE business_id = $1 AND kind IN ('stt_seconds','tts_seconds')", [a.businessId])).rows[0].n)
-  assert.equal(after, afterFallback)
-  assert.equal(afterFallback, used + 3)
+  assert.equal(after, used)
 
   // Bad input, too long, other business, no minutes left.
   assert.equal((await call('POST', `/v1/businesses/${a.businessId}/ai/stt`, { token: a.accessToken, body: { audio: 'not base64!' } })).status, 400)

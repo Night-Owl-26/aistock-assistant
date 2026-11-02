@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Turns on Whisper speech-to-text on this server (OpenAI's Whisper models via faster-whisper, CPU only).
 #   cd /opt/follower/server && bash enable-whisper.sh            (WHISPER_MODEL=small|medium|large-v3 to choose)
-#   bash enable-whisper.sh off                                     (back to Sarvam / Gemini)
+#   bash enable-whisper.sh off                                     (back to Gemini)
 set -euo pipefail
 cd "$(dirname "$0")"
 setenv() {
@@ -14,7 +14,7 @@ files="-f docker-compose.yml"
 sudo docker compose ps --services 2>/dev/null | grep -qx caddy || files="$files -f docker-compose.nginx.yml"
 
 if [ "${1:-}" = off ]; then
-  setenv STT_PROVIDER auto; setenv WHISPER_URL ""; setenv COMPOSE_PROFILES ""
+  setenv STT_PROVIDER gemini; setenv WHISPER_URL ""; setenv COMPOSE_PROFILES ""
   sudo docker compose $files --profile whisper stop whisper >/dev/null 2>&1 || true
   sudo docker compose $files up -d --build --force-recreate api >/dev/null
   echo "Whisper turned off."; exit 0
@@ -43,4 +43,4 @@ print('  took', json.load(urllib.request.urlopen(req, timeout=120))['took'], 'se
 sudo docker compose $files up -d --build --force-recreate api >/dev/null
 sleep 4
 curl -s "https://$(grep -E '^DOMAIN=' .env | cut -d= -f2)/healthz"; echo
-echo "Done: Server voice now hears with Whisper. Replies are still spoken by Sarvam/Gemini."
+echo "Done: Server voice now hears with Whisper. Replies are spoken by Gemini in the voice picked in the app."

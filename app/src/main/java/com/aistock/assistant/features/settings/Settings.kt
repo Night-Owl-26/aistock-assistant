@@ -241,6 +241,33 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
             SwitchRow(stringResource(R.string.cloud_speech), stringResource(R.string.cloud_speech_sub), prefs.cloudSpeech) { scope.launch { vm.setCloudSpeech(it) } }
             Text(stringResource(R.string.cloud_speech_privacy), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (!prefs.cloudSpeech) SwitchRow(stringResource(R.string.live_voice), stringResource(R.string.live_voice_sub), prefs.liveVoice) { scope.launch { vm.setLiveVoice(it) } }
+            if (prefs.cloudSpeech || prefs.liveVoice) {
+                Spacer(Modifier.height(8.dp))
+                Text(stringResource(R.string.voice_pick), style = MaterialTheme.typography.titleSmall)
+                Text(stringResource(R.string.voice_pick_sub), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(6.dp))
+                var picked by remember(prefs.voiceName) { mutableStateOf(prefs.voiceName) }
+                var playing by remember { mutableStateOf(false) }
+                DropdownField(
+                    stringResource(R.string.voice_label),
+                    com.aistock.assistant.voice.StockyVoices.ALL.map { it.name to com.aistock.assistant.voice.StockyVoices.label(it, prefs.tamil) },
+                    picked, { picked = it },
+                )
+                Spacer(Modifier.height(6.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(enabled = !playing && prefs.serverBusinessId.isNotBlank(), onClick = {
+                        playing = true
+                        scope.launch {
+                            val ok = vm.sampleVoice(picked, ctx.getString(R.string.voice_sample_text))
+                            if (!ok) toast(ctx.getString(R.string.voice_sample_failed))
+                            playing = false
+                        }
+                    }) { Text(stringResource(if (playing) R.string.voice_playing else R.string.voice_play)) }
+                    Button(enabled = picked != prefs.voiceName, onClick = {
+                        scope.launch { vm.setVoiceName(picked); toast(ctx.getString(R.string.voice_saved, picked)) }
+                    }) { Text(stringResource(R.string.voice_use)) }
+                }
+            }
             Spacer(Modifier.height(8.dp))
             OutlinedButton(enabled = !testing, onClick = {
                 testing = true; testResult = ""; checks = emptyList()

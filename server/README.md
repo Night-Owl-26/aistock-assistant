@@ -57,14 +57,13 @@ business's id answers "not found". This is covered by `test/api.test.js`.
    - `POSTGRES_PASSWORD`, `JWT_SECRET`, `ADMIN_TOKEN`: long random values — make each with `openssl rand -hex 32`.
    - `GEMINI_API_KEY`: your key from https://aistudio.google.com/apikey. Use a new key, not one that was ever shared in a chat.
    - `OPENROUTER_API_KEY` (optional): from https://openrouter.ai/keys. Stocky's typed conversation (and the Excel column matching) then runs on OpenRouter instead of Gemini; `OPENROUTER_MODEL` picks the model (`openrouter/free` = a free model that supports tools). Gemini Live voice still needs `GEMINI_API_KEY`; without it the app automatically uses Server voice or the phone's speech.
-   - `SARVAM_API_KEY` (optional, recommended for Tamil voice): from https://dashboard.sarvam.ai → API keys. Sarvam AI then turns the owner's speech into text (model `saaras:v4`, Tamil with English words kept in English). It is billed by Sarvam per minute of audio (new accounts get free credit). Replies are still read by Google Cloud Text-to-Speech when `GOOGLE_CLOUD_API_KEY` is set, otherwise by the phone.
-   - `GOOGLE_CLOUD_API_KEY` (optional): a Google Cloud API key for **Cloud Speech-to-Text** and **Cloud Text-to-Speech**. In console.cloud.google.com: pick or create a project with billing, enable both APIs, create an API key under *APIs & Services > Credentials*, and restrict it to those two APIs. Without it the app uses the phone's own speech and Gemini Live. Speech time counts against the plan's voice minutes.
    - **Whisper (optional, free):** `bash enable-whisper.sh` runs OpenAI's Whisper (via faster-whisper) in its own container
      on this server's CPU and makes it hear Server voice requests. `bash enable-whisper.sh off` switches back.
-   - **Choosing the voice service:** `bash use-voice.sh gemini` (Gemini key only), `sarvam` or `auto`. If the chosen
-     service fails (no credit, rate limit, error) the next configured one answers and the failing one rests for 30 minutes
-     (2 minutes after a server error); `/healthz` lists resting services under `speechResting`. Whisper, when running, is
-     the last resort for hearing. If every service fails, the phone's own voice reads the reply.
+   - **Choosing the voice service:** speech uses only Gemini (hearing and speaking, with `GEMINI_API_KEY`) and Whisper
+     (hearing, when turned on). `bash use-voice.sh gemini` or `bash use-voice.sh whisper` picks which one hears first; if it
+     fails (rate limit, error) the other one hears and the failing one rests for a while; `/healthz` lists resting services
+     under `speechResting`. Replies are always spoken by Gemini in the voice each owner picks in the app
+     (Settings › Stocky's voice). If Gemini cannot speak, the phone's own voice reads the reply.
 5. **Start it.**
    ```
    docker compose up -d --build

@@ -3,7 +3,7 @@
 #
 #   curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github.raw" \
 #     https://api.github.com/repos/Night-Owl-26/aistock-assistant/contents/server/install.sh | \
-#     GITHUB_TOKEN=$GITHUB_TOKEN GEMINI_API_KEY=... SARVAM_API_KEY=... OPENROUTER_API_KEY=... bash
+#     GITHUB_TOKEN=$GITHUB_TOKEN GEMINI_API_KEY=... OPENROUTER_API_KEY=... bash
 #
 # Run it again any time: it updates the code, keeps your passwords and data, and only changes the keys you pass.
 # Keys can also be left out of the command; the script then asks for them (input hidden).
@@ -96,9 +96,7 @@ DOMAIN_NOW="$(getenv "$ENVF" DOMAIN)"
 echo "  address: https://$DOMAIN_NOW"
 
 ask_key GEMINI_API_KEY "Google Gemini, for Stocky and live voice"
-ask_key SARVAM_API_KEY "Sarvam AI, Tamil speech-to-text"
 ask_key OPENROUTER_API_KEY "OpenRouter, optional spare chat model"
-ask_key GOOGLE_CLOUD_API_KEY "Google Cloud Speech/Text-to-Speech, optional"
 ask_key UPI_ID "your UPI ID, e.g. name@okaxis: owners pay this after the free trial"
 ask_key RAZORPAY_KEY_ID "Razorpay key id, for card and net-banking payments, optional"
 ask_key RAZORPAY_KEY_SECRET "Razorpay key secret, optional"

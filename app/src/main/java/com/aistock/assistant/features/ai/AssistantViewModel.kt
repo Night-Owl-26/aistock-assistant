@@ -214,7 +214,7 @@ class AssistantViewModel @Inject constructor(
 
     fun cloudRecognizer(): com.aistock.assistant.voice.SpeechInput = com.aistock.assistant.voice.cloud.CloudRecognizer(server) { speechHints() }
 
-    fun cloudSpeaker(fallback: com.aistock.assistant.voice.SpeechOutput): com.aistock.assistant.voice.SpeechOutput = com.aistock.assistant.voice.cloud.CloudSpeaker(server, fallback)
+    fun cloudSpeaker(fallback: com.aistock.assistant.voice.SpeechOutput): com.aistock.assistant.voice.SpeechOutput = com.aistock.assistant.voice.cloud.CloudSpeaker(server, fallback) { settings.current.value.voiceName }
 
     /** Names the recogniser should expect: products (with sizes), customers and suppliers. */
     private suspend fun speechHints(): List<String> =
@@ -223,7 +223,7 @@ class AssistantViewModel @Inject constructor(
 
     fun startLive() {
         if (live != null) return
-        val s = com.aistock.assistant.voice.live.LiveSession(appContext, server, stocky, viewModelScope)
+        val s = com.aistock.assistant.voice.live.LiveSession(appContext, server, stocky, viewModelScope, voiceName = settings.current.value.voiceName)
         live = s
         var userId: String? = null
         var stockyId: String? = null

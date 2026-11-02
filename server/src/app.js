@@ -6,7 +6,7 @@ import { checkPassword, hashPassword, randomToken, sameSecret, sha256, tokens } 
 import { tx } from './db.js'
 import { geminiApi, sanitizeRequest } from './gemini.js'
 import { openRouterApi } from './openrouter.js'
-import { SPEECH_LANGS, speechApi, speechLanguage, ttsSeconds } from './speech.js'
+import { GEMINI_VOICES, SPEECH_LANGS, speechApi, speechLanguage, ttsSeconds } from './speech.js'
 import { mailer } from './mail.js'
 import { randomInt } from 'node:crypto'
 import { validateConfig } from './businessConfig.js'
@@ -372,7 +372,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     return reply.code(r.status).send(r.body)
   })
 
-  // ---------------------------------------------------------------- AI: speech (Sarvam AI or Google Cloud), turn by turn
+  // ---------------------------------------------------------------- AI: speech (Gemini, or Whisper on this server), turn by turn
 
   /** Books [seconds] of voice time under the plan lock; refused when the month's minutes would be exceeded. */
   async function reserveSpeech(businessId, userId, kind, seconds, model) {
@@ -387,7 +387,7 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
 
   app.post('/v1/businesses/:id/ai/stt', { bodyLimit: 3 * 1024 * 1024, config: { rateLimit: { max: 30, timeWindow: '1 minute' } } }, async (req) => {
     const { user } = await member(req, req.params.id)
-    if (!speech.sttConfigured()) fail(503, 'speech_not_configured', 'The server has no speech-to-text key yet (Sarvam AI or Google Cloud).')
+    if (!speech.sttConfigured()) fail(503, 'speech_not_configured', 'The server has no speech-to-text yet (set GEMINI_API_KEY, or turn on Whisper).')
     const { audio, language, phrases } = req.body ?? {}
     if (typeof audio !== 'string' || audio.length < 8 || audio.length % 4 !== 0 || !B64.test(audio)) fail(400, 'bad_request', 'No audio was received.')
     const bytes = audio.length / 4 * 3
@@ -407,19 +407,21 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
 
   app.post('/v1/businesses/:id/ai/tts', { config: { rateLimit: { max: 40, timeWindow: '1 minute' } } }, async (req) => {
     const { user } = await member(req, req.params.id)
-    if (!speech.ttsConfigured()) fail(503, 'speech_not_configured', 'The server has no text-to-speech key yet (Sarvam AI or Google Cloud).')
+    if (!speech.ttsConfigured()) fail(503, 'speech_not_configured', 'The server has no text-to-speech yet (set GEMINI_API_KEY).')
     const text = typeof req.body?.text === 'string' ? req.body.text.trim() : ''
     if (!text) fail(400, 'bad_request', 'Nothing to say.')
     if ([...text].length > 2000) fail(413, 'too_long', 'The reply is too long to read out.')
     const lang = speechLanguage(text, req.body?.language)
-    const usageId = await reserveSpeech(req.params.id, user.id, 'tts_seconds', ttsSeconds(text), ({ sarvam: cfg.sarvamTtsModel, gemini: cfg.geminiTtsModel || 'gemini-tts' })[speech.ttsProvider()] ?? (lang === 'ta-IN' ? cfg.ttsVoiceTa : cfg.ttsVoiceEn))
+    // The voice the owner picked in the app; an unknown name falls back to the server's default voice.
+    const voice = GEMINI_VOICES.includes(req.body?.voice) ? req.body.voice : null
+    const usageId = await reserveSpeech(req.params.id, user.id, 'tts_seconds', ttsSeconds(text), cfg.geminiTtsModel || 'gemini-tts')
     let r
-    try { r = await speech.synthesize({ text, language: lang }) } catch (err) { await pool.query('DELETE FROM usage_events WHERE id = $1', [usageId]); throw err }
+    try { r = await speech.synthesize({ text, language: lang, voice }) } catch (err) { await pool.query('DELETE FROM usage_events WHERE id = $1', [usageId]); throw err }
     if (r.status !== 200) {
       await pool.query('DELETE FROM usage_events WHERE id = $1', [usageId])
       fail(r.status === 429 ? 503 : 502, 'speech_failed', r.error)
     }
-    return { audio: r.audio, encoding: 'wav', sampleRate: 24000, language: lang }
+    return { audio: r.audio, encoding: 'wav', sampleRate: 24000, language: lang, voice: voice ?? cfg.geminiTtsVoice }
   })
 
   // ---------------------------------------------------------------- AI: real-time voice

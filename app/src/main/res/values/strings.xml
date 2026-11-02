@@ -140,9 +140,9 @@
     <string name="chosen">Chosen</string>
     <string name="clear">Clear</string>
     <string name="close">Close</string>
-    <string name="cloud_speech">Server voice (Sarvam AI / Google Cloud)</string>
-    <string name="cloud_speech_privacy">With Server voice, each spoken request is sent as a short recording to your Thodar server, which turns it into text with Gemini, Sarvam AI or Google Cloud and does not keep it. Turn it off to use the phone\'s own speech recognition.</string>
-    <string name="cloud_speech_sub">Your voice is turned into text by Sarvam AI (made for Tamil) or Google Cloud through your Thodar server, one request at a time; replies are read by Google Cloud, or by the phone if the server has no Google key. Uses your plan\'s voice minutes.</string>
+    <string name="cloud_speech">Server voice (Gemini / Whisper)</string>
+    <string name="cloud_speech_privacy">With Server voice, each spoken request is sent as a short recording to your Thodar server, which turns it into text with Gemini or Whisper and does not keep it. Turn it off to use the phone\'s own speech recognition.</string>
+    <string name="cloud_speech_sub">Your voice is turned into text by Gemini (or Whisper on your server) through your Thodar server, one request at a time; replies are read by Gemini in the voice you pick below. Uses your plan\'s voice minutes.</string>
     <string name="cn_call_back">Call back later</string>
     <string name="cn_no_answer">No answer</string>
     <string name="cn_ordered">Gave an order</string>
@@ -811,4 +811,13 @@
     <string name="cat_by_ai">Your file has no category for %1$d products. The AI grouped them like this (only where a product has no category yet; you can change them later in Inventory › Categories):</string>
     <string name="cat_by_rules">Your file has no category for %1$d products. They will be grouped by their names like this (only where a product has no category yet; you can change them later in Inventory › Categories):</string>
     <string name="cat_filled">Products given a category</string>
+    <string name="voice_pick">Stocky\'s voice</string>
+    <string name="voice_pick_sub">Pick a voice, listen to it, then press Use this voice. Stocky keeps speaking in it every time until you change it here.</string>
+    <string name="voice_label">Voice</string>
+    <string name="voice_play">Listen</string>
+    <string name="voice_playing">Playing…</string>
+    <string name="voice_use">Use this voice</string>
+    <string name="voice_saved">Stocky will now always speak as %1$s.</string>
+    <string name="voice_sample_text">Vanakkam! I am Stocky. Shirt XL stock 12 pieces irukku. Innaiku sales 4,500 rupees.</string>
+    <string name="voice_sample_failed">Could not play the voice now. Check the internet and try again.</string>
 </resources>

@@ -21,30 +21,12 @@ export function loadConfig(env = process.env) {
     liveMode: get('LIVE_MODE', 'relay'),
     liveUpstreamUrl: get('GEMINI_LIVE_UPSTREAM_URL', 'wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1beta.GenerativeService.BidiGenerateContent'),
     liveMaxSeconds: Number(get('LIVE_MAX_SECONDS', 600)),
-    // Google Cloud Speech-to-Text / Text-to-Speech (an API key from a Google Cloud project with both APIs enabled).
-    speechKey: get('GOOGLE_CLOUD_API_KEY', ''),
-    sttBase: get('GOOGLE_STT_BASE_URL', 'https://speech.googleapis.com'),
-    ttsBase: get('GOOGLE_TTS_BASE_URL', 'https://texttospeech.googleapis.com'),
-    sttModel: get('GOOGLE_STT_MODEL', 'latest_short'),
-    ttsVoiceTa: get('GOOGLE_TTS_VOICE_TA', 'ta-IN-Chirp3-HD-Aoede'),
-    ttsVoiceEn: get('GOOGLE_TTS_VOICE_EN', 'en-IN-Chirp3-HD-Aoede'),
-    ttsRate: Math.max(0.25, Math.min(2, Number(get('GOOGLE_TTS_RATE', 1)))),
-    // Sarvam AI speech-to-text (Indian languages). When its key is set it hears the owner instead of Google
-    // (STT_PROVIDER=google keeps Google even then).
-    sarvamKey: get('SARVAM_API_KEY', ''),
-    sarvamBase: get('SARVAM_BASE_URL', 'https://api.sarvam.ai'),
-    sarvamModel: get('SARVAM_STT_MODEL', 'saaras:v4'),
-    sarvamMode: get('SARVAM_STT_MODE', 'codemix'),
-    sttProvider: get('STT_PROVIDER', 'auto'),
-    // Sarvam AI text-to-speech (Bulbul): natural Indian voices. Used for spoken replies when the Sarvam key is set
-    // (TTS_PROVIDER=google keeps Google Cloud).
-    sarvamTtsModel: get('SARVAM_TTS_MODEL', 'bulbul:v4-flash'),
-    sarvamSpeakerTa: get('SARVAM_TTS_SPEAKER_TA', 'gokul_ta_narration'),
-    sarvamSpeakerEn: get('SARVAM_TTS_SPEAKER_EN', ''),
-    sarvamTtsPace: Math.max(0.5, Math.min(2, Number(get('SARVAM_TTS_PACE', 1.05)))),
-    ttsProvider: get('TTS_PROVIDER', 'auto'),
+    // Which service hears the owner first: gemini (default) or whisper. Replies are always spoken by Gemini.
+    sttProvider: get('STT_PROVIDER', 'gemini'),
+    ttsProvider: 'gemini',
     // Gemini for speech, with the same Gemini key (no extra service): hearing uses the text model,
-    // speaking a Gemini TTS model (found automatically when empty) and one of its prebuilt voices.
+    // speaking a Gemini TTS model (found automatically when empty) in the prebuilt voice the owner picks in the app
+    // (GEMINI_TTS_VOICE is used until they pick one).
     // Self-hosted Whisper (server/whisper, started with COMPOSE_PROFILES=whisper): http://whisper:9000
     whisperUrl: get('WHISPER_URL', ''),
     geminiSttModel: get('GEMINI_STT_MODEL', ''),
