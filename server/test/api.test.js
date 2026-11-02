@@ -410,3 +410,88 @@ test('cards and net banking: a Razorpay page per plan; once paid the plan starts
   assert.ok(days > 29 && days < 31, `one month, got ${days}`)
   google.rzpStatus = 'created'
 })
+
+test('staff sync: the owner makes a staff login, both phones share stock and bills, staff limits are kept', async () => {
+  const o = await register('sync-owner@shop.in', 'Sync Shop')
+  const B = o.businessId
+  // Trial allows 1 person: the owner. Pro allows 10.
+  let r = await call('POST', `/v1/businesses/${B}/members/new`, { token: o.accessToken, body: { name: 'Ravi', email: 'ravi-staff@shop.in', password: 'ravi-pass-1', role: 'staff' } })
+  assert.equal(r.status, 402, JSON.stringify(r.json))
+  await call('POST', '/admin/subscriptions', { headers: { authorization: 'Bearer admin-secret-token' }, body: { businessId: B, planId: 'pro', days: 30 } })
+  r = await call('POST', `/v1/businesses/${B}/members/new`, { token: o.accessToken, body: { name: 'Ravi', email: 'ravi-staff@shop.in', password: 'ravi-pass-1', role: 'staff' } })
+  assert.equal(r.status, 200, JSON.stringify(r.json))
+  assert.equal((await call('POST', `/v1/businesses/${B}/members/new`, { token: o.accessToken, body: { name: 'Ravi', email: 'ravi-staff@shop.in', password: 'ravi-pass-1', role: 'staff' } })).status, 409)
+
+  // Ravi signs in on his phone: only this business, as staff S1.
+  const login = await call('POST', '/v1/auth/login', { body: { email: 'ravi-staff@shop.in', password: 'ravi-pass-1' } })
+  assert.equal(login.status, 200)
+  const s = login.json.accessToken
+  const me = await call('GET', '/v1/me', { token: s })
+  assert.equal(me.json.businesses.length, 1)
+  assert.equal(me.json.businesses[0].id, B)
+  assert.equal(me.json.businesses[0].role, 'staff')
+  assert.equal(me.json.businesses[0].code, 'S1')
+  assert.equal(me.json.businesses[0].staffMoney, false)
+  // Staff cannot make logins or change settings.
+  assert.equal((await call('POST', `/v1/businesses/${B}/members/new`, { token: s, body: { name: 'X', email: 'x@shop.in', password: 'xxxxxxxx1', role: 'staff' } })).status, 403)
+  assert.equal((await call('PUT', `/v1/businesses/${B}/settings`, { token: s, body: { staffMoney: true } })).status, 403)
+
+  // The owner's phone sends its products.
+  const shirt = { id: 'p1', name: 'Shirt XL', sellingPrice: 45000, currentStock: 10000 }
+  r = await call('POST', `/v1/businesses/${B}/sync/push`, { token: o.accessToken, body: { changes: [{ t: 'products', id: 'p1', data: shirt }, { t: 'customers', id: 'c1', data: { id: 'c1', name: 'Raju' } }] } })
+  assert.equal(r.json.applied, 2)
+  // Ravi pulls everything, then sells.
+  let pull = await call('GET', `/v1/businesses/${B}/sync/pull?since=0`, { token: s })
+  assert.deepEqual(pull.json.rows.map(x => x.id), ['p1', 'c1'])
+  assert.equal(pull.json.rows[0].by, 'Kumar')
+  const cursor = pull.json.next
+  r = await call('POST', `/v1/businesses/${B}/sync/push`, { token: s, body: { changes: [
+    { t: 'sales', id: 's1', data: { id: 's1', invoiceNumber: 'INV-S1-0001', total: 90000 } },
+    { t: 'sale_items', id: 'si1', data: { id: 'si1', saleId: 's1', productId: 'p1', quantity: 2000 } },
+    { t: 'inventory_transactions', id: 't1', data: { id: 't1', productId: 'p1', quantity: 2000, beforeQuantity: 10000, afterQuantity: 8000 } },
+    // Not allowed for staff: changing a price, deleting, a purchase while money entries are off, a strange table.
+    { t: 'products', id: 'p1', data: { ...shirt, sellingPrice: 100 } },
+    { t: 'customers', id: 'c1', deleted: true },
+    { t: 'purchases', id: 'u1', data: { id: 'u1', total: 5 } },
+    { t: 'users', id: 'x', data: { id: 'x' } },
+  ] } })
+  assert.equal(r.status, 200, JSON.stringify(r.json))
+  assert.equal(r.json.applied, 3)
+  const why = Object.fromEntries(r.json.rejected.map(x => [x.t + ':' + x.id, x.reason]))
+  assert.equal(why['products:p1'], 'staff_cannot_change')
+  assert.equal(why['customers:c1'], 'staff_cannot_delete')
+  assert.equal(why['purchases:u1'], 'staff_money_off')
+  assert.equal(why['users:x'], 'bad_change')
+  assert.equal(r.json.rejected.find(x => x.id === 'p1').data.sellingPrice, 45000, 'the server copy comes back so the phone can put it back')
+
+  // The owner's phone pulls only what is new: Ravi's sale, with his name.
+  pull = await call('GET', `/v1/businesses/${B}/sync/pull?since=${cursor}`, { token: o.accessToken })
+  assert.deepEqual(pull.json.rows.map(x => x.t), ['sales', 'sale_items', 'inventory_transactions'])
+  assert.equal(pull.json.rows[0].by, 'Ravi')
+  assert.equal(pull.json.more, false)
+  pull = await call('GET', `/v1/businesses/${B}/sync/pull?since=0&limit=2`, { token: o.accessToken })
+  assert.equal(pull.json.rows.length, 2)
+  assert.equal(pull.json.more, true)
+
+  // The owner allows money entries: now Ravi can record a purchase, still not change it afterwards.
+  assert.equal((await call('PUT', `/v1/businesses/${B}/settings`, { token: o.accessToken, body: { staffMoney: true } })).status, 200)
+  r = await call('POST', `/v1/businesses/${B}/sync/push`, { token: s, body: { changes: [{ t: 'purchases', id: 'u1', data: { id: 'u1', total: 5 } }] } })
+  assert.equal(r.json.applied, 1)
+  r = await call('POST', `/v1/businesses/${B}/sync/push`, { token: s, body: { changes: [{ t: 'purchases', id: 'u1', data: { id: 'u1', total: 6 } }] } })
+  assert.equal(r.json.rejected[0].reason, 'staff_cannot_change')
+  // The owner can change and delete anything.
+  r = await call('POST', `/v1/businesses/${B}/sync/push`, { token: o.accessToken, body: { changes: [{ t: 'purchases', id: 'u1', deleted: true }] } })
+  assert.equal(r.json.applied, 1)
+  // Another business never sees this one's rows.
+  const other = await register('sync-other@shop.in', 'Other Shop')
+  assert.equal((await call('GET', `/v1/businesses/${B}/sync/pull?since=0`, { token: other.accessToken })).status, 404)
+  assert.equal((await call('POST', `/v1/businesses/${B}/sync/push`, { token: other.accessToken, body: { changes: [{ t: 'sales', id: 'z', data: { id: 'z' } }] } })).status, 404)
+
+  // Members list, then removing Ravi switches his login off.
+  const members = await call('GET', `/v1/businesses/${B}/members`, { token: o.accessToken })
+  assert.deepEqual(members.json.members.map(m => [m.name, m.role, m.code]), [['Kumar', 'owner', null], ['Ravi', 'staff', 'S1']])
+  assert.equal(members.json.staffMoney, true)
+  assert.equal((await call('POST', `/v1/businesses/${B}/members/remove`, { token: o.accessToken, body: { email: 'ravi-staff@shop.in' } })).status, 200)
+  assert.equal((await call('GET', `/v1/businesses/${B}/sync/pull?since=0`, { token: s })).status, 401)
+  assert.equal((await call('POST', '/v1/auth/login', { body: { email: 'ravi-staff@shop.in', password: 'ravi-pass-1' } })).status, 401)
+})

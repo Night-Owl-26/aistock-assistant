@@ -34,9 +34,16 @@ class TradeRepository @Inject constructor(
     private val meta get() = db.metaDao()
 
     private suspend fun nextNumber(key: String, prefix: String): String {
-        val n = (meta.setting(key)?.toLongOrNull() ?: 0L) + 1
-        meta.putSetting(AppSettingEntity(key, n.toString(), System.currentTimeMillis()))
-        return prefix + "-" + n.toString().padStart(4, '0')
+        // The owner's series is kept per tag too, so the counter of one login is never continued by another.
+        val k = if (Access.memberCode.isNotBlank()) key + "_" + Access.memberCode else key
+        val head = prefix + "-" + Access.memberCode.filter { it.isLetterOrDigit() }.take(4).let { if (it.isNotEmpty()) "$it-" else "" }
+        // A reinstalled phone, or one that just received its old bills by sync, continues after the highest number used.
+        val used = (if (prefix == "INV") dao.saleNumbers(head) else if (prefix == "PUR") dao.purchaseNumbers(head) else emptyList())
+            .mapNotNull { it.removePrefix(head).toLongOrNull() }.maxOrNull() ?: 0L
+        val n = maxOf(meta.setting(k)?.toLongOrNull() ?: 0L, used) + 1
+        meta.putSetting(AppSettingEntity(k, n.toString(), System.currentTimeMillis()))
+        // Each staff or manager phone has its own series (INV-S1-0001), so two phones never give the same number.
+        return head + n.toString().padStart(4, '0')
     }
 
     private fun statusFor(total: Long, paid: Long) = when {
@@ -73,7 +80,7 @@ class TradeRepository @Inject constructor(
         if (balance > 0 && customerId == null) fail(ErrCode.NEEDS_PARTY)
         val sale = SaleEntity(
             id, nextNumber("sale_seq", "INV"), customerId, date, subtotal, discount, tax, total, paidNow, balance,
-            statusFor(total, paidNow), notes.trim().take(300), System.currentTimeMillis(),
+            statusFor(total, paidNow), notes.trim().take(300), System.currentTimeMillis(), createdBy = Access.memberName,
         )
         dao.insertSale(sale)
         dao.insertSaleItems(items)
@@ -86,6 +93,7 @@ class TradeRepository @Inject constructor(
 
     /** Cancels a sale: the stock comes back through return movements and the sale stays on record as CANCELLED. */
     suspend fun cancelSale(id: String): Op<Unit> = db.op {
+        Access.need(Access.Perm.MANAGE)
         val sale = dao.sale(id) ?: fail(ErrCode.NOT_FOUND)
         if (sale.status == Status.CANCELLED) fail(ErrCode.ALREADY_DONE)
         for (item in dao.saleItems(id)) {
@@ -100,6 +108,7 @@ class TradeRepository @Inject constructor(
         supplierId: String?, lines: List<LineInput>, discount: Long = 0, tax: Long = 0, paid: Long? = null,
         notes: String = "", date: Long = System.currentTimeMillis(), totalOverride: Long? = null,
     ): Op<PurchaseEntity> = db.op {
+        Access.need(Access.Perm.MONEY)
         if (lines.isEmpty() || discount < 0 || tax < 0) fail(ErrCode.INVALID)
         if (supplierId != null) parties.supplier(supplierId) ?: fail(ErrCode.NOT_FOUND)
         val id = newId()
@@ -118,7 +127,7 @@ class TradeRepository @Inject constructor(
         if (balance > 0 && supplierId == null) fail(ErrCode.NEEDS_PARTY)
         val purchase = PurchaseEntity(
             id, nextNumber("purchase_seq", "PUR"), supplierId, date, subtotal, discount, tax, total, paidNow, balance,
-            statusFor(total, paidNow), notes.trim().take(300), System.currentTimeMillis(),
+            statusFor(total, paidNow), notes.trim().take(300), System.currentTimeMillis(), createdBy = Access.memberName,
         )
         dao.insertPurchase(purchase)
         dao.insertPurchaseItems(items)
@@ -131,6 +140,7 @@ class TradeRepository @Inject constructor(
     }
 
     suspend fun cancelPurchase(id: String): Op<Unit> = db.op {
+        Access.need(Access.Perm.MANAGE)
         val purchase = dao.purchase(id) ?: fail(ErrCode.NOT_FOUND)
         if (purchase.status == Status.CANCELLED) fail(ErrCode.ALREADY_DONE)
         for (item in dao.purchaseItems(id)) {
@@ -145,14 +155,16 @@ class TradeRepository @Inject constructor(
         category: String, description: String, amount: Long, paymentMethod: String = "CASH",
         date: Long = System.currentTimeMillis(), notes: String = "",
     ): Op<ExpenseEntity> = db.op {
+        Access.need(Access.Perm.MONEY)
         val c = category.trim()
         if (c.isEmpty() || c.length > 60 || amount <= 0) fail(ErrCode.INVALID)
-        val e = ExpenseEntity(newId(), c, description.trim().take(200), amount, paymentMethod, date, notes.trim().take(300), Status.ACTIVE, System.currentTimeMillis())
+        val e = ExpenseEntity(newId(), c, description.trim().take(200), amount, paymentMethod, date, notes.trim().take(300), Status.ACTIVE, System.currentTimeMillis(), createdBy = Access.memberName)
         dao.insertExpense(e)
         e
     }
 
     suspend fun cancelExpense(id: String): Op<Unit> = db.op {
+        Access.need(Access.Perm.MANAGE)
         val e = dao.expense(id) ?: fail(ErrCode.NOT_FOUND)
         if (e.status == Status.CANCELLED) fail(ErrCode.ALREADY_DONE)
         dao.setExpenseStatus(id, Status.CANCELLED)
@@ -165,18 +177,20 @@ class TradeRepository @Inject constructor(
         partyType: String, partyId: String, amount: Long, paymentMethod: String = "CASH", reference: String = "",
         date: Long = System.currentTimeMillis(), notes: String = "",
     ): Op<PaymentEntity> = db.op {
+        Access.need(Access.Perm.MONEY)
         if (amount <= 0) fail(ErrCode.INVALID)
         when (partyType) {
             "CUSTOMER" -> parties.customer(partyId) ?: fail(ErrCode.NOT_FOUND)
             "SUPPLIER" -> parties.supplier(partyId) ?: fail(ErrCode.NOT_FOUND)
             else -> fail(ErrCode.INVALID)
         }
-        val p = PaymentEntity(newId(), partyType, partyId, amount, paymentMethod, reference.trim().take(80), date, notes.trim().take(300), Status.ACTIVE, System.currentTimeMillis())
+        val p = PaymentEntity(newId(), partyType, partyId, amount, paymentMethod, reference.trim().take(80), date, notes.trim().take(300), Status.ACTIVE, System.currentTimeMillis(), createdBy = Access.memberName)
         dao.insertPayment(p)
         p
     }
 
     suspend fun cancelPayment(id: String): Op<Unit> = db.op {
+        Access.need(Access.Perm.MANAGE)
         val p = dao.payment(id) ?: fail(ErrCode.NOT_FOUND)
         if (p.status == Status.CANCELLED) fail(ErrCode.ALREADY_DONE)
         dao.setPaymentStatus(id, Status.CANCELLED)

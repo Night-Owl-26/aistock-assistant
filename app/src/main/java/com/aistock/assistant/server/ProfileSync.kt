@@ -40,5 +40,25 @@ class ProfileSync @Inject constructor(private val server: ServerApi, private val
         }
     }
 
+    @Volatile private var lastPull = 0L
+
+    /**
+     * Brings the business setup made on another phone (the owner's) to this one: a staff phone gets the owner's
+     * kind of business, steps and words. Runs at most every two minutes; a setup this phone has not sent yet is kept.
+     */
+    suspend fun pull() {
+        if (!server.signedIn || System.currentTimeMillis() - lastPull < 120_000L) return
+        lastPull = System.currentTimeMillis()
+        try {
+            val (version, json) = server.profile()
+            if (json == null || version <= 0) return
+            val local = platform.latestProfile()
+            if (local != null && local.serverVersion >= version) return
+            if (local != null && local.serverVersion == 0 && server.businessId.isNotBlank() && com.aistock.assistant.data.Access.can(com.aistock.assistant.data.Access.Perm.MANAGE)) return
+            val cfg = BusinessConfigJson.read(json) ?: return
+            platform.saveConfig(cfg, serverVersion = version)
+        } catch (e: Exception) { }
+    }
+
     @Suppress("unused") private fun json(c: BusinessConfig) = BusinessConfigJson.write(c)
 }

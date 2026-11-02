@@ -31,6 +31,7 @@ class MainViewModel @Inject constructor(
     private val alarms: com.aistock.assistant.business.AlarmReminders,
     platform: com.aistock.assistant.business.RoomBusinessBackend,
     private val server: com.aistock.assistant.server.ServerApi,
+    val sync: com.aistock.assistant.sync.SyncEngine,
 ) : ViewModel() {
     val businessConfig: StateFlow<com.aistock.assistant.business.BusinessConfig> =
         platform.observeConfig().stateIn(viewModelScope, SharingStarted.Eagerly, com.aistock.assistant.business.Templates.DEFAULT)

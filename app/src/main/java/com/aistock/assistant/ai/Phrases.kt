@@ -53,6 +53,8 @@ class Phrases(private val ta: Boolean) {
     fun invalid() = t("That command doesn't look right, so I haven't changed anything.", "அந்த கட்டளை சரியாக இல்லை. எதுவும் மாத்தல.")
     fun readOnly() = t("Your free trial has ended, so I can't save this. You can still see everything. Pay from More > Plan & payment and I'll start saving again.",
         "Free trial முடிஞ்சுருச்சு, அதனால இதை save பண்ண முடியல. எல்லாத்தையும் பார்க்கலாம். More > Plan & payment-ல பணம் கட்டினா மறுபடியும் save பண்ணலாம்.")
+    fun notAllowed() = t("Your staff login can't do this. Ask the owner (or a manager) to do it, or to allow it for staff.",
+        "உங்கள் staff login-ல இதைச் செய்ய முடியாது. Owner (அல்லது manager) செய்யணும், இல்லனா staff-க்கு அனுமதி தரணும்.")
     fun saveFailed() = t("Something went wrong while saving. Your data was not changed.", "சேமிக்கும்போது தவறு ஏற்பட்டது. உங்கள் தரவு மாற்றப்படவில்லை.")
     fun cancelled() = t("Okay, cancelled. Nothing was changed.", "சரி, cancel பண்ணியாச்சு. எதுவும் மாத்தல.")
     fun nothingToConfirm() = t("There is nothing waiting for confirmation.", "உறுதிப்படுத்த எதுவும் இல்லை.")

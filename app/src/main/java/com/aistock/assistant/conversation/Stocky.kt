@@ -55,7 +55,18 @@ class Stocky(
     private val businessTools = business?.let { BusinessTools(it, backend, engine, symbol, zone, now) }
 
     /** Every tool the model may use: stock and money, plus the business platform when it is available. */
-    val tools: List<ToolSpec> get() = TOOLS + (if (businessTools != null) BusinessTools.SPECS else emptyList())
+    val tools: List<ToolSpec> get() = (TOOLS + (if (businessTools != null) BusinessTools.SPECS else emptyList())).filter { allowedTool(it.name) }
+
+    /**
+     * A staff login (staff sync) gets no tools for the shop's money position or for what its role may not save, so
+     * Stocky neither shows those figures nor offers those changes. Saving is also checked again when it happens.
+     */
+    private fun allowedTool(name: String): Boolean {
+        val access = com.aistock.assistant.data.Access
+        if (!access.can(com.aistock.assistant.data.Access.Perm.MANAGE) && name in MANAGER_TOOLS) return false
+        if (!access.can(com.aistock.assistant.data.Access.Perm.MONEY) && name in MONEY_TOOLS) return false
+        return true
+    }
 
     private val turns = ArrayList<ChatTurn>()
     private var summary = ""
@@ -636,6 +647,8 @@ class Stocky(
     }
 
     companion object {
+        private val MANAGER_TOOLS = setOf("business_summary", "business_briefing", "propose_update_product", "propose_stock_set", "propose_business_setup", "propose_create_sheet")
+        private val MONEY_TOOLS = setOf("get_purchases", "propose_purchase", "propose_expense", "propose_payment")
         private const val MAX_TURNS = 14
         private const val MAX_ROUNDS = 6
         private val SAME_WORDS = setOf("same", "it", "that", "this", "same one", "same product", "that one", "them", "adhu", "idhu", "adhe", "அது", "இது", "they", "he", "she", "avanga", "avar")

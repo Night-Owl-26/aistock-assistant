@@ -34,7 +34,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun excelDao(): com.aistock.assistant.excel.ExcelDao
 
     companion object {
-        const val VERSION = 4
+        const val VERSION = 5
         const val NAME = "aistock.db"
 
         /**
@@ -93,7 +93,21 @@ abstract class AppDatabase : RoomDatabase() {
             "CREATE TABLE IF NOT EXISTS `excel_links` (`id` TEXT NOT NULL, `uri` TEXT NOT NULL, `fileName` TEXT NOT NULL, `sheetName` TEXT NOT NULL, `nameHeader` TEXT NOT NULL, `nameCol` INTEGER NOT NULL, `sizeHeader` TEXT NOT NULL, `sizeCol` INTEGER NOT NULL, `stockHeader` TEXT NOT NULL, `stockCol` INTEGER NOT NULL, `priceHeader` TEXT NOT NULL, `priceCol` INTEGER NOT NULL, `enabled` INTEGER NOT NULL, `addNewRows` INTEGER NOT NULL, `salesSheet` INTEGER NOT NULL, `lastSyncAt` INTEGER, `lastResult` TEXT NOT NULL, `createdAt` INTEGER NOT NULL, PRIMARY KEY(`id`))",
         )
 
-        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        /** V5 (staff sync): who entered each bill, payment and expense, and the change-recording tables. Nothing is removed. */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                for (t in listOf("sales", "purchases", "expenses", "payments")) db.execSQL("ALTER TABLE `$t` ADD COLUMN `createdBy` TEXT NOT NULL DEFAULT ''")
+                com.aistock.assistant.sync.SyncSchema.install(db)
+            }
+        }
+
+        /** Creates the sync tables and triggers on a new database and checks them on every open. */
+        val CALLBACK = object : RoomDatabase.Callback() {
+            override fun onCreate(db: SupportSQLiteDatabase) = com.aistock.assistant.sync.SyncSchema.install(db)
+            override fun onOpen(db: SupportSQLiteDatabase) = com.aistock.assistant.sync.SyncSchema.install(db)
+        }
+
+        val MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
 
         /** Tables tied to this phone (file permissions), cleared on reset but never put in a backup. */
         val LOCAL_TABLES = listOf("excel_links")

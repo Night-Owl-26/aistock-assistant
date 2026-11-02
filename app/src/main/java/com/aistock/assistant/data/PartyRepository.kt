@@ -26,6 +26,7 @@ class PartyRepository @Inject constructor(private val db: AppDatabase) {
     private val dao get() = db.partyDao()
 
     suspend fun create(kind: PartyKind, input: PartyInput): Op<String> = db.op {
+        if (kind == PartyKind.SUPPLIER) Access.need(Access.Perm.MONEY)
         val name = input.name.trim()
         check(input, name)
         val key = NameMatcher.key(name)
@@ -42,6 +43,7 @@ class PartyRepository @Inject constructor(private val db: AppDatabase) {
     }
 
     suspend fun update(kind: PartyKind, id: String, input: PartyInput): Op<Unit> = db.op {
+        Access.need(Access.Perm.MANAGE)
         val name = input.name.trim()
         check(input, name)
         val key = NameMatcher.key(name)
@@ -63,6 +65,7 @@ class PartyRepository @Inject constructor(private val db: AppDatabase) {
 
     /** @return true when physically deleted, false when hidden because it has transaction history. */
     suspend fun remove(kind: PartyKind, id: String): Op<Boolean> = db.op {
+        Access.need(Access.Perm.MANAGE)
         val now = System.currentTimeMillis()
         if (kind == PartyKind.CUSTOMER) {
             dao.customer(id) ?: fail(ErrCode.NOT_FOUND)

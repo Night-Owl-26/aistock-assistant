@@ -178,11 +178,21 @@ fun DashboardScreen(nav: AppNav, vm: DashboardViewModel = hiltViewModel(), work:
             QuickAction(R.drawable.ic_stock_in, stringResource(R.string.stock_in)) { nav.go("stockmove/in") }
             QuickAction(R.drawable.ic_stock_out, stringResource(R.string.stock_out)) { nav.go("stockmove/out") }
             QuickAction(R.drawable.ic_sale, stringResource(R.string.sale)) { nav.go("trade/sale") }
-            QuickAction(R.drawable.ic_purchase, stringResource(R.string.purchase)) { nav.go("trade/purchase") }
-            QuickAction(R.drawable.ic_expense, stringResource(R.string.expense)) { nav.go("expense") }
+            // Staff see purchases and expenses only when the owner allows them (staff sync).
+            val canMoney = com.aistock.assistant.data.Access.can(com.aistock.assistant.data.Access.Perm.MONEY)
+            if (canMoney) QuickAction(R.drawable.ic_purchase, stringResource(R.string.purchase)) { nav.go("trade/purchase") }
+            if (canMoney) QuickAction(R.drawable.ic_expense, stringResource(R.string.expense)) { nav.go("expense") }
         }
 
         SectionTitle(stringResource(R.string.today))
+        val manage = com.aistock.assistant.data.Access.can(com.aistock.assistant.data.Access.Perm.MANAGE)
+        if (!manage) {
+            // A staff login sees the day's sales and low stock, not purchases, expenses or the shop's money position.
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                Metric(stringResource(R.string.todays_sales), money(st.sales), Modifier.weight(1f)) { nav.go("transactions?tab=0") }
+                Metric(stringResource(R.string.low_stock_count), st.lowCount.toString(), Modifier.weight(1f), warn = st.lowCount > 0) { nav.go("inventory?tab=2") }
+            }
+        } else {
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Metric(stringResource(R.string.todays_sales), money(st.sales), Modifier.weight(1f)) { nav.go("transactions?tab=0") }
             Metric(stringResource(R.string.todays_purchases), money(st.purchases), Modifier.weight(1f)) { nav.go("transactions?tab=1") }
@@ -197,6 +207,7 @@ fun DashboardScreen(nav: AppNav, vm: DashboardViewModel = hiltViewModel(), work:
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
             Metric(stringResource(R.string.customer_outstanding), money(st.customerOutstanding), Modifier.weight(1f), sub = stringResource(R.string.to_receive)) { nav.go("parties/customer") }
             Metric(stringResource(R.string.supplier_outstanding), money(st.supplierOutstanding), Modifier.weight(1f), sub = stringResource(R.string.to_pay)) { nav.go("parties/supplier") }
+        }
         }
 
         if (st.low.isNotEmpty()) {

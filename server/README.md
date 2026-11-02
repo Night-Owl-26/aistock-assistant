@@ -64,6 +64,11 @@ business's id answers "not found". This is covered by `test/api.test.js`.
      fails (rate limit, error) the other one hears and the failing one rests for a while; `/healthz` lists resting services
      under `speechResting`. Replies are always spoken by Gemini in the voice each owner picks in the app
      (Settings › Stocky's voice). If Gemini cannot speak, the phone's own voice reads the reply.
+   - **Staff sync:** the owner adds staff and managers in the app (More › Staff & logins). Each phone keeps working
+     offline and syncs its sales, stock movements, customers, bills and work through `/v1/businesses/:id/sync/push`
+     and `/sync/pull` (table `sync_rows`). Staff may only add records (and update their work items); the owner decides
+     whether they may also add purchases, payments and expenses. Stock travels as movements, so phones selling at the
+     same time both count. The plan limits how many people a business has (Basic 2, Pro 10).
 5. **Start it.**
    ```
    docker compose up -d --build

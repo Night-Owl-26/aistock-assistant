@@ -534,7 +534,9 @@ class AssistantEngine(
                 val hasSupplier = partyName != null
                 val returnIn = d.e.reason == "RETURN_IN"
                 // Stock from a named supplier is a purchase: it goes to Purchases and the supplier's account, not only to stock.
-                val asPurchase = !returnIn && (d.intent == Intent.CREATE_PURCHASE || hasSupplier)
+                // A staff login that may not record purchases still brings the stock in (noted as from the supplier).
+                val canBuy = com.aistock.assistant.data.Access.can(com.aistock.assistant.data.Access.Perm.MONEY)
+                val asPurchase = !returnIn && (d.intent == Intent.CREATE_PURCHASE || (hasSupplier && canBuy))
                 if (asPurchase && unitCost == null) {
                     unitCost = prod?.buyPaise?.takeIf { it > 0 } ?: return ask(d, "unitPrice", p.whatPrice(prodName))
                 }
@@ -813,6 +815,7 @@ class AssistantEngine(
             else -> p.saveFailed()
         }
         "READ_ONLY" -> p.readOnly()
+        "NOT_ALLOWED" -> p.notAllowed()
         else -> p.saveFailed()
     }
 

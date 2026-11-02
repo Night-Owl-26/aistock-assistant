@@ -24,6 +24,8 @@ object ErrCode {
     const val FAILED = "FAILED"
     /** The free trial or plan has ended: records can be seen but not changed until the owner pays. */
     const val READ_ONLY = "READ_ONLY"
+    /** This person's role (staff) may not do this; the owner or a manager can. */
+    const val NOT_ALLOWED = "NOT_ALLOWED"
 }
 
 class BizException(val code: String) : Exception(code)

@@ -85,7 +85,7 @@ fun TransactionsScreen(nav: AppNav, initialTab: Int, vm: TradeViewModel = hiltVi
                 2 -> R.string.new_expense to "expense"
                 else -> R.string.new_payment to "payment"
             }
-            ExtendedFloatingActionButton(onClick = { nav.go(route) }, icon = { Icon(Icons.Default.Add, null) }, text = { Text(stringResource(label)) })
+            if (tab == 0 || com.aistock.assistant.data.Access.can(com.aistock.assistant.data.Access.Perm.MONEY)) ExtendedFloatingActionButton(onClick = { nav.go(route) }, icon = { Icon(Icons.Default.Add, null) }, text = { Text(stringResource(label)) })
         },
     ) { padding ->
         Column(Modifier.padding(padding).fillMaxSize()) {
@@ -104,7 +104,7 @@ fun TransactionsScreen(nav: AppNav, initialTab: Int, vm: TradeViewModel = hiltVi
                             val s = r.sale
                             ListRow(
                                 title = r.partyName ?: stringResource(R.string.cash_sale),
-                                subtitle = s.invoiceNumber + " · " + fmtDate(s.date) + (r.itemSummary?.let { "\n$it" } ?: ""),
+                                subtitle = s.invoiceNumber + " · " + fmtDate(s.date) + (if (s.createdBy.isNotBlank()) " · " + stringResource(R.string.entered_by, s.createdBy) else "") + (r.itemSummary?.let { "\n$it" } ?: ""),
                                 trailing = money(s.total),
                                 trailingSub = if (s.balanceAmount > 0 && s.status != Status.CANCELLED) stringResource(R.string.due_amount, money(s.balanceAmount)) else "",
                                 onClick = { detail = Detail("sale", s.id, s.invoiceNumber, r.partyName.orEmpty(), s.date, s.status, s.subtotal, s.discount, s.tax, s.total, s.paidAmount, s.balanceAmount, s.notes, s.customerId) },
@@ -121,7 +121,7 @@ fun TransactionsScreen(nav: AppNav, initialTab: Int, vm: TradeViewModel = hiltVi
                             val s = r.purchase
                             ListRow(
                                 title = r.partyName ?: stringResource(R.string.cash_purchase),
-                                subtitle = s.purchaseNumber + " · " + fmtDate(s.date) + (r.itemSummary?.let { "\n$it" } ?: ""),
+                                subtitle = s.purchaseNumber + " · " + fmtDate(s.date) + (if (s.createdBy.isNotBlank()) " · " + stringResource(R.string.entered_by, s.createdBy) else "") + (r.itemSummary?.let { "\n$it" } ?: ""),
                                 trailing = money(s.total),
                                 trailingSub = if (s.balanceAmount > 0 && s.status != Status.CANCELLED) stringResource(R.string.due_amount, money(s.balanceAmount)) else "",
                                 onClick = { detail = Detail("purchase", s.id, s.purchaseNumber, r.partyName.orEmpty(), s.date, s.status, s.subtotal, s.discount, s.tax, s.total, s.paidAmount, s.balanceAmount, s.notes, s.supplierId) },
@@ -139,7 +139,7 @@ fun TransactionsScreen(nav: AppNav, initialTab: Int, vm: TradeViewModel = hiltVi
                                 title = e.category,
                                 subtitle = listOf(fmtDate(e.date), stringResource(methodRes(e.paymentMethod)), e.description).filter { it.isNotBlank() }.joinToString(" · "),
                                 trailing = money(e.amount),
-                                onClick = if (e.status == Status.ACTIVE) ({ cancelSimple = "expense" to e.id }) else null,
+                                onClick = if (e.status == Status.ACTIVE && com.aistock.assistant.data.Access.can(com.aistock.assistant.data.Access.Perm.MANAGE)) ({ cancelSimple = "expense" to e.id }) else null,
                                 badge = if (e.status == Status.CANCELLED) ({ StatusTag(e.status) }) else null,
                             )
                         }
@@ -157,7 +157,7 @@ fun TransactionsScreen(nav: AppNav, initialTab: Int, vm: TradeViewModel = hiltVi
                                 subtitle = stringResource(if (p.partyType == "CUSTOMER") R.string.received_from_customer else R.string.paid_to_supplier) + " · " + fmtDate(p.date) + " · " +
                                     (if (atBill) stringResource(R.string.paid_with_bill, p.reference) else stringResource(methodRes(p.paymentMethod))),
                                 trailing = money(p.amount),
-                                onClick = if (p.status == Status.ACTIVE) ({ cancelSimple = "payment" to p.id }) else null,
+                                onClick = if (p.status == Status.ACTIVE && com.aistock.assistant.data.Access.can(com.aistock.assistant.data.Access.Perm.MANAGE)) ({ cancelSimple = "payment" to p.id }) else null,
                                 badge = if (p.status == Status.CANCELLED) ({ StatusTag(p.status) }) else null,
                             )
                         }
@@ -226,7 +226,7 @@ private fun DetailDialog(d: Detail, vm: TradeViewModel, onClose: () -> Unit) {
             }
         },
         confirmButton = { TextButton(onClick = onClose) { Text(stringResource(R.string.close)) } },
-        dismissButton = if (d.status != Status.CANCELLED) ({
+        dismissButton = if (d.status != Status.CANCELLED && com.aistock.assistant.data.Access.can(com.aistock.assistant.data.Access.Perm.MANAGE)) ({
             TextButton(onClick = { confirmCancel = true }) { Text(stringResource(if (d.kind == "sale") R.string.cancel_sale else R.string.cancel_purchase), color = MaterialTheme.colorScheme.error) }
         }) else null,
     )

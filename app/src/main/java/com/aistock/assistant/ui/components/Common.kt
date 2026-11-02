@@ -86,6 +86,7 @@ fun errorRes(code: String?): Int = when (code) {
     ErrCode.NEEDS_PARTY -> R.string.err_needs_party
     ErrCode.ALREADY_DONE -> R.string.err_already_done
     ErrCode.READ_ONLY -> R.string.err_read_only
+    ErrCode.NOT_ALLOWED -> R.string.err_not_allowed
     else -> R.string.err_failed
 }
 

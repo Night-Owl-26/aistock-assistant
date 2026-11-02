@@ -113,6 +113,7 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
         val list = me.getJSONArray("businesses")
         var chosen: JSONObject? = null
         for (i in 0 until list.length()) if (list.getJSONObject(i).optString("id") == businessId) chosen = list.getJSONObject(i)
+        (chosen ?: list.optJSONObject(0))?.let { rememberMember(me, it) }
         val u = (chosen ?: list.optJSONObject(0))?.optJSONObject("entitlement")?.let { usage(it) } ?: return null
         settings.setPlan(u.status, u.planName, u.endMillis, u.active, u.pendingPayments)
         return u
@@ -158,6 +159,7 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
         val o = send("POST", "/v1/auth/register", JSONObject().put("email", email).put("password", password).put("name", name).put("businessName", businessName), null).let { (c, b) -> parse(c, b) }
         remember(o)
         if (!settings.setServerSession(url, email.trim().lowercase(), o.getString("businessId"), o.getString("refreshToken"))) throw ServerException(0, "keystore", "This phone could not store the sign-in securely.")
+        settings.setMember("owner", "", name.ifBlank { email.substringBefore('@') }, false)
         try { refreshPlan() } catch (e: Exception) { }
     }
 
@@ -184,6 +186,7 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
         val me = obj("GET", "/v1/me")
         val first = me.getJSONArray("businesses").optJSONObject(0) ?: throw ServerException(0, "no_business", "This account has no business.")
         settings.setServerBusiness(first.getString("id"))
+        rememberMember(me, first)
         try { refreshPlan() } catch (e: Exception) { }
     }
 
@@ -200,6 +203,7 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
         var chosen: JSONObject? = null
         for (i in 0 until list.length()) if (list.getJSONObject(i).optString("id") == businessId) chosen = list.getJSONObject(i)
         val b = chosen ?: list.optJSONObject(0) ?: throw ServerException(0, "no_business", "This account has no business.")
+        rememberMember(me, b)
         val ai = me.optJSONObject("ai") ?: JSONObject()
         liveReady = ai.optBoolean("live", ai.optBoolean("configured", true))
         b.optJSONObject("entitlement")?.let { usage(it) }?.let { settings.setPlan(it.status, it.planName, it.endMillis, it.active, it.pendingPayments) }
@@ -260,6 +264,48 @@ class ServerApi @Inject constructor(private val settings: SettingsStore) {
     suspend fun liveUsage(sessionId: String, seconds: Int, final: Boolean) {
         if (sessionId.isBlank()) return // relayed sessions are measured by the server itself
         try { obj("POST", "/v1/businesses/$businessId/ai/live-usage", JSONObject().put("sessionId", sessionId).put("seconds", seconds).put("final", final)) } catch (e: Exception) { }
+    }
+
+    // ---------------------------------------------------------------- staff logins and sync
+
+    data class Member(val email: String, val name: String, val role: String, val code: String)
+    data class Team(val members: List<Member>, val staffMoney: Boolean, val maxStaff: Int)
+
+    suspend fun team(): Team {
+        val o = obj("GET", "/v1/businesses/$businessId/members")
+        val a = o.optJSONArray("members") ?: JSONArray()
+        val list = (0 until a.length()).map { a.getJSONObject(it) }.map { Member(it.optString("email"), it.optString("name"), it.optString("role"), if (it.isNull("code")) "" else it.optString("code")) }
+        return Team(list, o.optBoolean("staffMoney"), o.optInt("maxStaff", 1))
+    }
+
+    /** The owner makes a sign-in for a staff member or manager. */
+    suspend fun createMember(name: String, email: String, password: String, role: String) {
+        obj("POST", "/v1/businesses/$businessId/members/new", JSONObject().put("name", name).put("email", email).put("password", password).put("role", role))
+    }
+
+    /** Adds someone who already has a Thodar account. */
+    suspend fun addExistingMember(email: String, role: String) {
+        obj("POST", "/v1/businesses/$businessId/members", JSONObject().put("email", email).put("role", role))
+    }
+
+    suspend fun removeMember(email: String) {
+        obj("POST", "/v1/businesses/$businessId/members/remove", JSONObject().put("email", email))
+    }
+
+    suspend fun setStaffMoney(on: Boolean) {
+        obj("PUT", "/v1/businesses/$businessId/settings", JSONObject().put("staffMoney", on))
+        val p = settings.current.value
+        settings.setMember(p.role, p.memberCode, p.memberName, on)
+    }
+
+    suspend fun syncPush(changes: JSONArray): JSONObject = obj("POST", "/v1/businesses/$businessId/sync/push", JSONObject().put("changes", changes))
+
+    suspend fun syncPull(since: Long, limit: Int): JSONObject = obj("GET", "/v1/businesses/$businessId/sync/pull?since=$since&limit=$limit")
+
+    /** Saves who is signed in (role, bill-number tag, name, staff money entries) from a /v1/me business entry. */
+    private suspend fun rememberMember(me: JSONObject, b: JSONObject) {
+        val name = me.optJSONObject("user")?.optString("name").orEmpty().ifBlank { me.optJSONObject("user")?.optString("email").orEmpty().substringBefore('@') }
+        settings.setMember(b.optString("role", "owner"), if (b.isNull("code")) "" else b.optString("code"), name, b.optBoolean("staffMoney"))
     }
 
     // ---------------------------------------------------------------- business profile and backups

@@ -10,6 +10,7 @@ import { GEMINI_VOICES, SPEECH_LANGS, speechApi, speechLanguage, ttsSeconds } fr
 import { mailer } from './mail.js'
 import { randomInt } from 'node:crypto'
 import { validateConfig } from './businessConfig.js'
+import { MAX_CHANGES, allowed, clean } from './sync.js'
 
 const EMAIL = /^[^\s@]{1,64}@[^\s@]{1,190}\.[^\s@]{2,24}$/
 
@@ -247,8 +248,8 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
   app.get('/v1/me', async (req) => {
     const u = await authUser(req)
     const rows = (await pool.query(
-      `SELECT b.id, b.name, m.role FROM memberships m JOIN businesses b ON b.id = m.business_id
-        WHERE m.user_id = $1 AND b.deleted_at IS NULL ORDER BY b.created_at`, [u.id])).rows
+      `SELECT b.id, b.name, m.role, m.code, b.staff_money AS "staffMoney" FROM memberships m JOIN businesses b ON b.id = m.business_id
+        WHERE m.user_id = $1 AND b.deleted_at IS NULL ORDER BY (m.role = 'owner'), m.created_at DESC`, [u.id])).rows
     const businesses = []
     for (const b of rows) {
       // A card or net-banking payment finished in the browser starts the plan here, the next time the app looks.
@@ -316,7 +317,12 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
 
   app.get('/v1/businesses/:id/members', async (req) => {
     await member(req, req.params.id, 'manager')
-    return { members: (await pool.query('SELECT u.email, u.name, m.role FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.business_id = $1 ORDER BY m.created_at', [req.params.id])).rows }
+    const b = (await pool.query('SELECT staff_money FROM businesses WHERE id = $1', [req.params.id])).rows[0]
+    const e = await entitlement(req.params.id)
+    return {
+      members: (await pool.query('SELECT u.email, u.name, m.role, m.code FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.business_id = $1 ORDER BY m.created_at', [req.params.id])).rows,
+      staffMoney: !!b?.staff_money, maxStaff: e.maxStaff ?? 1,
+    }
   })
 
   app.post('/v1/businesses/:id/members', async (req) => {
@@ -332,9 +338,116 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
     const e = await entitlement(req.params.id)
     const count = Number((await pool.query('SELECT COUNT(*) AS n FROM memberships WHERE business_id = $1', [req.params.id])).rows[0].n)
     if (!existing && count >= (e.maxStaff ?? 1)) fail(402, 'staff_limit', `Your plan allows ${e.maxStaff} people.`)
-    await pool.query('INSERT INTO memberships (user_id, business_id, role) VALUES ($1,$2,$3) ON CONFLICT (user_id, business_id) DO UPDATE SET role = EXCLUDED.role', [target.id, req.params.id, role])
+    await addMember(pool, req.params.id, target.id, role)
     audit(req.params.id, user.id, 'member_added', { role }, req.ip)
     return { ok: true }
+  })
+
+  /** Gives a staff member or manager a tag for their bill numbers (S1, S2, M1 ...) and saves the membership. */
+  async function addMember(c, businessId, userId, role) {
+    const prefix = role === 'manager' ? 'M' : 'S'
+    const used = (await c.query("SELECT code FROM memberships WHERE business_id = $1 AND code LIKE $2", [businessId, prefix + '%'])).rows
+      .map(r => Number(String(r.code).slice(1)) || 0)
+    const code = prefix + (Math.max(0, ...used) + 1)
+    await c.query(`INSERT INTO memberships (user_id, business_id, role, code) VALUES ($1,$2,$3,$4)
+      ON CONFLICT (user_id, business_id) DO UPDATE SET role = EXCLUDED.role, code = COALESCE(memberships.code, EXCLUDED.code)`, [userId, businessId, role, code])
+  }
+
+  /** The owner makes a login for a staff member or manager: they sign in with this email and password on their phone. */
+  app.post('/v1/businesses/:id/members/new', { config: { rateLimit: { max: 20, timeWindow: '1 hour' } } }, async (req) => {
+    const { user } = await member(req, req.params.id, 'owner')
+    const { email, password, name = '', role } = req.body ?? {}
+    if (!['manager', 'staff'].includes(role)) fail(400, 'bad_role', 'Role must be manager or staff.')
+    const em = String(email ?? '').trim().toLowerCase()
+    if (!EMAIL.test(em)) fail(400, 'bad_email', 'Enter a valid email address.')
+    if (typeof password !== 'string' || password.length < 8 || password.length > 200) fail(400, 'weak_password', 'Use a password of at least 8 characters.')
+    const nm = String(name).trim().slice(0, 80)
+    if (!nm) fail(400, 'bad_name', 'Enter the staff member\'s name.')
+    const hash = await hashPassword(password)
+    await tx(pool, async (c) => {
+      await c.query('SELECT 1 FROM businesses WHERE id = $1 FOR UPDATE', [req.params.id])
+      if ((await c.query('SELECT 1 FROM users WHERE email = $1', [em])).rowCount) fail(409, 'email_taken', 'This email already has a Thodar account. Add it with "Existing account" instead.')
+      const e = await entitlement(req.params.id, c)
+      const count = Number((await c.query('SELECT COUNT(*) AS n FROM memberships WHERE business_id = $1', [req.params.id])).rows[0].n)
+      if (count >= (e.maxStaff ?? 1)) fail(402, 'staff_limit', `Your plan allows ${e.maxStaff} people. Upgrade the plan to add more.`)
+      const u = (await c.query('INSERT INTO users (email, password_hash, name) VALUES ($1,$2,$3) RETURNING id', [em, hash, nm])).rows[0]
+      await addMember(c, req.params.id, u.id, role)
+    })
+    audit(req.params.id, user.id, 'member_created', { role }, req.ip)
+    return { ok: true }
+  })
+
+  /** The owner removes someone from the business. Their phone stops syncing; what they entered stays. */
+  app.post('/v1/businesses/:id/members/remove', async (req) => {
+    const { user } = await member(req, req.params.id, 'owner')
+    const em = String(req.body?.email ?? '').trim().toLowerCase()
+    const target = (await pool.query('SELECT id FROM users WHERE email = $1', [em])).rows[0]
+    if (!target) fail(404, 'user_not_found', 'No such person in this business.')
+    const r = await pool.query("DELETE FROM memberships WHERE user_id = $1 AND business_id = $2 AND role <> 'owner'", [target.id, req.params.id])
+    if (!r.rowCount) fail(404, 'user_not_found', 'No such person in this business.')
+    // A login the owner made only for this business is switched off, so it cannot be used any more.
+    const other = (await pool.query('SELECT 1 FROM memberships WHERE user_id = $1', [target.id])).rowCount
+    if (!other) {
+      await pool.query('UPDATE users SET disabled = true WHERE id = $1', [target.id])
+      await pool.query('UPDATE refresh_tokens SET revoked_at = now() WHERE user_id = $1 AND revoked_at IS NULL', [target.id])
+    }
+    audit(req.params.id, user.id, 'member_removed', {}, req.ip)
+    return { ok: true }
+  })
+
+  /** Business settings the owner decides: whether staff may also record purchases, payments and expenses. */
+  app.put('/v1/businesses/:id/settings', async (req) => {
+    const { user } = await member(req, req.params.id, 'owner')
+    if (typeof req.body?.staffMoney !== 'boolean') fail(400, 'bad_request', 'staffMoney must be true or false.')
+    await pool.query('UPDATE businesses SET staff_money = $2 WHERE id = $1', [req.params.id, req.body.staffMoney])
+    audit(req.params.id, user.id, 'settings_changed', { staffMoney: req.body.staffMoney }, req.ip)
+    return { ok: true, staffMoney: req.body.staffMoney }
+  })
+
+  // ---------------------------------------------------------------- staff sync
+
+  /**
+   * A phone sends what changed on it. Each change replaces the server's copy of that row (last change wins), within
+   * what the sender's role may do. Refused changes come back with the server's copy, so the phone can undo them.
+   * Changes of one business are numbered one at a time, so a phone that pulls never skips a change.
+   */
+  app.post('/v1/businesses/:id/sync/push', { bodyLimit: 4 * 1024 * 1024, config: { rateLimit: { max: 120, timeWindow: '1 minute' } } }, async (req) => {
+    const { user, role } = await member(req, req.params.id)
+    const list = Array.isArray(req.body?.changes) ? req.body.changes : null
+    if (!list || list.length > MAX_CHANGES) fail(400, 'bad_request', `Send 1 to ${MAX_CHANGES} changes.`)
+    return tx(pool, async (c) => {
+      await c.query('SELECT pg_advisory_xact_lock(hashtext($1))', [req.params.id])
+      const staffMoney = !!(await c.query('SELECT staff_money FROM businesses WHERE id = $1', [req.params.id])).rows[0]?.staff_money
+      let applied = 0
+      const rejected = []
+      for (const raw of list) {
+        const ch = clean(raw)
+        if (!ch) { rejected.push({ t: raw?.t ?? '', id: raw?.id ?? '', reason: 'bad_change' }); continue }
+        const cur = (await c.query('SELECT data, deleted FROM sync_rows WHERE business_id = $1 AND tbl = $2 AND row_id = $3', [req.params.id, ch.t, ch.id])).rows[0]
+        const why = allowed({ role, staffMoney }, ch, !!cur && !cur.deleted)
+        if (why) { rejected.push({ t: ch.t, id: ch.id, reason: why, data: cur?.data ?? null, deleted: cur?.deleted ?? false }); continue }
+        await c.query(`INSERT INTO sync_rows (business_id, tbl, row_id, data, deleted, seq, user_id, updated_at)
+            VALUES ($1,$2,$3,$4,$5,nextval('sync_seq'),$6,now())
+          ON CONFLICT (business_id, tbl, row_id) DO UPDATE SET data = EXCLUDED.data, deleted = EXCLUDED.deleted, seq = EXCLUDED.seq,
+            user_id = EXCLUDED.user_id, updated_at = now()`, [req.params.id, ch.t, ch.id, ch.deleted ? null : ch.data, ch.deleted, user.id])
+        applied++
+      }
+      return { ok: true, applied, rejected }
+    })
+  })
+
+  /** Everything that changed in the business after [since], oldest first, with who changed it. */
+  app.get('/v1/businesses/:id/sync/pull', { config: { rateLimit: { max: 240, timeWindow: '1 minute' } } }, async (req) => {
+    await member(req, req.params.id)
+    const since = Math.max(0, Number(req.query?.since) || 0)
+    const limit = Math.min(1000, Math.max(1, Number(req.query?.limit) || 500))
+    const rows = (await pool.query(
+      `SELECT r.tbl AS t, r.row_id AS id, r.data, r.deleted, r.seq, COALESCE(NULLIF(u.name, ''), u.email) AS by
+         FROM sync_rows r LEFT JOIN users u ON u.id = r.user_id
+        WHERE r.business_id = $1 AND r.seq > $2 ORDER BY r.seq LIMIT $3`, [req.params.id, since, limit + 1])).rows
+    const more = rows.length > limit
+    const page = rows.slice(0, limit).map(r => ({ ...r, seq: Number(r.seq) }))
+    return { rows: page, next: page.length ? page[page.length - 1].seq : since, more }
   })
 
   // ---------------------------------------------------------------- AI: text conversation proxy

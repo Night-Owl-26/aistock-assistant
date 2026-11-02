@@ -206,6 +206,7 @@ private fun MainScaffold(vm: MainViewModel, startTalking: Boolean, openChat: Boo
                 composable("setup") { BusinessSetupScreen(nav) }
                 composable("account") { com.aistock.assistant.features.account.AccountScreen(nav) }
                 composable("plan") { com.aistock.assistant.features.account.PlanScreen(nav) }
+                composable("logins") { com.aistock.assistant.features.account.LoginsScreen(nav) }
                 composable("analysis") { com.aistock.assistant.features.reports.AnalysisScreen(nav) }
                 composable("call") { com.aistock.assistant.features.ai.CallStockyScreen(nav) }
 

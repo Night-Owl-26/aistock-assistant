@@ -28,6 +28,7 @@ class AIStockApp : Application() {
     @Inject lateinit var settings: SettingsStore
     @Inject lateinit var profileSync: com.aistock.assistant.server.ProfileSync
     @Inject lateinit var excelSync: com.aistock.assistant.excel.ExcelSync
+    @Inject lateinit var staffSync: com.aistock.assistant.sync.SyncEngine
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
@@ -35,6 +36,7 @@ class AIStockApp : Application() {
         super.onCreate()
         profileSync.start()
         excelSync.start()
+        staffSync.start()
         val manager = getSystemService(NotificationManager::class.java)
         manager?.createNotificationChannel(NotificationChannel(CHANNEL_LOW_STOCK, "Low stock", NotificationManager.IMPORTANCE_DEFAULT))
         scope.launch {

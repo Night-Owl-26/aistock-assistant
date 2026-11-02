@@ -9,7 +9,7 @@ import com.aistock.assistant.database.AppDatabase
 /** A fresh in-memory database with the real repositories on top, for one test. */
 class TestEnv(var allowNegative: Boolean = false) {
     val context: Context = ApplicationProvider.getApplicationContext()
-    val db: AppDatabase = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).allowMainThreadQueries().build()
+    val db: AppDatabase = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java).addCallback(AppDatabase.CALLBACK).allowMainThreadQueries().build()
     val inventory = InventoryRepository(db, object : StockRules { override fun allowNegativeStock() = allowNegative })
     val trade = TradeRepository(db, inventory)
     val parties = PartyRepository(db)

@@ -77,6 +77,14 @@ data class Prefs(
     val planEnd: Long = 0L,
     val planActive: Boolean = false,
     val planPending: Int = 0,
+    /** This person's role in the business: owner, manager or staff (staff sync). */
+    val role: String = "owner",
+    /** Their tag in bill numbers made on this phone (S1, M1 ...); empty for the owner. */
+    val memberCode: String = "",
+    /** Their name, saved on bills they enter ("Sold by Ravi"). */
+    val memberName: String = "",
+    /** Whether the owner lets staff record purchases, payments and expenses. */
+    val staffMoney: Boolean = false,
 ) {
     val tamil: Boolean get() = language == "ta"
 }
@@ -115,6 +123,10 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
         val planEnd = longPreferencesKey("plan_end")
         val planActive = booleanPreferencesKey("plan_active")
         val planPending = intPreferencesKey("plan_pending")
+        val role = stringPreferencesKey("member_role")
+        val memberCode = stringPreferencesKey("member_code")
+        val memberName = stringPreferencesKey("member_name")
+        val staffMoney = booleanPreferencesKey("staff_money")
     }
 
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
@@ -147,6 +159,10 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
             planEnd = p[K.planEnd] ?: 0L,
             planActive = p[K.planActive] ?: false,
             planPending = p[K.planPending] ?: 0,
+            role = p[K.role]?.takeIf { it in setOf("owner", "manager", "staff") } ?: "owner",
+            memberCode = p[K.memberCode].orEmpty(),
+            memberName = p[K.memberName].orEmpty(),
+            staffMoney = p[K.staffMoney] ?: false,
         )
     }
 
@@ -217,12 +233,18 @@ class SettingsStore @Inject constructor(@ApplicationContext private val context:
     suspend fun refreshToken(): String? = context.dataStore.data.first()[K.session]?.let { SecretBox.decrypt(it) }
 
     /** Saves the plan the server reported; [Access] follows it so the app turns read-only when the trial or plan ends. */
+    /** Who is signed in on this phone, as the server says (role, bill-number tag, name, staff money entries). */
+    suspend fun setMember(role: String, code: String, name: String, staffMoney: Boolean) {
+        context.dataStore.edit { it[K.role] = role; it[K.memberCode] = code; it[K.memberName] = name; it[K.staffMoney] = staffMoney }
+        settle { it.role == role && it.memberCode == code && it.staffMoney == staffMoney }
+    }
+
     suspend fun setPlan(status: String, name: String, endMillis: Long, active: Boolean, pending: Int) {
         context.dataStore.edit { it[K.planStatus] = status; it[K.planName] = name; it[K.planEnd] = endMillis; it[K.planActive] = active; it[K.planPending] = pending }
         settle { it.planEnd == endMillis && it.planActive == active && it.planPending == pending }
     }
 
-    suspend fun clearServerSession() { context.dataStore.edit { it.remove(K.session); it.remove(K.serverBusiness); it.remove(K.serverEmail); it.remove(K.planEnd); it.remove(K.planActive); it.remove(K.planStatus); it.remove(K.planPending) }; settle { it.serverBusinessId.isBlank() } }
+    suspend fun clearServerSession() { context.dataStore.edit { it.remove(K.session); it.remove(K.serverBusiness); it.remove(K.serverEmail); it.remove(K.planEnd); it.remove(K.planActive); it.remove(K.planStatus); it.remove(K.planPending); it.remove(K.role); it.remove(K.memberCode); it.remove(K.memberName); it.remove(K.staffMoney) }; settle { it.serverBusinessId.isBlank() } }
 
     suspend fun setHandsFree(on: Boolean) = context.dataStore.edit { it[K.handsFree] = on }.let { }
 

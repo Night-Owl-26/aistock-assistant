@@ -76,6 +76,7 @@ class InventoryRepository @Inject constructor(
 
     /** Updates the product details. Stock is not touched here: use a stock movement for that. */
     suspend fun updateProduct(id: String, input: ProductInput): Op<ProductEntity> = db.op {
+        Access.need(Access.Perm.MANAGE)
         val existing = products.byId(id) ?: fail(ErrCode.NOT_FOUND)
         val name = input.name.trim()
         checkProduct(input, name)
@@ -112,6 +113,7 @@ class InventoryRepository @Inject constructor(
      * @return true when physically deleted, false when hidden.
      */
     suspend fun removeProduct(id: String): Op<Boolean> = db.op {
+        Access.need(Access.Perm.MANAGE)
         products.byId(id) ?: fail(ErrCode.NOT_FOUND)
         if (products.movementCount(id) == 0) {
             products.delete(id); true
@@ -128,6 +130,7 @@ class InventoryRepository @Inject constructor(
     // ------------------------------------------------------------ categories
 
     suspend fun saveCategory(id: String?, name: String, description: String): Op<CategoryEntity> = db.op {
+        Access.need(Access.Perm.MANAGE)
         val n = name.trim()
         if (n.isEmpty() || n.length > 60) fail(ErrCode.INVALID)
         val key = NameMatcher.key(n)
@@ -154,7 +157,7 @@ class InventoryRepository @Inject constructor(
         return c.id
     }
 
-    suspend fun removeCategory(id: String): Op<Unit> = db.op { categories.delete(id) }
+    suspend fun removeCategory(id: String): Op<Unit> = db.op { Access.need(Access.Perm.MANAGE); categories.delete(id) }
     fun observeCategories() = categories.observeWithCount()
     suspend fun activeCategories() = categories.active()
 
@@ -178,6 +181,7 @@ class InventoryRepository @Inject constructor(
 
     /** Sets the stock to a counted quantity and records the difference as an adjustment. */
     suspend fun adjustTo(productId: String, newQuantity: Long, notes: String = ""): Op<InventoryTransactionEntity> = db.op {
+        Access.need(Access.Perm.MANAGE)
         if (newQuantity < 0) fail(ErrCode.INVALID)
         val p = products.byId(productId) ?: fail(ErrCode.NOT_FOUND)
         val delta = newQuantity - p.currentStock

@@ -66,29 +66,46 @@ import kotlinx.coroutines.launch
 @Composable
 fun MoreScreen(nav: AppNav, vm: MainViewModel, cfg: com.aistock.assistant.business.BusinessConfig, inNav: Set<com.aistock.assistant.business.Module>, tabRoutes: Set<String> = emptySet()) {
     val business by vm.businessProfile.collectAsStateWithLifecycle()
+    val prefs by vm.prefs.collectAsStateWithLifecycle()
+    val sync by vm.sync.status.collectAsStateWithLifecycle()
+    val manage = com.aistock.assistant.data.Access.can(com.aistock.assistant.data.Access.Perm.MANAGE, prefs)
+    val owner = com.aistock.assistant.data.Access.can(com.aistock.assistant.data.Access.Perm.OWNER, prefs)
     Column(
         Modifier.fillMaxSize().statusBarsPadding().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Text(stringResource(R.string.nav_more), style = MaterialTheme.typography.headlineSmall)
         business?.let { Text(it.name + " · " + it.ownerName, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant) }
+        if (prefs.serverBusinessId.isNotBlank()) {
+            // Staff sync: who is signed in here, and whether this phone is up to date with the others.
+            val who = stringResource(when (prefs.role) { "staff" -> R.string.role_staff; "manager" -> R.string.role_manager; else -> R.string.role_owner })
+            val state = when {
+                sync.problem != null -> stringResource(R.string.sync_problem)
+                sync.waiting > 0 -> stringResource(R.string.sync_waiting, sync.waiting)
+                sync.lastOk > 0 -> stringResource(R.string.sync_ok, android.text.format.DateUtils.getRelativeTimeSpanString(sync.lastOk).toString())
+                else -> stringResource(R.string.sync_starting)
+            }
+            Text(listOf(prefs.memberName.ifBlank { prefs.serverEmail }, who, state).filter { it.isNotBlank() }.joinToString(" · "),
+                style = MaterialTheme.typography.bodySmall, color = if (sync.problem != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
+        }
         Spacer(Modifier.height(4.dp))
         // Everyday things first; work modules that are not in the bottom bar next; setup and account last.
         for (m in cfg.workModules.filter { it !in inNav }) MenuRow(R.drawable.ic_work, com.aistock.assistant.features.work.moduleTitle(cfg, m), stringResource(R.string.work_sub)) { nav.go("worklist/${m.key}") }
         if (cfg.has(com.aistock.assistant.business.Module.FOLLOWUPS)) MenuRow(R.drawable.ic_people, stringResource(R.string.followups), stringResource(R.string.followups_sub)) { nav.go("followups") }
         MenuRow(R.drawable.ic_people, stringResource(R.string.customers), stringResource(R.string.customers_sub)) { nav.go("parties/customer") }
-        MenuRow(R.drawable.ic_people, stringResource(R.string.suppliers), stringResource(R.string.suppliers_sub)) { nav.go("parties/supplier") }
-        MenuRow(R.drawable.ic_chart, stringResource(R.string.analysis), stringResource(R.string.analysis_sub)) { nav.go("analysis") }
+        if (com.aistock.assistant.data.Access.can(com.aistock.assistant.data.Access.Perm.MONEY, prefs)) MenuRow(R.drawable.ic_people, stringResource(R.string.suppliers), stringResource(R.string.suppliers_sub)) { nav.go("parties/supplier") }
+        if (manage) MenuRow(R.drawable.ic_chart, stringResource(R.string.analysis), stringResource(R.string.analysis_sub)) { nav.go("analysis") }
         MenuRow(R.drawable.ic_call, stringResource(R.string.call_stocky), stringResource(R.string.call_stocky_sub)) { nav.go("call") }
-        MenuRow(R.drawable.ic_report, stringResource(R.string.reports), stringResource(R.string.reports_sub)) { nav.go("reports") }
+        if (manage) MenuRow(R.drawable.ic_report, stringResource(R.string.reports), stringResource(R.string.reports_sub)) { nav.go("reports") }
         if ("inventory" !in tabRoutes && cfg.has(com.aistock.assistant.business.Module.INVENTORY)) MenuRow(R.drawable.ic_inventory, stringResource(R.string.nav_inventory), stringResource(R.string.inventory_sub)) { nav.go("inventory") }
         if ("transactions" !in tabRoutes) MenuRow(R.drawable.ic_receipt, stringResource(R.string.nav_transactions), stringResource(R.string.transactions_sub)) { nav.go("transactions") }
         MenuRow(R.drawable.ic_settings, stringResource(R.string.reminders), stringResource(R.string.reminders_sub)) { nav.go("reminders") }
         if (cfg.has(com.aistock.assistant.business.Module.STAFF) || cfg.has(com.aistock.assistant.business.Module.TASKS)) MenuRow(R.drawable.ic_people, stringResource(R.string.staff), stringResource(R.string.staff_sub)) { nav.go("staff") }
-        MenuRow(R.drawable.ic_stock_in, stringResource(R.string.import_export), stringResource(R.string.import_export_sub)) { nav.go("data") }
-        MenuRow(R.drawable.ic_backup, stringResource(R.string.backup_restore), stringResource(R.string.backup_restore_sub)) { nav.go("backup") }
-        MenuRow(R.drawable.ic_work, stringResource(R.string.business_setup), stringResource(R.string.business_setup_sub)) { nav.go("setup") }
-        MenuRow(R.drawable.ic_payment, stringResource(R.string.plan_and_payment), stringResource(R.string.plan_and_payment_sub)) { nav.go("plan") }
+        if (owner && prefs.serverBusinessId.isNotBlank()) MenuRow(R.drawable.ic_lock, stringResource(R.string.logins_title), stringResource(R.string.logins_sub)) { nav.go("logins") }
+        if (manage) MenuRow(R.drawable.ic_stock_in, stringResource(R.string.import_export), stringResource(R.string.import_export_sub)) { nav.go("data") }
+        if (owner) MenuRow(R.drawable.ic_backup, stringResource(R.string.backup_restore), stringResource(R.string.backup_restore_sub)) { nav.go("backup") }
+        if (manage) MenuRow(R.drawable.ic_work, stringResource(R.string.business_setup), stringResource(R.string.business_setup_sub)) { nav.go("setup") }
+        if (owner) MenuRow(R.drawable.ic_payment, stringResource(R.string.plan_and_payment), stringResource(R.string.plan_and_payment_sub)) { nav.go("plan") }
         MenuRow(R.drawable.ic_lock, stringResource(R.string.aistock_account), stringResource(R.string.account_sub)) { nav.go("account") }
         MenuRow(R.drawable.ic_settings, stringResource(R.string.settings), stringResource(R.string.settings_sub)) { nav.go("settings") }
     }

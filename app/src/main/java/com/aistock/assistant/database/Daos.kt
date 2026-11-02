@@ -134,6 +134,9 @@ private const val PURCHASE_ITEMS_SUMMARY =
 
 @Dao
 interface TradeDao {
+    /** Bill numbers already used with a prefix (synced from other phones too), to continue after the highest. */
+    @Query("SELECT invoiceNumber FROM sales WHERE invoiceNumber LIKE :prefix || '%'") suspend fun saleNumbers(prefix: String): List<String>
+    @Query("SELECT purchaseNumber FROM purchases WHERE purchaseNumber LIKE :prefix || '%'") suspend fun purchaseNumbers(prefix: String): List<String>
     // ---- sales
     @Insert suspend fun insertSale(s: SaleEntity)
     @Insert suspend fun insertSaleItems(items: List<SaleItemEntity>)
@@ -266,14 +269,14 @@ interface TradeDao {
      */
     @Query(
         "SELECT * FROM (" +
-            "SELECT p.id, p.partyType, p.partyId, p.amount, p.paymentMethod, p.reference, p.date, p.notes, p.status, p.createdAt, " +
+            "SELECT p.id, p.partyType, p.partyId, p.amount, p.paymentMethod, p.reference, p.date, p.notes, p.status, p.createdAt, p.createdBy, " +
             "CASE WHEN p.partyType = 'CUSTOMER' THEN (SELECT name FROM customers WHERE id = p.partyId) " +
             "ELSE (SELECT name FROM suppliers WHERE id = p.partyId) END AS partyName FROM payments p " +
             "UNION ALL SELECT 'BILL:' || s.id AS id, 'CUSTOMER' AS partyType, s.customerId AS partyId, s.paidAmount AS amount, 'CASH' AS paymentMethod, " +
-            "s.invoiceNumber AS reference, s.date AS date, '' AS notes, 'BILL' AS status, s.createdAt AS createdAt, c.name AS partyName " +
+            "s.invoiceNumber AS reference, s.date AS date, '' AS notes, 'BILL' AS status, s.createdAt AS createdAt, s.createdBy AS createdBy, c.name AS partyName " +
             "FROM sales s JOIN customers c ON c.id = s.customerId WHERE s.paidAmount > 0 AND s.status != 'CANCELLED' " +
             "UNION ALL SELECT 'BILL:' || u.id AS id, 'SUPPLIER' AS partyType, COALESCE(u.supplierId, '') AS partyId, u.paidAmount AS amount, 'CASH' AS paymentMethod, " +
-            "u.purchaseNumber AS reference, u.date AS date, '' AS notes, 'BILL' AS status, u.createdAt AS createdAt, " +
+            "u.purchaseNumber AS reference, u.date AS date, '' AS notes, 'BILL' AS status, u.createdAt AS createdAt, u.createdBy AS createdBy, " +
             "(SELECT name FROM suppliers WHERE id = u.supplierId) AS partyName FROM purchases u WHERE u.paidAmount > 0 AND u.status != 'CANCELLED'" +
             ") ORDER BY date DESC, createdAt DESC LIMIT 500"
     )

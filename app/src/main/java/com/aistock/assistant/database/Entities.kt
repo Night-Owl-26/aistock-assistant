@@ -1,5 +1,6 @@
 package com.aistock.assistant.database
 
+import androidx.room.ColumnInfo
 import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
@@ -110,6 +111,8 @@ data class SaleEntity(
     val status: String,
     val notes: String,
     val createdAt: Long,
+    /** Who entered it (staff sync): the person's name; empty for entries made before sync or by the owner alone. */
+    @ColumnInfo(defaultValue = "''") val createdBy: String = "",
 )
 
 @Entity(
@@ -151,6 +154,8 @@ data class PurchaseEntity(
     val status: String,
     val notes: String,
     val createdAt: Long,
+    /** Who entered it (staff sync): the person's name; empty for entries made before sync or by the owner alone. */
+    @ColumnInfo(defaultValue = "''") val createdBy: String = "",
 )
 
 @Entity(
@@ -185,6 +190,8 @@ data class ExpenseEntity(
     /** ACTIVE or CANCELLED. Expenses are never physically deleted. */
     val status: String,
     val createdAt: Long,
+    /** Who entered it (staff sync): the person's name; empty for entries made before sync or by the owner alone. */
+    @ColumnInfo(defaultValue = "''") val createdBy: String = "",
 )
 
 @Entity(tableName = "payments", indices = [Index(value = ["partyType", "partyId"]), Index("date")])
@@ -201,6 +208,8 @@ data class PaymentEntity(
     /** ACTIVE or CANCELLED */
     val status: String,
     val createdAt: Long,
+    /** Who entered it (staff sync): the person's name; empty for entries made before sync or by the owner alone. */
+    @ColumnInfo(defaultValue = "''") val createdBy: String = "",
 )
 
 @Entity(

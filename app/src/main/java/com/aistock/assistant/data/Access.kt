@@ -13,8 +13,15 @@ object Access {
     @Volatile var trial = false; private set
     @Volatile var pending = 0; private set
 
+    /** owner, manager or staff (see [can]). Not signed in counts as the owner of this phone. */
+    @Volatile var role = "owner"; private set
+    @Volatile var memberName = ""; private set
+    @Volatile var memberCode = ""; private set
+    @Volatile var staffMoney = false; private set
+
     fun follow(p: Prefs) {
         signedIn = p.serverBusinessId.isNotBlank() && p.serverBusinessId != "pending"
+        role = p.role; memberName = p.memberName; memberCode = p.memberCode; staffMoney = p.staffMoney
         until = p.planEnd
         active = p.planActive
         trial = p.planStatus == "trial"
@@ -22,6 +29,24 @@ object Access {
     }
 
     /** For tests and previews. */
+    fun setRole(role: String, name: String = "", code: String = "", staffMoney: Boolean = false) { this.role = role; memberName = name; memberCode = code; this.staffMoney = staffMoney }
+
+    /**
+     * What each role may do. Staff sell, move stock and add customers; the owner decides whether they may also record
+     * purchases, payments and expenses. Managers do everything except staff logins, the plan and restoring backups.
+     */
+    enum class Perm { MANAGE, MONEY, OWNER }
+
+    fun can(perm: Perm, r: String = role, money: Boolean = staffMoney): Boolean = when (perm) {
+        Perm.OWNER -> r == "owner"
+        Perm.MANAGE -> r == "owner" || r == "manager"
+        Perm.MONEY -> r == "owner" || r == "manager" || money
+    }
+
+    fun can(perm: Perm, p: Prefs): Boolean = can(perm, p.role, p.staffMoney)
+
+    /** Inside a write: stops it with [ErrCode.NOT_ALLOWED] when this role may not do it. */
+    fun need(perm: Perm) { if (!can(perm)) fail(ErrCode.NOT_ALLOWED) }
     fun set(signedIn: Boolean, until: Long, active: Boolean) { this.signedIn = signedIn; this.until = until; this.active = active }
 
     fun readOnly(now: Long = System.currentTimeMillis()): Boolean = signedIn && until > 0L && (!active || now >= until)

@@ -36,10 +36,22 @@ object AppModule {
     fun database(@ApplicationContext context: Context): AppDatabase =
         Room.databaseBuilder(context, AppDatabase::class.java, AppDatabase.NAME)
             .addMigrations(*AppDatabase.MIGRATIONS)
+            .addCallback(AppDatabase.CALLBACK)
             .build()
 
     @Provides
     fun stockRules(settings: SettingsStore): StockRules = settings
+
+    /** Staff sync through the signed-in Thodar server. Before another business's data replaces this phone's, a backup is made. */
+    @Provides
+    @Singleton
+    fun syncEngine(db: AppDatabase, server: com.aistock.assistant.server.ServerApi, settings: SettingsStore, backups: com.aistock.assistant.backup.BackupManager, profile: com.aistock.assistant.server.ProfileSync): com.aistock.assistant.sync.SyncEngine =
+        com.aistock.assistant.sync.SyncEngine(db, object : com.aistock.assistant.sync.SyncTransport {
+            override fun business(): String? = if (server.signedIn && server.businessId != "pending") server.businessId else null
+            override fun role(): String = settings.current.value.role
+            override suspend fun push(changes: org.json.JSONArray) = server.syncPush(changes)
+            override suspend fun pull(since: Long, limit: Int) = server.syncPull(since, limit)
+        }, beforeReplace = { backups.create("before-staff-sync") }, afterSync = { profile.pull() })
 
     @Provides
     fun backend(impl: RoomAssistantBackend): AssistantBackend = impl
