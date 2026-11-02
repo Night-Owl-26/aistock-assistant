@@ -33,7 +33,7 @@ object ImportSpec {
             ImportField("name", true, listOf("name", "product", "product name", "item", "item name", "description of goods", "particulars", "பொருள்", "பெயர்")),
             ImportField("size", false, SIZE_WORDS),
             ImportField("code", false, listOf("code", "product code", "item code", "sku", "id")),
-            ImportField("category", false, listOf("category", "group", "type", "வகை")),
+            ImportField("category", false, listOf("category", "category name", "product category", "item category", "group", "item group", "product group", "group name", "sub category", "subcategory", "section", "department", "dept", "segment", "class", "type", "product type", "item type", "வகை", "பிரிவு")),
             ImportField("unit", false, listOf("unit", "uom", "units", "யூனிட்")),
             ImportField("barcode", false, listOf("barcode", "bar code", "ean", "upc")),
             ImportField("purchasePrice", false, listOf("purchase price", "cost", "cost price", "buying price", "purchase rate", "buy price")),

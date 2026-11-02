@@ -522,7 +522,7 @@ class Stocky(
             }
 
             // ---------------------------------------------------------- proposing changes (never saved here)
-            "propose_stock_in", "propose_stock_out", "propose_stock_set", "propose_sale" -> {
+            "propose_stock_in", "propose_purchase", "propose_stock_out", "propose_stock_set", "propose_sale" -> {
                 val (product, same) = productArg(call)
                 val qtyKey = if (call.name == "propose_stock_set") "counted_quantity" else "quantity"
                 val e = Entities(
@@ -538,6 +538,7 @@ class Stocky(
                 )
                 val intent = when (call.name) {
                     "propose_stock_in" -> Intent.STOCK_IN
+                    "propose_purchase" -> Intent.CREATE_PURCHASE
                     "propose_stock_out" -> Intent.STOCK_OUT
                     "propose_stock_set" -> Intent.STOCK_ADJUST
                     else -> Intent.CREATE_SALE
@@ -700,7 +701,8 @@ VOICE: This is a spoken conversation. Answer in one or two short spoken sentence
                 s("group_by", "Optional column to break the result down by, e.g. Region or Product."),
                 s("sum", "Optional numeric column to add up, e.g. Quantity."),
                 s("times", "Optional second numeric column to multiply by before adding, e.g. sum=Quantity, times=UnitPrice gives revenue."))),
-            ToolSpec("propose_stock_in", "Propose adding stock that arrived. If the product does not exist the app offers to create it.", listOf(s("product", PRODUCT), s("size", SIZE), n("quantity", "How many.", true), s("unit", "Unit if the owner said one (pieces, kg, meter, box ...)."), s("supplier", "Supplier, if said."), n("unit_price", "Price per unit in rupees, if said."), n("total", "Total amount in rupees, if said instead of a unit price."), ToolParam("paid", "boolean", "true if already paid, false if on credit, if said."))),
+            ToolSpec("propose_purchase", "Propose recording a purchase (stock bought from a supplier, \"vanginen\", \"purchase panninen\"). It adds the stock, saves the bill under Purchases, creates the supplier if new and updates what is owed to them. Uses the product's last purchase price if no price is given.", listOf(s("product", PRODUCT), s("size", SIZE), n("quantity", "How many.", true), s("unit", "Unit if said."), s("supplier", "Supplier, if said."), n("unit_price", "Purchase price per unit in rupees, if said."), n("total", "Total amount in rupees, if said instead of a unit price."), ToolParam("paid", "boolean", "true if paid now, false if on credit, if said."))),
+            ToolSpec("propose_stock_in", "Propose adding stock that arrived without a purchase bill (opening stock, found stock, a customer return). For anything bought from a supplier use propose_purchase. If the product does not exist the app offers to create it.", listOf(s("product", PRODUCT), s("size", SIZE), n("quantity", "How many.", true), s("unit", "Unit if the owner said one (pieces, kg, meter, box ...)."), s("supplier", "Supplier, if said."), n("unit_price", "Price per unit in rupees, if said."), n("total", "Total amount in rupees, if said instead of a unit price."), ToolParam("paid", "boolean", "true if already paid, false if on credit, if said."))),
             ToolSpec("propose_stock_out", "Propose removing stock that was damaged, lost, used or returned to a supplier (not a sale).", listOf(s("product", PRODUCT), s("size", SIZE), n("quantity", "How many.", true), s("unit", "Unit if said."), ToolParam("reason", "string", "Why.", options = listOf("DAMAGE", "RETURN_OUT", "OTHER")), s("note", "Short note in the owner's words."))),
             ToolSpec("propose_stock_set", "Propose setting the stock to a counted quantity (stock taking / correction).", listOf(s("product", PRODUCT), s("size", SIZE), n("counted_quantity", "The actual quantity now.", true), s("unit", "Unit if said."))),
             ToolSpec("propose_sale", "Propose recording a sale. Uses the product's selling price unless a price is given.", listOf(s("product", PRODUCT), s("size", SIZE), n("quantity", "How many.", true), s("unit", "Unit if said."), s("customer", "Customer, if said."), n("unit_price", "Price per unit in rupees, if said."), n("total", "Total in rupees, if said."), ToolParam("paid", "boolean", "true for cash/paid, false for credit, if said."))),

@@ -133,6 +133,9 @@ class CloudSpeaker(private val server: ServerApi, private val fallback: SpeechOu
         stop()
         val t = text.trim()
         if (t.isEmpty()) return
+        // After the server voice fails, the phone's voice reads every reply for a while, instead of the voice
+        // switching back and forth from one reply to the next.
+        if (System.currentTimeMillis() < phoneUntil) { fallback.speak(t, tamil); return }
         talking = true
         job = scope.launch {
             try {
@@ -143,6 +146,7 @@ class CloudSpeaker(private val server: ServerApi, private val fallback: SpeechOu
                 // stopped by the owner
             } catch (e: Exception) {
                 talking = false
+                phoneUntil = System.currentTimeMillis() + PHONE_VOICE_MS
                 fallback.speak(t, tamil)
             } finally {
                 talking = false
@@ -181,6 +185,12 @@ class CloudSpeaker(private val server: ServerApi, private val fallback: SpeechOu
     }
 
     override fun isSpeaking(): Boolean = talking || fallback.isSpeaking()
+
+    companion object {
+        private const val PHONE_VOICE_MS = 20 * 60_000L
+        /** Shared by every screen, so the voice stays the same when the owner moves between screens. */
+        @Volatile private var phoneUntil = 0L
+    }
 
     override fun stop() {
         job?.cancel()

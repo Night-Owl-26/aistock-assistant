@@ -53,7 +53,15 @@ data class WorkbookPlanItem(
 /** A sheet whose stock column AIStock could keep up to date in the owner's file, if the owner turns that on. */
 data class LinkCandidate(val sheet: String, val headers: List<String>, val nameCol: Int, val sizeCol: Int, val stockCol: Int, val priceCol: Int)
 
-data class WorkbookResult(val imported: Map<ImportKind, Int>, val issues: List<String>, val sheetsRemembered: Int, val linkable: List<LinkCandidate> = emptyList())
+data class WorkbookResult(val imported: Map<ImportKind, Int>, val issues: List<String>, val sheetsRemembered: Int, val linkable: List<LinkCandidate> = emptyList(), val categorised: Int = 0)
+
+/**
+ * Categories for products whose file gives none: product key -> category, how many products each category gets, and
+ * whether the AI chose them (otherwise the keyword rules did).
+ */
+data class CategoryPlan(val byProduct: Map<String, String>, val counts: Map<String, Int>, val byAi: Boolean) {
+    companion object { val EMPTY = CategoryPlan(emptyMap(), emptyMap(), false) }
+}
 
 /** Whether the AI looked at the columns this time. */
 enum class ColumnAiStatus { USED, SAVED, OFF, FAILED, NOT_NEEDED }
@@ -192,8 +200,79 @@ class DataExchange @Inject constructor(
         return out
     }
 
+    /**
+     * Product names in the product sheets with no category in the file, and the category the shop's own column gives
+     * for the rest. Names carry their size ("Shirt XL"), the way they are saved.
+     */
+    private fun productNames(profiles: List<SheetProfile>): Pair<List<String>, Map<String, String>> {
+        val missing = LinkedHashMap<String, String>()
+        val given = LinkedHashMap<String, String>()
+        for ((p, kind) in WorkbookAnalyzer.importOrder(profiles)) {
+            if (kind != ImportKind.PRODUCTS) continue
+            val m = HeaderMapper.choose(p, kind).mapping
+            val nameCol = m["name"] ?: continue
+            for (row in p.table.drop(1)) {
+                val base = row.getOrNull(nameCol)?.trim().orEmpty()
+                if (base.isEmpty()) continue
+                val name = ImportSpec.nameWithSize(base, m["size"]?.let { row.getOrNull(it) })
+                val key = NameMatcher.key(name)
+                val cat = m["category"]?.let { row.getOrNull(it)?.trim() }.orEmpty()
+                if (cat.isNotEmpty()) given[key] = cat else if (key !in given) missing[key] = name
+            }
+        }
+        for (k in given.keys) missing.remove(k)
+        return missing.values.toList() to given
+    }
+
+    /**
+     * Suggests categories for products the file gives none for: the AI groups the names when it can (only product
+     * names are sent), the keyword rules otherwise. Nothing is saved here; [importWorkbook] fills them in, and only on
+     * products that have no category yet.
+     */
+    suspend fun suggestCategories(profiles: List<SheetProfile>): CategoryPlan {
+        val (names, _) = withContext(Dispatchers.Default) { productNames(profiles) }
+        if (names.isEmpty()) return CategoryPlan.EMPTY
+        val ask = names.take(MAX_CATEGORY_NAMES)
+        val existing = withContext(Dispatchers.IO) { db.categoryDao().active().map { it.name } }
+        val fromAi = try {
+            withTimeout(AI_TIMEOUT_MS) { columnAi.ask(CategoryGuess.prompt(ask, existing)) }?.let { CategoryGuess.parse(it, ask) } ?: emptyMap()
+        } catch (e: CancellationException) {
+            if (e is TimeoutCancellationException) emptyMap() else throw e
+        } catch (e: Exception) {
+            emptyMap()
+        }
+        // The shop's own spelling of a category it already has wins ("shirts" -> "Shirts").
+        val known = existing.associateBy { NameMatcher.key(it) }
+        val out = LinkedHashMap<String, String>()
+        for (n in names) {
+            val key = NameMatcher.key(n)
+            val c = fromAi[key] ?: CategoryGuess.of(n) ?: continue
+            out[key] = known[NameMatcher.key(c)] ?: c
+        }
+        val counts = out.values.groupingBy { it }.eachCount().entries.sortedByDescending { it.value }.associate { it.key to it.value }
+        return CategoryPlan(out, counts, fromAi.isNotEmpty())
+    }
+
+    /** Sets the category of every product in the file that has none yet: from the file's column, else from [plan]. */
+    private suspend fun fillCategories(profiles: List<SheetProfile>, plan: CategoryPlan): Int = withContext(Dispatchers.IO) {
+        val (_, given) = productNames(profiles)
+        val wanted = LinkedHashMap<String, String>(plan.byProduct).apply { putAll(given) }
+        if (wanted.isEmpty()) return@withContext 0
+        var n = 0
+        db.withTransaction {
+            val now = System.currentTimeMillis()
+            for (p in db.productDao().active()) {
+                if (p.categoryId != null) continue
+                val cat = wanted[NameMatcher.key(p.name)] ?: continue
+                val id = inventory.categoryIdFor(cat) ?: continue
+                n += db.productDao().fillCategory(p.id, id, now)
+            }
+        }
+        n
+    }
+
     /** Imports products, stock, customers and suppliers, then keeps every sheet inside the app so Stocky can read it. */
-    suspend fun importWorkbook(profiles: List<SheetProfile>): WorkbookResult {
+    suspend fun importWorkbook(profiles: List<SheetProfile>, categories: CategoryPlan = CategoryPlan.EMPTY): WorkbookResult {
         val counts = LinkedHashMap<ImportKind, Int>()
         val issues = ArrayList<String>()
         val linkable = ArrayList<LinkCandidate>()
@@ -214,7 +293,8 @@ class DataExchange @Inject constructor(
         }
         // A sheet that only carries quantities next to an item master is the one that should be updated.
         val ordered = linkable.sortedBy { c -> if (profiles.firstOrNull { it.name == c.sheet }?.purpose == SheetPurpose.STOCK) 0 else 1 }
-        return WorkbookResult(counts, issues, rememberSheets(profiles), ordered)
+        val categorised = if (com.aistock.assistant.data.Access.readOnly()) 0 else fillCategories(profiles, categories)
+        return WorkbookResult(counts, issues, rememberSheets(profiles), ordered, categorised)
     }
 
     /** What changed compared with the workbook remembered from an earlier upload: sheet name -> short note. */
@@ -282,7 +362,8 @@ class DataExchange @Inject constructor(
     }
 
     /** Saves the rows that passed the preview. Everything is written in one transaction. */
-    suspend fun import(kind: ImportKind, preview: ImportPreview): ImportResult = withContext(Dispatchers.IO) {
+    /** @param guessCategories give a product with no category in the file one from its name ([CategoryGuess]) */
+    suspend fun import(kind: ImportKind, preview: ImportPreview, guessCategories: Boolean = false): ImportResult = withContext(Dispatchers.IO) {
         if (com.aistock.assistant.data.Access.readOnly()) return@withContext ImportResult(0, preview.skipped,
             preview.errors + ImportIssue(0, "The free trial has ended, so nothing was imported. Pay from More > Plan & payment to continue."))
         var imported = 0
@@ -308,7 +389,7 @@ class DataExchange @Inject constructor(
                         val cost = Money.parse(v["purchasePrice"]) ?: 0L
                         db.productDao().insert(
                             ProductEntity(
-                                id, code, name, v["description"].orEmpty(), v["category"]?.let { inventory.categoryIdFor(it) },
+                                id, code, name, v["description"].orEmpty(), (v["category"] ?: if (guessCategories) CategoryGuess.of(name) else null)?.let { inventory.categoryIdFor(it) },
                                 v["unit"] ?: "PCS", v["barcode"].orEmpty(), cost, Money.parse(v["sellingPrice"]) ?: 0L,
                                 Qty.parse(v["minStock"]) ?: 0L, 0L, true, now, now,
                             )
@@ -478,6 +559,8 @@ class DataExchange @Inject constructor(
     companion object {
         const val MAX_SHEET_ROWS = 20_000
         const val AI_TIMEOUT_MS = 45_000L
+        /** At most this many product names go to the AI at once; the keyword rules cover the rest. */
+        const val MAX_CATEGORY_NAMES = 400
     }
 
     fun fileName(base: String): String =

@@ -510,6 +510,7 @@
     <string name="paid">Paid</string>
     <string name="paid_in_full">Paid in full</string>
     <string name="paid_more_than_total">Paid amount is more than the total</string>
+    <string name="paid_with_bill">Paid with bill %1$s</string>
     <string name="paid_to_supplier">Paid to supplier</string>
     <string name="part_paid">Part paid</string>
     <string name="password">Password (8+ characters)</string>
@@ -806,4 +807,8 @@
     <string name="wrong_pin">Wrong PIN</string>
     <string name="yesterday">Yesterday</string>
     <string name="your_payments">Your payments</string>
+    <string name="cat_title">Product categories</string>
+    <string name="cat_by_ai">Your file has no category for %1$d products. The AI grouped them like this (only where a product has no category yet; you can change them later in Inventory › Categories):</string>
+    <string name="cat_by_rules">Your file has no category for %1$d products. They will be grouped by their names like this (only where a product has no category yet; you can change them later in Inventory › Categories):</string>
+    <string name="cat_filled">Products given a category</string>
 </resources>

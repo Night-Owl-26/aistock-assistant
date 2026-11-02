@@ -194,4 +194,48 @@ class SmartWorkbookTest {
         upgraded.close()
         file.delete()
     }
+    @Test
+    fun productsWithoutACategoryAreGroupedByTheAiOrByTheirNames(): Unit = runBlocking {
+        // The AI answers the column question first, then the category question.
+        val ai = FakeAi { null }
+        var n = 0
+        val scripted = object : ColumnAi {
+            override suspend fun ask(prompt: String): String? = when (n++) {
+                0 -> aiReply
+                else -> """{"Shirt XL":"Shirts","Shirt L":"Shirts","Pant 32":"Pants"}"""
+            }
+        }
+        val exchange = DataExchange(env.context, env.db, env.inventory, env.parties, scripted)
+        val (smart, _) = exchange.smartColumns(exchange.analyzeWorkbook("shop.xlsx", ByteArrayInputStream(workbook())))
+        val plan = exchange.suggestCategories(smart)
+        assertTrue(plan.byAi)
+        assertEquals(mapOf("Shirts" to 2, "Pants" to 1), plan.counts)
+        assertTrue(env.db.productDao().active().isEmpty())
+        val result = exchange.importWorkbook(smart, plan)
+        assertEquals(3, result.categorised)
+        val cats = env.db.categoryDao().active().associate { it.id to it.name }
+        assertEquals("Shirts", cats[env.db.productDao().active().single { it.name == "Shirt XL" }.categoryId])
+        assertEquals("Pants", cats[env.db.productDao().active().single { it.name == "Pant 32" }.categoryId])
+
+        // Without the AI the names decide; a product that already has a category keeps it.
+        val offline = DataExchange(env.context, env.db, env.inventory, env.parties, ai)
+        val rules = offline.suggestCategories(smart)
+        assertEquals(false, rules.byAi)
+        assertEquals("Pants & Jeans", rules.byProduct[NameMatcher.key("Pant 32")])
+        assertEquals(0, offline.importWorkbook(smart, rules).categorised)
+        assertEquals("Pants", env.db.categoryDao().active().associate { it.id to it.name }[env.db.productDao().active().single { it.name == "Pant 32" }.categoryId])
+    }
+
+    @Test
+    fun keywordRulesPickSensibleCategories() {
+        assertEquals("T-Shirts", CategoryGuess.of("Round Neck T-Shirt XL"))
+        assertEquals("Shirts", CategoryGuess.of("Cotton Formal Shirt 40"))
+        assertEquals("Kids Wear", CategoryGuess.of("Kids T Shirt 2-3Y"))
+        assertEquals("Innerwear", CategoryGuess.of("Jockey Brief 85"))
+        assertEquals("Sarees", CategoryGuess.of("Silk Saree Red"))
+        assertEquals("Spices & Masala", CategoryGuess.of("Chilli Powder 100g"))
+        assertEquals("Cleaning", CategoryGuess.of("Washing Powder 1kg"))
+        assertEquals(null, CategoryGuess.of("XYZ 123"))
+        assertEquals(mapOf(NameMatcher.key("Shirt XL") to "Shirts"), CategoryGuess.parse("```json\n{\"Shirt XL\":\"shirts\",\"Other\":\"X\"}\n```", listOf("Shirt XL")))
+    }
 }

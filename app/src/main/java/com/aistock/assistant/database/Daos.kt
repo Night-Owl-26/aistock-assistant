@@ -31,6 +31,8 @@ interface ProductDao {
     @Query("DELETE FROM products WHERE id = :id") suspend fun delete(id: String)
 
     @Query("SELECT * FROM products WHERE id = :id") suspend fun byId(id: String): ProductEntity?
+    /** Fills in a category only where none is set. */
+    @Query("UPDATE products SET categoryId = :categoryId, updatedAt = :now WHERE id = :id AND categoryId IS NULL") suspend fun fillCategory(id: String, categoryId: String, now: Long): Int
     @Query("SELECT * FROM products WHERE active = 1 ORDER BY name COLLATE NOCASE") suspend fun active(): List<ProductEntity>
     @Query("SELECT * FROM products ORDER BY name COLLATE NOCASE") suspend fun all(): List<ProductEntity>
     @Query("SELECT COUNT(*) FROM products") suspend fun count(): Int
@@ -258,9 +260,22 @@ interface TradeDao {
     @Insert suspend fun insertPayment(p: PaymentEntity)
     @Query("SELECT * FROM payments WHERE id = :id") suspend fun payment(id: String): PaymentEntity?
     @Query("UPDATE payments SET status = :status WHERE id = :id") suspend fun setPaymentStatus(id: String, status: String)
+    /**
+     * Separate payments, plus money paid at the time of a purchase or a customer's sale (status BILL, reference = bill
+     * number). The BILL rows are only shown here; balances come from the bills themselves, so nothing is counted twice.
+     */
     @Query(
-        "SELECT p.*, CASE WHEN p.partyType = 'CUSTOMER' THEN (SELECT name FROM customers WHERE id = p.partyId) " +
-            "ELSE (SELECT name FROM suppliers WHERE id = p.partyId) END AS partyName FROM payments p ORDER BY p.date DESC, p.createdAt DESC LIMIT 500"
+        "SELECT * FROM (" +
+            "SELECT p.id, p.partyType, p.partyId, p.amount, p.paymentMethod, p.reference, p.date, p.notes, p.status, p.createdAt, " +
+            "CASE WHEN p.partyType = 'CUSTOMER' THEN (SELECT name FROM customers WHERE id = p.partyId) " +
+            "ELSE (SELECT name FROM suppliers WHERE id = p.partyId) END AS partyName FROM payments p " +
+            "UNION ALL SELECT 'BILL:' || s.id AS id, 'CUSTOMER' AS partyType, s.customerId AS partyId, s.paidAmount AS amount, 'CASH' AS paymentMethod, " +
+            "s.invoiceNumber AS reference, s.date AS date, '' AS notes, 'BILL' AS status, s.createdAt AS createdAt, c.name AS partyName " +
+            "FROM sales s JOIN customers c ON c.id = s.customerId WHERE s.paidAmount > 0 AND s.status != 'CANCELLED' " +
+            "UNION ALL SELECT 'BILL:' || u.id AS id, 'SUPPLIER' AS partyType, COALESCE(u.supplierId, '') AS partyId, u.paidAmount AS amount, 'CASH' AS paymentMethod, " +
+            "u.purchaseNumber AS reference, u.date AS date, '' AS notes, 'BILL' AS status, u.createdAt AS createdAt, " +
+            "(SELECT name FROM suppliers WHERE id = u.supplierId) AS partyName FROM purchases u WHERE u.paidAmount > 0 AND u.status != 'CANCELLED'" +
+            ") ORDER BY date DESC, createdAt DESC LIMIT 500"
     )
     fun observePayments(): Flow<List<PaymentWithParty>>
 }

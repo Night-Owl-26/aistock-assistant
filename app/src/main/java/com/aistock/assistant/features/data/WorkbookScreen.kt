@@ -135,6 +135,7 @@ fun WorkbookScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
     var isXlsx by remember { mutableStateOf(false) }
     var profiles by remember { mutableStateOf<List<SheetProfile>>(emptyList()) }
     var aiStatus by remember { mutableStateOf<ColumnAiStatus?>(null) }
+    var categories by remember { mutableStateOf(com.aistock.assistant.excel.CategoryPlan.EMPTY) }
     // The sheets as read from the file, before the AI looked at them (kept to ask the AI again).
     var original by remember { mutableStateOf<List<SheetProfile>>(emptyList()) }
     var changes by remember { mutableStateOf<Map<String, String>>(emptyMap()) }
@@ -147,7 +148,7 @@ fun WorkbookScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
 
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) scope.launch {
-            busy = true; result = null; aiStatus = null; linkOutcome = null; linkSheet = null
+            busy = true; result = null; aiStatus = null; linkOutcome = null; linkSheet = null; categories = com.aistock.assistant.excel.CategoryPlan.EMPTY
             try {
                 val name = displayName(ctx, uri)
                 val bytes = withContext(Dispatchers.IO) { ctx.contentResolver.openInputStream(uri)?.use { it.readBytes() } } ?: ByteArray(0)
@@ -165,6 +166,7 @@ fun WorkbookScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
                     reading = true
                     val (smart, status) = vm.exchange.smartColumns(found)
                     profiles = smart; aiStatus = status
+                    categories = try { vm.exchange.suggestCategories(smart) } catch (e: Exception) { com.aistock.assistant.excel.CategoryPlan.EMPTY }
                     reading = false
                 }
             } catch (e: Exception) {
@@ -209,6 +211,7 @@ fun WorkbookScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
             AppCard(Modifier.fillMaxWidth()) {
                 for ((kind, n) in done.imported) LabelValue(stringResource(kindRes(kind)), n.toString(), strong = true)
                 LabelValue(stringResource(R.string.workbook_sheets_remembered), done.sheetsRemembered.toString())
+                if (done.categorised > 0) LabelValue(stringResource(R.string.cat_filled), done.categorised.toString())
                 Text(stringResource(R.string.workbook_done_body), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 for (i in done.issues.take(15)) Text(i, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(10.dp))
@@ -275,7 +278,10 @@ fun WorkbookScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
                     if (aiStatus == ColumnAiStatus.FAILED && original.isNotEmpty()) TextButton(onClick = {
                         scope.launch {
                             reading = true
-                            try { val (smart, status) = vm.exchange.smartColumns(original); profiles = smart; aiStatus = status } catch (e: Exception) { }
+                            try {
+                                val (smart, status) = vm.exchange.smartColumns(original); profiles = smart; aiStatus = status
+                                categories = vm.exchange.suggestCategories(smart)
+                            } catch (e: Exception) { }
                             reading = false
                         }
                     }) { Text(stringResource(R.string.cols_ai_retry)) }
@@ -331,12 +337,21 @@ fun WorkbookScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
                     }
                     Spacer(Modifier.height(8.dp))
                 }
+                if (categories.counts.isNotEmpty()) {
+                    Text(stringResource(R.string.cat_title), style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        stringResource(if (categories.byAi) R.string.cat_by_ai else R.string.cat_by_rules, categories.byProduct.size) + " " +
+                            categories.counts.entries.take(12).joinToString(", ") { "${it.key} (${it.value})" } + if (categories.counts.size > 12) "…" else "",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(8.dp))
+                }
                 Text(stringResource(R.string.workbook_other_sheets), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(10.dp))
                 Button(enabled = !busy && !reading, onClick = {
                     scope.launch {
                         busy = true
-                        try { result = vm.exchange.importWorkbook(profiles) } catch (e: Exception) { toast(ctx.getString(R.string.import_failed)) }
+                        try { result = vm.exchange.importWorkbook(profiles, categories) } catch (e: Exception) { toast(ctx.getString(R.string.import_failed)) }
                         busy = false
                     }
                 }) { Text(stringResource(R.string.workbook_import)) }

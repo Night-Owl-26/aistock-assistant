@@ -510,6 +510,7 @@
     <string name="paid">செலுத்தியது</string>
     <string name="paid_in_full">முழுவதும் செலுத்தியது</string>
     <string name="paid_more_than_total">செலுத்திய தொகை மொத்தத்தை விட அதிகம்</string>
+    <string name="paid_with_bill">பில் %1$s உடன் கொடுத்தது</string>
     <string name="paid_to_supplier">சப்ளையருக்கு கொடுத்தது</string>
     <string name="part_paid">பகுதி</string>
     <string name="password">கடவுச்சொல் (8+ எழுத்து)</string>
@@ -806,4 +807,8 @@
     <string name="wrong_pin">தவறான PIN</string>
     <string name="yesterday">நேற்று</string>
     <string name="your_payments">நீங்க கட்டினது</string>
+    <string name="cat_title">பொருள் வகைகள்</string>
+    <string name="cat_by_ai">உங்கள் கோப்பில் %1$d பொருட்களுக்கு வகை இல்லை. AI இவற்றை இப்படி பிரித்தது (வகை இல்லாத பொருட்களுக்கு மட்டும்; பின்னர் Inventory › Categories-ல் மாற்றலாம்):</string>
+    <string name="cat_by_rules">உங்கள் கோப்பில் %1$d பொருட்களுக்கு வகை இல்லை. பெயரை வைத்து இப்படி பிரிக்கப்படும் (வகை இல்லாத பொருட்களுக்கு மட்டும்; பின்னர் Inventory › Categories-ல் மாற்றலாம்):</string>
+    <string name="cat_filled">வகை சேர்க்கப்பட்ட பொருட்கள்</string>
 </resources>

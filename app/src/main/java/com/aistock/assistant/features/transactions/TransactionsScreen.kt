@@ -151,9 +151,11 @@ fun TransactionsScreen(nav: AppNav, initialTab: Int, vm: TradeViewModel = hiltVi
                     else LazyColumn(contentPadding = listPadding, verticalArrangement = Arrangement.spacedBy(8.dp)) {
                         items(payments, key = { it.payment.id }) { r ->
                             val p = r.payment
+                            val atBill = p.status == "BILL"
                             ListRow(
-                                title = r.partyName ?: "—",
-                                subtitle = stringResource(if (p.partyType == "CUSTOMER") R.string.received_from_customer else R.string.paid_to_supplier) + " · " + fmtDate(p.date) + " · " + stringResource(methodRes(p.paymentMethod)),
+                                title = r.partyName ?: p.reference.ifBlank { "—" },
+                                subtitle = stringResource(if (p.partyType == "CUSTOMER") R.string.received_from_customer else R.string.paid_to_supplier) + " · " + fmtDate(p.date) + " · " +
+                                    (if (atBill) stringResource(R.string.paid_with_bill, p.reference) else stringResource(methodRes(p.paymentMethod))),
                                 trailing = money(p.amount),
                                 onClick = if (p.status == Status.ACTIVE) ({ cancelSimple = "payment" to p.id }) else null,
                                 badge = if (p.status == Status.CANCELLED) ({ StatusTag(p.status) }) else null,

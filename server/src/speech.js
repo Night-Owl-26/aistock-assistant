@@ -45,10 +45,14 @@ export function speechApi(cfg, fetchImpl = fetch) {
   }
   const STT_ORDER = ['sarvam', 'google', 'gemini', 'whisper']
   const TTS_ORDER = ['sarvam', 'google', 'gemini']
-  /** Out of credit, wrong key or rate limited: rest 30 minutes. Server error or timeout: rest 2 minutes. */
+  /**
+   * Out of credit: rest 6 hours (a balance does not come back by itself). Wrong key or rate limited: 30 minutes.
+   * Server error or timeout: 2 minutes.
+   */
   const rest = (p, r) => {
     const st = Number(r.status) || 0
-    const ms = [401, 402, 403, 429].includes(st) ? 30 * 60_000 : (st >= 500 || st === 0 || st === 408) ? 2 * 60_000 : 0
+    const credit = st === 402 || /credit|balance|quota exceeded|insufficient/i.test(String(r.error ?? ''))
+    const ms = credit && st !== 429 ? 6 * 60 * 60_000 : [401, 402, 403, 429].includes(st) ? 30 * 60_000 : (st >= 500 || st === 0 || st === 408) ? 2 * 60_000 : 0
     if (ms) down.set(p, { until: Date.now() + ms, reason: `${st || 'no answer'}: ${String(r.error ?? '').slice(0, 120)}` })
   }
   const attempt = async (fn) => {
@@ -92,6 +96,9 @@ export function speechApi(cfg, fetchImpl = fetch) {
   }
 
   let ttsModelFound = null
+  // The same seed and a low temperature keep Gemini's voice the same from one reply to the next (without them it can
+  // change accent or tone each time).
+  let steady = { temperature: 0.2, seed: 7 }
   /** The Gemini TTS model to use: the configured one, or the first "tts" model this key may call (flash first). */
   async function geminiTtsModel() {
     if (cfg.geminiTtsModel) return cfg.geminiTtsModel
@@ -115,10 +122,12 @@ export function speechApi(cfg, fetchImpl = fetch) {
       method: 'POST', headers: gHeaders(), signal: AbortSignal.timeout(20_000),
       body: JSON.stringify({
         contents: [{ role: 'user', parts: [{ text: text.slice(0, 2000) }] }],
-        generationConfig: { responseModalities: ['AUDIO'], speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: cfg.geminiTtsVoice } } } },
+        generationConfig: { responseModalities: ['AUDIO'], ...steady, speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: cfg.geminiTtsVoice } } } },
       }),
     })
     const b = await parse(r)
+    // A model that does not take the steadiness settings says 400: ask again without them, and stop sending them.
+    if (r.status === 400 && Object.keys(steady).length) { steady = {}; return synthesizeGemini({ text, language }) }
     if (!r.ok) {
       if (r.status === 404) ttsModelFound = null // the model went away: look again next time
       return { status: r.status, error: b?.error?.message || `text-to-speech failed (${r.status})` }
@@ -150,11 +159,12 @@ export function speechApi(cfg, fetchImpl = fetch) {
     return { status: 200, text: String(body.transcript ?? '').replace(/\s+/g, ' ').trim(), language: body.language_code || language, confidence: null }
   }
 
-  const ttsProvider = () => chain(cfg.ttsProvider, TTS_ORDER)[0] ?? null
+  const ttsProvider = () => ttsChain()[0] ?? null
 
   /** Sarvam AI Bulbul: one WAV for the reply. Tries the chosen voice, then the model's own default voice. */
   async function synthesizeSarvam({ text, language }) {
-    const speaker = language === 'ta-IN' ? cfg.sarvamSpeakerTa : cfg.sarvamSpeakerEn
+    // One voice for both languages: English replies use the Tamil voice too unless an English one is chosen.
+    const speaker = language === 'ta-IN' ? cfg.sarvamSpeakerTa : (cfg.sarvamSpeakerEn || cfg.sarvamSpeakerTa)
     const send = (body) => fetchImpl(`${cfg.sarvamBase}/text-to-speech`, {
       method: 'POST', signal: AbortSignal.timeout(15_000),
       headers: { 'content-type': 'application/json', 'api-subscription-key': cfg.sarvamKey },
@@ -217,12 +227,22 @@ export function speechApi(cfg, fetchImpl = fetch) {
   const hear = { whisper: recognizeWhisper, sarvam: recognizeSarvam, google: recognizeGoogle, gemini: recognizeGemini }
   const speak = { sarvam: synthesizeSarvam, google: synthesizeGoogle, gemini: synthesizeGemini }
 
+  /**
+   * The voice that answered last keeps answering while it works, so replies do not switch between voices (for
+   * example back to Sarvam each time its rest ends while its balance is still empty).
+   */
+  let lastVoice = null
+  const ttsChain = () => {
+    const c = chain(cfg.ttsProvider, TTS_ORDER)
+    return lastVoice && c.includes(lastVoice) && !isDown(lastVoice) ? [lastVoice, ...c.filter(p => p !== lastVoice)] : c
+  }
+
   /** Tries each provider in turn until one answers; a failing one rests for a while. */
-  async function firstThatWorks(order, impl, args) {
+  async function firstThatWorks(order, impl, args, onOk = () => {}) {
     let first = null
     for (const p of order) {
       const r = await attempt(() => impl[p](args))
-      if (r.status === 200) { down.delete(p); return { ...r, provider: p } }
+      if (r.status === 200) { down.delete(p); onOk(p); return { ...r, provider: p } }
       rest(p, r)
       first ??= { ...r, provider: p } // the preferred provider's error says the most ("not enough credits", ...)
     }
@@ -246,6 +266,6 @@ export function speechApi(cfg, fetchImpl = fetch) {
     recognize: (args) => firstThatWorks(chain(cfg.sttProvider, STT_ORDER), hear, args),
 
     /** Text -> spoken audio (WAV, 16-bit PCM). Returns { status, audio, error, provider }. */
-    synthesize: (args) => firstThatWorks(chain(cfg.ttsProvider, TTS_ORDER), speak, args),
+    synthesize: (args) => firstThatWorks(ttsChain(), speak, args, (p) => { lastVoice = p }),
   }
 }

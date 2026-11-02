@@ -103,6 +103,29 @@ class AssistantEngineTest {
     }
 
     @Test
+    fun stockFromANamedSupplierIsAlwaysAPurchase(): Unit = runBlocking {
+        // No price said: the product's last purchase price is used, and it is still saved as a purchase from the supplier.
+        val b = FakeBackend()
+        b.addProduct("Blue Shirt", stock = 10_000, buy = 30_000)
+        val e = engine(b)
+        val r = e.handle("Received 20 Blue Shirt from Kumar Traders")
+        assertEquals(ReplyKind.CONFIRM, r.kind)
+        e.confirm()
+        val plan = b.executed.single() as Plan.StockIn
+        assertTrue(plan.asPurchase)
+        assertEquals("Kumar Traders", plan.newSupplierName)
+        assertEquals(30_000L, plan.unitCostPaise)
+        assertEquals(600_000L, plan.totalPaise)
+
+        // A new product with no price yet: the price is asked for instead of saving stock without a bill.
+        val b2 = FakeBackend()
+        val e2 = engine(b2)
+        val ask = e2.handle("Received 5 Red Saree from Kumar Traders")
+        assertEquals(ReplyKind.CLARIFY, ask.kind)
+        assertTrue(b2.executed.isEmpty())
+    }
+
+    @Test
     fun cancelChangesNothing(): Unit = runBlocking {
         val b = FakeBackend()
         b.addProduct("Blue Shirt", stock = 100, sell = 450)

@@ -226,3 +226,38 @@ test('Sarvam out of credit: Gemini hears and speaks instead, and Sarvam rests in
   assert.equal(t.provider, 'gemini')
   assert.ok(Buffer.from(t.audio, 'base64').subarray(0, 4).toString() === 'RIFF')
 })
+
+test('Gemini voice is kept steady, and a model that refuses the steadiness settings still speaks', async () => {
+  const cfg = loadConfig({ ...base, GEMINI_API_KEY: 'gk', GEMINI_BASE_URL: 'https://gem.test', GEMINI_TTS_MODEL: 'tts-model', TTS_PROVIDER: 'gemini' })
+  const bodies = []
+  const f = async (url, init) => {
+    const b = JSON.parse(init.body); bodies.push(b)
+    if (b.generationConfig.seed !== undefined && bodies.length === 1) return new Response(JSON.stringify({ error: { message: 'Unknown field seed' } }), { status: 400 })
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/L16;rate=24000', data: Buffer.alloc(8).toString('base64') } }] } }] }), { status: 200 })
+  }
+  const api = speechApi(cfg, f)
+  const r = await api.synthesize({ text: 'வணக்கம்', language: 'ta-IN' })
+  assert.equal(r.status, 200)
+  assert.equal(bodies[0].generationConfig.seed, 7)
+  assert.equal(bodies[0].generationConfig.speechConfig.voiceConfig.prebuiltVoiceConfig.voiceName, 'Kore')
+  assert.equal(bodies[1].generationConfig.seed, undefined, 'asked again without the settings')
+  await api.synthesize({ text: 'Hello', language: 'en-IN' })
+  assert.equal(bodies.length, 3, 'not sent again after the model refused them')
+})
+
+test('the voice that answered keeps answering; a used-up Sarvam balance rests for hours', async () => {
+  const cfg = loadConfig({ ...base, SARVAM_API_KEY: 'k', SARVAM_BASE_URL: 'https://sarvam.test', GEMINI_API_KEY: 'gk', GEMINI_BASE_URL: 'https://gem.test', GEMINI_TTS_MODEL: 'tts-model' })
+  const hits = []
+  const f = async (url) => {
+    hits.push(String(url))
+    if (String(url).includes('sarvam')) return new Response(JSON.stringify({ error: { message: 'Insufficient credits' } }), { status: 402 })
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/L16;rate=24000', data: Buffer.alloc(8).toString('base64') } }] } }] }), { status: 200 })
+  }
+  const api = speechApi(cfg, f)
+  assert.equal((await api.synthesize({ text: 'one', language: 'en-IN' })).provider, 'gemini')
+  assert.match(api.resting().sarvam, /402/)
+  hits.length = 0
+  assert.equal((await api.synthesize({ text: 'two', language: 'ta-IN' })).provider, 'gemini')
+  assert.equal(hits.filter(h => h.includes('sarvam')).length, 0, 'Sarvam is not tried again while Gemini works')
+  assert.equal(api.ttsProvider(), 'gemini')
+})

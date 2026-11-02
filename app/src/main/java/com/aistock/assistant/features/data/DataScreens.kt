@@ -248,7 +248,7 @@ fun ImportExportScreen(nav: AppNav, vm: DataViewModel = hiltViewModel()) {
                         scope.launch {
                             busy = true
                             try {
-                                result = vm.exchange.import(importKind, p)
+                                result = vm.exchange.import(importKind, p, guessCategories = true)
                                 table = null
                             } catch (e: Exception) {
                                 toast(ctx.getString(R.string.import_failed))

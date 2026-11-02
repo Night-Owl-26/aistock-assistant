@@ -533,8 +533,9 @@ class AssistantEngine(
                 var unitCost = d.e.unitPricePaise ?: d.e.totalPaise?.let { perUnit(it, qtyMilli) }
                 val hasSupplier = partyName != null
                 val returnIn = d.e.reason == "RETURN_IN"
-                val asPurchase = !returnIn && (d.intent == Intent.CREATE_PURCHASE || (hasSupplier && unitCost != null))
-                if (d.intent == Intent.CREATE_PURCHASE && unitCost == null) {
+                // Stock from a named supplier is a purchase: it goes to Purchases and the supplier's account, not only to stock.
+                val asPurchase = !returnIn && (d.intent == Intent.CREATE_PURCHASE || hasSupplier)
+                if (asPurchase && unitCost == null) {
                     unitCost = prod?.buyPaise?.takeIf { it > 0 } ?: return ask(d, "unitPrice", p.whatPrice(prodName))
                 }
                 val total = if (unitCost != null) d.e.totalPaise ?: Money.lineTotal(qtyMilli, unitCost) else null
