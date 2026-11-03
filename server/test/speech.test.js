@@ -168,8 +168,36 @@ test('Gemini rate limited: Whisper hears instead, and Gemini rests instead of sl
   let r = await api.recognize({ audio: 'AAAA', language: 'ta-IN', phrases: [] })
   assert.equal(r.provider, 'whisper')
   assert.equal(r.text, 'Shirt XL evlo irukku')
-  assert.match(api.resting().gemini, /429/)
+  assert.match(api.resting()['stt:gemini'], /429/)
   calls.length = 0
   r = await api.recognize({ audio: 'AAAA', language: 'ta-IN', phrases: [] })
   assert.ok(calls.every(u => !u.startsWith('https://gemini.test')), 'no time lost on Gemini while it rests')
+})
+
+test('a Gemini voice model out of its limit rests and the next one speaks; hearing is not stopped by it', async () => {
+  const cfg = loadConfig({ ...base, GEMINI_API_KEY: 'g', GEMINI_BASE_URL: 'https://gem.test' })
+  const calls = []
+  const f = async (url) => {
+    url = String(url); calls.push(url)
+    const json = (status, o) => new Response(JSON.stringify(o), { status })
+    if (url.includes('/models?')) return json(200, { models: [
+      { name: 'models/gemini-flash-tts', supportedGenerationMethods: ['generateContent'] },
+      { name: 'models/gemini-pro-tts', supportedGenerationMethods: ['generateContent'] },
+    ] })
+    if (url.includes('gemini-flash-tts:')) return json(429, { error: { message: 'Quota exceeded for requests per day' } })
+    if (url.includes('gemini-pro-tts:')) return json(200, { candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/L16;rate=24000', data: Buffer.alloc(48).toString('base64') } }] } }] })
+    return json(200, { candidates: [{ content: { parts: [{ text: 'Shirt XL evlo' }] } }] })
+  }
+  const api = speechApi(cfg, f)
+  let r = await api.synthesize({ text: 'Hello', language: 'en-IN' })
+  assert.equal(r.status, 200)
+  assert.equal(r.model, 'gemini-pro-tts')
+  assert.match(api.resting()['tts-model:gemini-flash-tts'], /429/)
+  calls.length = 0
+  r = await api.synthesize({ text: 'Again', language: 'en-IN' })
+  assert.equal(r.model, 'gemini-pro-tts')
+  assert.ok(calls.every(u => !u.includes('gemini-flash-tts:')), 'the resting model is not asked again')
+  // Hearing still uses Gemini.
+  assert.equal(api.sttProvider(), 'gemini')
+  assert.equal((await api.recognize({ audio: 'AAAA', language: 'ta-IN', phrases: [] })).provider, 'gemini')
 })

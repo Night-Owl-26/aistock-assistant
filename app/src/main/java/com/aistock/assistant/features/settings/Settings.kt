@@ -262,6 +262,10 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
                 Spacer(Modifier.height(8.dp))
                 Text(stringResource(R.string.voice_pick), style = MaterialTheme.typography.titleSmall)
                 Text(stringResource(R.string.voice_pick_sub), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // Why replies were read by the phone's own voice, so the owner (and support) can see it.
+                com.aistock.assistant.voice.cloud.CloudSpeaker.lastProblem?.let {
+                    Text(stringResource(R.string.voice_phone_used, it.take(160)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                }
                 Spacer(Modifier.height(6.dp))
                 var picked by remember(prefs.voiceName) { mutableStateOf(prefs.voiceName) }
                 var playing by remember { mutableStateOf(false) }
@@ -275,8 +279,8 @@ fun SettingsScreen(nav: AppNav, vm: MainViewModel) {
                     OutlinedButton(enabled = !playing && prefs.serverBusinessId.isNotBlank(), onClick = {
                         playing = true
                         scope.launch {
-                            val ok = vm.sampleVoice(picked, ctx.getString(R.string.voice_sample_text))
-                            if (!ok) toast(ctx.getString(R.string.voice_sample_failed))
+                            val problem = vm.sampleVoice(picked, ctx.getString(R.string.voice_sample_text))
+                            if (problem != null) toast(ctx.getString(R.string.voice_sample_failed) + " (" + problem.take(160) + ")")
                             playing = false
                         }
                     }) { Text(stringResource(if (playing) R.string.voice_playing else R.string.voice_play)) }

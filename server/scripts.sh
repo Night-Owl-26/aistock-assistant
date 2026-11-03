@@ -31,5 +31,8 @@ case "${1:-}" in
   reset-code) # ./scripts.sh reset-code owner@email.com  -> a 6-digit code (15 minutes) to read out to an owner who forgot the password
     docker compose exec -T api wget -qO- --header "Authorization: Bearer $(grep ^ADMIN_TOKEN .env | cut -d= -f2-)" \
       --header 'Content-Type: application/json' --post-data "{\"email\":\"$2\"}" http://127.0.0.1:8080/admin/password-code; echo ;;
-  *) echo "usage: ./scripts.sh backup|restore <file>|activate <businessId> <plan> [days] [ref]|find <email>|usage|payments|approve <#>|reject <#> [note]|reset-code <email>" ;;
+  voice-test) # ./scripts.sh voice-test [Kore]  -> speaks a test sentence with Gemini; shows the model or the exact error
+    docker compose exec -T api wget -qO- --header "Authorization: Bearer $(grep ^ADMIN_TOKEN .env | cut -d= -f2-)" \
+      "http://127.0.0.1:8080/admin/voice-test?voice=${2:-Kore}"; echo ;;
+  *) echo "usage: ./scripts.sh backup|restore <file>|activate <businessId> <plan> [days] [ref]|find <email>|usage|payments|approve <#>|reject <#> [note]|reset-code <email>|voice-test [voice]" ;;
 esac

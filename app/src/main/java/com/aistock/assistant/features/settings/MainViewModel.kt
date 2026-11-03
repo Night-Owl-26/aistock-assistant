@@ -92,7 +92,7 @@ class MainViewModel @Inject constructor(
     suspend fun setCloudSpeech(on: Boolean) = settings.setCloudSpeech(on)
     suspend fun setVoiceName(name: String) { settings.setVoiceName(name); com.aistock.assistant.voice.cloud.CloudSpeaker.voiceChanged() }
     /** Speaks a short sample in [voice] through the server. @return false when it could not be played. */
-    suspend fun sampleVoice(voice: String, text: String): Boolean {
+    suspend fun sampleVoice(voice: String, text: String): String? {
         val silent = object : com.aistock.assistant.voice.SpeechOutput {
             override fun speak(text: String, tamil: Boolean) {}
             override fun isSpeaking() = false

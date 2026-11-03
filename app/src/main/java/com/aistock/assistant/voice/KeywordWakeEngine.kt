@@ -33,18 +33,21 @@ class KeywordWakeEngine(private val context: Context, private val follow: WakeWo
         try {
             // Only these phrases (plus "unknown") are recognised, which makes the name easy to catch and cheap to run.
             val rec = Recognizer(model, 16000f, GRAMMAR)
+            // Word confidences let a weak, guessed match (a video's voice, music) be told from the name really said.
+            try { rec.setWords(true) } catch (e: Exception) { }
             val s = SpeechService(rec, 16000f)
             service = s
             s.startListening(object : RecognitionListener {
-                override fun onPartialResult(hypothesis: String?) = check(hypothesis, "partial")
-                override fun onResult(hypothesis: String?) = check(hypothesis, "text")
-                override fun onFinalResult(hypothesis: String?) = check(hypothesis, "text")
+                // Only finished phrases count: partial guesses fire on almost any sound when the word list is this short.
+                override fun onPartialResult(hypothesis: String?) {}
+                override fun onResult(hypothesis: String?) = check(hypothesis)
+                override fun onFinalResult(hypothesis: String?) = check(hypothesis)
                 override fun onError(exception: Exception?) { main.post { if (active) { stopSpotting(); main.postDelayed({ if (active) spot(model, listener) }, 2_000) } } }
                 override fun onTimeout() {}
 
-                private fun check(json: String?, field: String) {
-                    val heard = try { JSONObject(json ?: "{}").optString(field) } catch (e: Exception) { "" }
-                    if (heard.isBlank() || WakePhrase.find(heard) == null) return
+                private fun check(json: String?) {
+                    val o = try { JSONObject(json ?: "{}") } catch (e: Exception) { return }
+                    if (!WakeCheck.accept(o, otherAudioPlaying())) return
                     main.post {
                         if (!active) return@post
                         active = false
@@ -58,6 +61,12 @@ class KeywordWakeEngine(private val context: Context, private val follow: WakeWo
             listener.onFatal(-1)
         }
     }
+
+    /** A video, reel, song or call playing on the phone: its voices must not wake Stocky. */
+    private fun otherAudioPlaying(): Boolean = try {
+        val am = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        am.isMusicActive || am.mode == android.media.AudioManager.MODE_IN_CALL || am.mode == android.media.AudioManager.MODE_IN_COMMUNICATION
+    } catch (e: Exception) { false }
 
     private fun stopSpotting() {
         val s = service ?: return
@@ -89,7 +98,8 @@ class KeywordWakeEngine(private val context: Context, private val follow: WakeWo
 
     companion object {
         @Volatile private var model: Model? = null
-        private const val GRAMMAR = "[\"hey stocky\", \"hi stocky\", \"ok stocky\", \"okay stocky\", \"stocky\", \"hey stock key\", \"hey stalky\", \"[unk]\"]"
+        // Two-word phrases only: a lone "stocky" was matched far too easily by other voices.
+        private const val GRAMMAR = "[\"hey stocky\", \"hi stocky\", \"ok stocky\", \"okay stocky\", \"hey stalky\", \"[unk]\"]"
 
         /** The offline model is part of this build. */
         fun available(context: Context): Boolean = try { context.assets.list("model-wake")?.isNotEmpty() == true } catch (e: Exception) { false }

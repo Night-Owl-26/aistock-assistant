@@ -142,11 +142,13 @@ class CloudSpeaker(private val server: ServerApi, private val fallback: SpeechOu
                 val wav = server.textToSpeech(t.take(2000), null, voice())
                 val pcm = Wav.parse(wav) ?: throw IllegalStateException("not a WAV file")
                 withContext(Dispatchers.IO) { play(pcm) }
+                lastProblem = null
             } catch (e: CancellationException) {
                 // stopped by the owner
             } catch (e: Exception) {
                 talking = false
                 phoneUntil = System.currentTimeMillis() + PHONE_VOICE_MS
+                lastProblem = e.message ?: e.toString()
                 fallback.speak(t, tamil)
             } finally {
                 talking = false
@@ -186,26 +188,32 @@ class CloudSpeaker(private val server: ServerApi, private val fallback: SpeechOu
 
     override fun isSpeaking(): Boolean = talking || fallback.isSpeaking()
 
-    /** Plays [text] in [voiceName] with no phone fallback (the voice sample in Settings). @return false if it could not. */
-    suspend fun sample(text: String, voiceName: String): Boolean {
+    /** Plays [text] in [voiceName] with no phone fallback (the voice sample in Settings). @return null if it played, else why not. */
+    suspend fun sample(text: String, voiceName: String): String? {
         stop()
         return try {
-            val pcm = Wav.parse(server.textToSpeech(text, null, voiceName)) ?: return false
+            val pcm = Wav.parse(server.textToSpeech(text, null, voiceName)) ?: return "The server's answer was not audio."
             talking = true
             withContext(Dispatchers.IO) { play(pcm) }
             phoneUntil = 0L // the server voice works again
-            true
+            lastProblem = null
+            null
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            false
+            lastProblem = e.message ?: e.toString()
+            lastProblem
         } finally {
             talking = false
         }
     }
 
     companion object {
-        private const val PHONE_VOICE_MS = 20 * 60_000L
+        /** After a failure the phone's voice reads replies for this long, then the Gemini voice is tried again. */
+        private const val PHONE_VOICE_MS = 3 * 60_000L
+        /** Why the last reply was read by the phone's voice (shown in Settings), or null when the Gemini voice worked. */
+        @Volatile var lastProblem: String? = null
+            private set
         /** A newly picked voice is tried straight away, even if the server voice failed a moment ago. */
         fun voiceChanged() { phoneUntil = 0L }
         /** Shared by every screen, so the voice stays the same when the owner moves between screens. */

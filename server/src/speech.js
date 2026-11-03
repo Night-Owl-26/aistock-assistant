@@ -41,10 +41,11 @@ export function speechApi(cfg, fetchImpl = fetch) {
   // always spoken by Gemini, in the voice the owner picked in the app.
   const down = new Map() // provider -> { until, reason }
   const isDown = (p) => { const d = down.get(p); if (d && d.until > Date.now()) return true; if (d) down.delete(p); return false }
-  const chain = (wanted, order) => {
+  // Hearing and speaking rest separately: Gemini's voice limit running out must not stop Gemini from hearing.
+  const chain = (kind, wanted, order) => {
     const usable = order.filter(p => has[p]())
     const first = usable.includes(wanted) ? [wanted, ...usable.filter(p => p !== wanted)] : usable
-    const up = first.filter(p => !isDown(p))
+    const up = first.filter(p => !isDown(`${kind}:${p}`))
     return up.length ? up : first // all resting: try them anyway
   }
   const STT_ORDER = ['gemini', 'whisper']
@@ -62,7 +63,7 @@ export function speechApi(cfg, fetchImpl = fetch) {
   const attempt = async (fn) => {
     try { return await fn() } catch (err) { return { status: err?.name === 'TimeoutError' || err?.name === 'AbortError' ? 408 : 0, error: err?.message || String(err) } }
   }
-  const sttProvider = () => chain(cfg.sttProvider, STT_ORDER)[0] ?? null
+  const sttProvider = () => chain('stt', cfg.sttProvider, STT_ORDER)[0] ?? null
 
   /** Whisper on this server's own CPU: free, unlimited, nothing leaves the server. */
   async function recognizeWhisper({ audio, language, phrases }) {
@@ -99,29 +100,54 @@ export function speechApi(cfg, fetchImpl = fetch) {
     return { status: 200, text, language, confidence: null }
   }
 
-  let ttsModelFound = null
+  let ttsModelsFound = null
+  // A TTS model that is out of its limit (429) or not open to this key rests; the next TTS model speaks meanwhile.
+  const modelDown = new Map()
+  let lastTtsModel = null
   // The same seed and a low temperature keep Gemini's voice the same from one reply to the next (without them it can
   // change accent or tone each time).
   let steady = { temperature: 0.2, seed: 7 }
-  /** The Gemini TTS model to use: the configured one, or the first "tts" model this key may call (flash first). */
-  async function geminiTtsModel() {
-    if (cfg.geminiTtsModel) return cfg.geminiTtsModel
-    if (ttsModelFound) return ttsModelFound
-    const r = await fetchImpl(`${cfg.geminiBase}/v1beta/models?pageSize=200`, { headers: gHeaders(), signal: AbortSignal.timeout(15_000) })
-    const b = await parse(r)
-    const names = (b?.models ?? []).filter(m => (m.supportedGenerationMethods ?? []).includes('generateContent')).map(m => String(m.name).replace(/^models\//, '')).filter(n => /tts/i.test(n))
-    // Newest first, and the "lite" voice first among equals: it answers fastest, which matters more in a shop.
-    const ver = (n) => Number(/(\d+(?:\.\d+)?)/.exec(n)?.[1] ?? 0)
-    names.sort((a, b) => ver(b) - ver(a) || (/lite/i.test(b) - /lite/i.test(a)) || (/preview/i.test(a) - /preview/i.test(b)))
-    ttsModelFound = names.find(n => /flash/i.test(n)) ?? names[0] ?? null
-    return ttsModelFound
+  /**
+   * The Gemini TTS models to try, in order: the configured one, then every "tts" model this key may call (flash and
+   * lite first, newest first). The one that answered last is tried first.
+   */
+  async function geminiTtsModels() {
+    if (!ttsModelsFound) {
+      let names = []
+      try {
+        const r = await fetchImpl(`${cfg.geminiBase}/v1beta/models?pageSize=200`, { headers: gHeaders(), signal: AbortSignal.timeout(15_000) })
+        const b = await parse(r)
+        names = (b?.models ?? []).filter(m => (m.supportedGenerationMethods ?? []).includes('generateContent')).map(m => String(m.name).replace(/^models\//, '')).filter(n => /tts/i.test(n))
+      } catch { /* the configured model may still work */ }
+      const ver = (n) => Number(/(\d+(?:\.\d+)?)/.exec(n)?.[1] ?? 0)
+      names.sort((a, b) => (/flash/i.test(b) - /flash/i.test(a)) || ver(b) - ver(a) || (/lite/i.test(b) - /lite/i.test(a)) || (/preview/i.test(a) - /preview/i.test(b)))
+      ttsModelsFound = [...new Set([cfg.geminiTtsModel, ...names].filter(Boolean))]
+      if (!names.length && !cfg.geminiTtsModel) ttsModelsFound = null // look again next time
+    }
+    const list = ttsModelsFound ?? []
+    const up = list.filter(m => { const d = modelDown.get(m); return !d || d.until <= Date.now() })
+    const ordered = (up.length ? up : list)
+    return lastTtsModel && ordered.includes(lastTtsModel) ? [lastTtsModel, ...ordered.filter(m => m !== lastTtsModel)] : ordered
   }
 
   /** Gemini speaks the reply in a natural voice; returns a WAV (its audio comes as raw 16-bit PCM). */
-  async function synthesizeGemini({ text, language, voice }) {
+  async function synthesizeGemini(args) {
+    const models = await geminiTtsModels()
+    if (!models.length) return { status: 503, error: 'This Gemini key has no text-to-speech model.' }
+    let last = null
+    for (const model of models) {
+      const r = await attempt(() => synthesizeWith(model, args))
+      if (r.status === 200) { lastTtsModel = model; modelDown.delete(model); return { ...r, model } }
+      const st = Number(r.status) || 0
+      if ([403, 404, 429].includes(st)) modelDown.set(model, { until: Date.now() + (st === 429 ? 30 : 360) * 60_000, reason: `${st}: ${String(r.error ?? '').slice(0, 120)}` })
+      last = { ...r, model }
+      if (![400, 403, 404, 429].includes(st)) break // a timeout or server error: another model would wait as long
+    }
+    return last
+  }
+
+  async function synthesizeWith(model, { text, language, voice }) {
     const voiceName = GEMINI_VOICES.includes(voice) ? voice : (GEMINI_VOICES.includes(cfg.geminiTtsVoice) ? cfg.geminiTtsVoice : 'Kore')
-    const model = await geminiTtsModel()
-    if (!model) return { status: 503, error: 'This Gemini key has no text-to-speech model.' }
     // Only the reply itself: a style note in front of it ("Read this aloud ...") was sometimes spoken out loud too.
     const r = await fetchImpl(`${cfg.geminiBase}/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
       method: 'POST', headers: gHeaders(), signal: AbortSignal.timeout(20_000),
@@ -132,9 +158,9 @@ export function speechApi(cfg, fetchImpl = fetch) {
     })
     const b = await parse(r)
     // A model that does not take the steadiness settings says 400: ask again without them, and stop sending them.
-    if (r.status === 400 && Object.keys(steady).length) { steady = {}; return synthesizeGemini({ text, language, voice }) }
+    if (r.status === 400 && Object.keys(steady).length) { steady = {}; return synthesizeWith(model, { text, language, voice }) }
     if (!r.ok) {
-      if (r.status === 404) ttsModelFound = null // the model went away: look again next time
+      if (r.status === 404) ttsModelsFound = null // a model went away: look again next time
       return { status: r.status, error: b?.error?.message || `text-to-speech failed (${r.status})` }
     }
     const part = (b?.candidates?.[0]?.content?.parts ?? []).find(p => p?.inlineData?.data)
@@ -157,17 +183,17 @@ export function speechApi(cfg, fetchImpl = fetch) {
    */
   let lastVoice = null
   const ttsChain = () => {
-    const c = chain(cfg.ttsProvider, TTS_ORDER)
-    return lastVoice && c.includes(lastVoice) && !isDown(lastVoice) ? [lastVoice, ...c.filter(p => p !== lastVoice)] : c
+    const c = chain('tts', cfg.ttsProvider, TTS_ORDER)
+    return lastVoice && c.includes(lastVoice) && !isDown(`tts:${lastVoice}`) ? [lastVoice, ...c.filter(p => p !== lastVoice)] : c
   }
 
   /** Tries each provider in turn until one answers; a failing one rests for a while. */
-  async function firstThatWorks(order, impl, args, onOk = () => {}) {
+  async function firstThatWorks(kind, order, impl, args, onOk = () => {}) {
     let first = null
     for (const p of order) {
       const r = await attempt(() => impl[p](args))
-      if (r.status === 200) { down.delete(p); onOk(p); return { ...r, provider: p } }
-      rest(p, r)
+      if (r.status === 200) { down.delete(`${kind}:${p}`); onOk(p); return { ...r, provider: p } }
+      rest(`${kind}:${p}`, r)
       first ??= { ...r, provider: p } // the preferred provider's error says the most ("not enough credits", ...)
     }
     return first ?? { status: 503, error: 'no speech service is available' }
@@ -181,15 +207,18 @@ export function speechApi(cfg, fetchImpl = fetch) {
     ttsConfigured: () => ttsProvider() !== null,
     configured: () => sttProvider() !== null || ttsProvider() !== null,
     /** Providers resting after a failure, with the reason (shown on /healthz so the owner sees "gemini: 429 ..."). */
-    resting: () => Object.fromEntries([...down.entries()].filter(([p]) => isDown(p)).map(([p, d]) => [p, d.reason])),
+    resting: () => Object.fromEntries([
+      ...[...down.entries()].filter(([p]) => isDown(p)).map(([p, d]) => [p, d.reason]),
+      ...[...modelDown.entries()].filter(([, d]) => d.until > Date.now()).map(([m, d]) => [`tts-model:${m}`, d.reason]),
+    ]),
 
     /**
      * 16 kHz mono 16-bit PCM (base64) -> text. Product and customer names are passed as phrase hints so they are
      * recognised as the shop writes them. Returns { status, text, language, confidence, error, provider }.
      */
-    recognize: (args) => firstThatWorks(chain(cfg.sttProvider, STT_ORDER), hear, args),
+    recognize: (args) => firstThatWorks('stt', chain('stt', cfg.sttProvider, STT_ORDER), hear, args),
 
     /** Text -> spoken audio (WAV, 16-bit PCM). Returns { status, audio, error, provider }. */
-    synthesize: (args) => firstThatWorks(ttsChain(), speak, args, (p) => { lastVoice = p }),
+    synthesize: (args) => firstThatWorks('tts', ttsChain(), speak, args, (p) => { lastVoice = p }),
   }
 }

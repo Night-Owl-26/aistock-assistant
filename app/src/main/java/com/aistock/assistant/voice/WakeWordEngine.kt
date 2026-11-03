@@ -34,6 +34,11 @@ interface WakeWordEngine {
  * Every utterance is checked for "Hey Stocky"; nothing is stored or sent anywhere unless the phrase was said.
  */
 class SpeechWakeWordEngine(private val context: Context) : WakeWordEngine {
+    private fun otherAudioPlaying(): Boolean = try {
+        val am = context.getSystemService(android.content.Context.AUDIO_SERVICE) as android.media.AudioManager
+        am.isMusicActive || am.mode == android.media.AudioManager.MODE_IN_CALL || am.mode == android.media.AudioManager.MODE_IN_COMMUNICATION
+    } catch (e: Exception) { false }
+
     private val main = Handler(Looper.getMainLooper())
     private var recognizer: SpeechRecognizer? = null
     private var active = false
@@ -76,7 +81,8 @@ class SpeechWakeWordEngine(private val context: Context) : WakeWordEngine {
                     return
                 }
                 // Any of the recogniser's guesses may hold the name.
-                val cmd = all.firstNotNullOfOrNull { WakePhrase.find(it) }
+                // Only the best guess, and not while a video or song is playing (its voices must not wake Stocky).
+                val cmd = all.firstOrNull()?.let { WakePhrase.find(it) }?.takeIf { !otherAudioPlaying() }
                 if (cmd != null) listener.onHeard(true, cmd) else again(languageTag, needWake, listener, 150)
             }
             override fun onError(error: Int) {

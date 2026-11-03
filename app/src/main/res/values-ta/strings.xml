@@ -853,4 +853,5 @@
     <string name="sync_problem">இப்போது sync ஆகவில்லை; மீண்டும் முயலும்</string>
     <string name="sync_starting">sync ஆகிறது…</string>
     <string name="retry">மீண்டும் முயல்</string>
+    <string name="voice_phone_used">Gemini குரல் பதில் தராததால் கடைசி பதிலை phone குரல் படித்தது: %1$s. சில நிமிடங்களில் மீண்டும் முயலும்.</string>
 </resources>

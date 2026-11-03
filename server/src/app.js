@@ -763,6 +763,14 @@ export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, W
   })
 
   /** Administrator: payments waiting to be checked, with who sent them. */
+  /** Speaks a short test sentence with Gemini and says which model answered, or exactly why it could not. */
+  app.get('/admin/voice-test', async (req) => {
+    admin(req)
+    const voice = GEMINI_VOICES.includes(req.query?.voice) ? req.query.voice : null
+    const r = await speech.synthesize({ text: 'Vanakkam! Naan Stocky. Shirt XL stock 12 irukku.', language: 'en-IN', voice })
+    return { ok: r.status === 200, status: r.status, provider: r.provider ?? null, model: r.model ?? null, error: r.status === 200 ? null : r.error, bytes: r.audio ? Math.round(r.audio.length * 3 / 4) : 0, resting: speech.resting() }
+  })
+
   app.get('/admin/payments', async (req) => {
     admin(req)
     const status = ['pending', 'approved', 'rejected'].includes(req.query?.status) ? req.query.status : 'pending'
