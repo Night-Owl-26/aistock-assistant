@@ -127,6 +127,8 @@ if [ "$MODE" = nginx ]; then
   say "nginx already runs here: Thodar goes behind it (your other sites are not touched)"
   $SUDO docker compose rm -sf caddy >/dev/null 2>&1 || true
   extra=""; grep -qE '^COMPOSE_PROFILES=.*whisper' .env && extra="whisper"
+  # Remember the nginx setup, so a plain "docker compose up" later keeps the API reachable by nginx.
+  setenv "$ENVF" COMPOSE_FILE "docker-compose.yml:docker-compose.nginx.yml"
   $SUDO docker compose -f docker-compose.yml -f docker-compose.nginx.yml up -d --build db api $extra
   conf_dir=/etc/nginx/conf.d; [ -d /etc/nginx/sites-enabled ] && conf_dir=/etc/nginx/sites-available
   conf="$conf_dir/follower.conf"
