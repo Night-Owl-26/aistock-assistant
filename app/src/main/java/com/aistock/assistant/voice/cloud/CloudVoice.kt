@@ -31,6 +31,8 @@ import java.io.ByteArrayOutputStream
  */
 class CloudRecognizer(
     private val server: ServerApi,
+    /** The phone's own recogniser: takes over at once when the server cannot hear (limit reached, server down). */
+    private val fallback: SpeechInput? = null,
     private val phrases: suspend () -> List<String>,
 ) : SpeechInput {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -42,6 +44,8 @@ class CloudRecognizer(
     override fun start(languageTag: String, callback: VoiceRecognizer.Callback, quiet: Boolean) {
         stop()
         stopRecording = false
+        // The server failed a moment ago: the phone hears for a while, instead of failing every time.
+        if (fallback != null && System.currentTimeMillis() < phoneUntil && fallback.isAvailable()) { fallback.start(languageTag, callback, quiet); return }
         job = scope.launch {
             callback.onListening()
             val pcm = try {
@@ -62,9 +66,11 @@ class CloudRecognizer(
             } catch (e: CancellationException) {
                 throw e
             } catch (e: ServerException) {
-                callback.onError(if (e.status == 0) SpeechRecognizer.ERROR_NETWORK else SpeechRecognizer.ERROR_SERVER)
+                lastProblem = e.message
+                if (!useFallback(languageTag, callback, quiet)) callback.onError(if (e.status == 0) SpeechRecognizer.ERROR_NETWORK else SpeechRecognizer.ERROR_SERVER)
             } catch (e: Exception) {
-                callback.onError(SpeechRecognizer.ERROR_NETWORK)
+                lastProblem = e.message ?: e.toString()
+                if (!useFallback(languageTag, callback, quiet)) callback.onError(SpeechRecognizer.ERROR_NETWORK)
             }
         }
     }
@@ -112,10 +118,31 @@ class CloudRecognizer(
         return if (ep.state == Endpointer.State.WAITING || out.size() < rate / 5) null else out.toByteArray()
     }
 
+    /** The server could not hear: the phone's recogniser listens again right away (the owner says it once more). */
+    private fun useFallback(languageTag: String, callback: VoiceRecognizer.Callback, quiet: Boolean): Boolean {
+        val f = fallback ?: return false
+        if (!f.isAvailable()) return false
+        phoneUntil = System.currentTimeMillis() + PHONE_MS
+        callback.onPartial(SAY_AGAIN)
+        f.start(languageTag, callback, quiet)
+        return true
+    }
+
     override fun stop() {
         stopRecording = true
         job?.cancel()
         job = null
+        try { fallback?.stop() } catch (e: Exception) { }
+    }
+
+    companion object {
+        private const val PHONE_MS = 3 * 60_000L
+        /** Shown while the phone's recogniser takes over after the server failed. */
+        const val SAY_AGAIN = "↻"
+        @Volatile private var phoneUntil = 0L
+        /** Why the server could not hear the last request (shown with the error), or null. */
+        @Volatile var lastProblem: String? = null
+            private set
     }
 }
 

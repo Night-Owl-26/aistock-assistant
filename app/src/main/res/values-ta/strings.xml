@@ -854,4 +854,5 @@
     <string name="sync_starting">sync ஆகிறது…</string>
     <string name="retry">மீண்டும் முயல்</string>
     <string name="voice_phone_used">Gemini குரல் பதில் தராததால் கடைசி பதிலை phone குரல் படித்தது: %1$s. சில நிமிடங்களில் மீண்டும் முயலும்.</string>
+    <string name="voice_server_problem">இப்போது உங்கள் Thodar server குரலை எழுத்தாக மாற்ற முடியவில்லை (%1$s). மீண்டும் முயலுங்கள், அல்லது type செய்யுங்கள்.</string>
 </resources>

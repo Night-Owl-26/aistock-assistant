@@ -81,8 +81,24 @@ export function speechApi(cfg, fetchImpl = fetch) {
   const geminiText = (b) => (b?.candidates?.[0]?.content?.parts ?? []).filter(p => typeof p.text === 'string' && !p.thought).map(p => p.text).join('').trim()
 
   /** Gemini hears the recording and writes it down: Tamil in Tamil script, English words in English. */
-  async function recognizeGemini({ audio, language, phrases }) {
-    const model = cfg.geminiSttModel || cfg.textModel
+  // When one Gemini model is out of its limit (429), the next one hears instead; it rests meanwhile.
+  const sttModelDown = new Map()
+  async function recognizeGemini(args) {
+    const all = [...new Set([cfg.geminiSttModel || cfg.textModel, 'gemini-flash-lite-latest', 'gemini-flash-latest'])]
+    const up = all.filter(m => !((sttModelDown.get(m) ?? 0) > Date.now()))
+    let last = null
+    for (const model of (up.length ? up : all)) {
+      const r = await attempt(() => recognizeWith(model, args))
+      if (r.status === 200) return r
+      last = r
+      // Out of its limit, not open to this key, or not taking audio (400): the next model may hear it.
+      if (![400, 403, 404, 429].includes(Number(r.status))) break
+      sttModelDown.set(model, Date.now() + 30 * 60_000)
+    }
+    return last
+  }
+
+  async function recognizeWith(model, { audio, language, phrases }) {
     const wav = wavFromPcm(Buffer.from(audio, 'base64')).toString('base64')
     const names = phrases.slice(0, 80).join(', ')
     const prompt = `Transcribe this short recording of a shop owner in Tamil Nadu talking to their stock and billing app. ` +

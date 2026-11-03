@@ -85,7 +85,7 @@ fun CallStockyScreen(nav: AppNav, vm: AssistantViewModel = hiltViewModel()) {
     val busy by vm.busy.collectAsStateWithLifecycle()
 
     val cloudVoice = prefs.cloudSpeech && vm.cloudSpeechReady()
-    val recognizer: SpeechInput = remember(cloudVoice) { if (cloudVoice) vm.cloudRecognizer() else VoiceRecognizer(ctx) }
+    val recognizer: SpeechInput = remember(cloudVoice) { if (cloudVoice) vm.cloudRecognizer(VoiceRecognizer(ctx)) else VoiceRecognizer(ctx) }
     val speaker: SpeechOutput = remember(cloudVoice) { if (cloudVoice) vm.cloudSpeaker(Speaker(ctx)) else Speaker(ctx) }
     var tamil by remember { mutableStateOf(prefs.tamil) }
     var muted by remember { mutableStateOf(false) }

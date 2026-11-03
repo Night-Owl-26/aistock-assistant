@@ -94,7 +94,7 @@ class HandsFreeService : Service() {
         val cloud = p0.cloudSpeech && p0.aiSource == "server" && server.signedIn
         // With Google Cloud voice chosen, replies are read by Google's voice and follow-up requests are heard by Google.
         speaker = if (cloud) com.aistock.assistant.voice.cloud.CloudSpeaker(server, Speaker(this)) { settings.current.value.voiceName } else Speaker(this)
-        if (cloud) cloudInput = com.aistock.assistant.voice.cloud.CloudRecognizer(server) {
+        if (cloud) cloudInput = com.aistock.assistant.voice.cloud.CloudRecognizer(server, null) {
             (backend.products().map { it.name } + backend.parties(com.aistock.assistant.ai.PartyKind.CUSTOMER).map { it.name }).distinct().take(500)
         }
         stocky = factory.create()

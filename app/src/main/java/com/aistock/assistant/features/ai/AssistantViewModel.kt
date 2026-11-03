@@ -212,7 +212,7 @@ class AssistantViewModel @Inject constructor(
         return p.cloudSpeech && p.aiSource == "server" && server.signedIn
     }
 
-    fun cloudRecognizer(): com.aistock.assistant.voice.SpeechInput = com.aistock.assistant.voice.cloud.CloudRecognizer(server) { speechHints() }
+    fun cloudRecognizer(phone: com.aistock.assistant.voice.SpeechInput? = null): com.aistock.assistant.voice.SpeechInput = com.aistock.assistant.voice.cloud.CloudRecognizer(server, phone) { speechHints() }
 
     fun cloudSpeaker(fallback: com.aistock.assistant.voice.SpeechOutput): com.aistock.assistant.voice.SpeechOutput = com.aistock.assistant.voice.cloud.CloudSpeaker(server, fallback) { settings.current.value.voiceName }
 

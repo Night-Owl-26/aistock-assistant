@@ -108,7 +108,7 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
 
     // Google Cloud Speech-to-Text / Text-to-Speech through the owner's server when chosen in Settings; the phone's own otherwise.
     val cloudVoice = prefs.cloudSpeech && vm.cloudSpeechReady()
-    val recognizer: SpeechInput = remember(cloudVoice) { if (cloudVoice) vm.cloudRecognizer() else VoiceRecognizer(ctx) }
+    val recognizer: SpeechInput = remember(cloudVoice) { if (cloudVoice) vm.cloudRecognizer(VoiceRecognizer(ctx)) else VoiceRecognizer(ctx) }
     val speaker: SpeechOutput = remember(cloudVoice) { if (cloudVoice) vm.cloudSpeaker(Speaker(ctx)) else Speaker(ctx) }
     DisposableEffect(recognizer, speaker) { onDispose { recognizer.stop(); speaker.shutdown() } }
 
@@ -155,7 +155,8 @@ fun AssistantScreen(nav: AppNav, prefs: Prefs, conversationId: String?, startLis
                 vm.onVoiceError(
                     when (code) {
                         SpeechRecognizer.ERROR_INSUFFICIENT_PERMISSIONS -> msgNoPermission
-                        SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT, SpeechRecognizer.ERROR_SERVER -> msgNetwork
+                        SpeechRecognizer.ERROR_SERVER -> com.aistock.assistant.voice.cloud.CloudRecognizer.lastProblem?.let { ctx.getString(R.string.voice_server_problem, it.take(160)) } ?: msgNetwork
+                        SpeechRecognizer.ERROR_NETWORK, SpeechRecognizer.ERROR_NETWORK_TIMEOUT -> msgNetwork
                         SpeechRecognizer.ERROR_CLIENT, SpeechRecognizer.ERROR_RECOGNIZER_BUSY -> msgNoService
                         else -> msgNoSpeech
                     }
