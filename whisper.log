@@ -1,0 +1,3 @@
+en {'text': 'Two XL shirts sold for cash', 'language': 'en', 'took': 6.41, 'model': 'medium'}
+ta {'text': 'பிரப்பு சக்தாய் வீட்டு பார்', 'language': 'ta', 'took': 7.13, 'model': 'medium'}
+whisper OK
