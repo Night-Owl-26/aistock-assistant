@@ -1,0 +1,5 @@
+uninstall test build: Success
+install release: Performing Streamed Install
+Success
+run-as: run-as: package not debuggable: com.aistock.assistant
+problems: none

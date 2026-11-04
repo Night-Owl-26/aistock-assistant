@@ -1,0 +1,210 @@
+I/SdkSandboxManager(  505): No SDKs used. Skipping SDK data reconcilation for CallingInfo{mUid=10142, mPackageName='com.aistock.assistant, mAppProcessToken='null'}
+D/CarrierSvcBindHelper(  996): onPackageModified: com.aistock.assistant
+I/SafetyLabelChangedBroadcastReceiver(  808): received broadcast packageName: com.aistock.assistant, current user: UserHandle{0}, packageChangeEvent: NEW_INSTALL, intent user: UserHandle{0}
+D/ImsResolver(  996): maybeAddedImsService, packageName: com.aistock.assistant
+D/AndroidRuntime(13562): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(13562): Using default boot image
+I/AndroidRuntime(13562): Leaving lock profiling enabled
+D/AndroidRuntime(13562): Calling main entry com.android.commands.monkey.Monkey
+W/Monkey  (13562): args: [-p, com.aistock.assistant, -c, android.intent.category.LAUNCHER, 1]
+W/Monkey  (13562):  arg: "com.aistock.assistant"
+W/Monkey  (13562): data="com.aistock.assistant"
+I/ActivityTaskManager(  505): START u0 {act=android.intent.action.MAIN cat=[android.intent.category.LAUNCHER] flg=0x10200000 cmp=com.aistock.assistant/.MainActivity} with LAUNCH_MULTIPLE from uid 2000 (BAL_ALLOW_PERMISSION) result code=0
+V/WindowManagerShell(  794): Transition requested: android.os.BinderProxy@ad43b7a TransitionRequestInfo { type = OPEN, triggerTask = TaskInfo{userId=0 taskId=11 displayId=0 isRunning=true baseIntent=Intent { act=android.intent.action.MAIN cat=[android.intent.category.LAUNCHER] flg=0x10200000 cmp=com.aistock.assistant/.MainActivity } baseActivity=ComponentInfo{com.aistock.assistant/com.aistock.assistant.MainActivity} topActivity=ComponentInfo{com.aistock.assistant/com.aistock.assistant.MainActivity} origActivity=null realActivity=ComponentInfo{com.aistock.assistant/com.aistock.assistant.MainActivity} numActivities=1 lastActiveTime=1423098 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{android.window.IWindowContainerToken$Stub$Proxy@d8af2b} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=Rect(0, 128 - 0, 0) topActivityInfo=ActivityInfo{7e3df88 com.aistock.assistant.MainActivity} launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=false isVisible=false isVisibleRequested=false isSleeping=false topActivityInSizeCompat=false topActivityEligibleForLetterboxEducation= false topActivityLetterboxed= false isFromDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 locusId=null displayAreaFeatureId=1 cameraCompatControlState=hidden}, remoteTransition = null, displayChange = null }
+I/ActivityManager(  505): Start proc 13577:com.aistock.assistant/u0a142 for next-top-activity {com.aistock.assistant/com.aistock.assistant.MainActivity}
+D/CoreBackPreview(  505): Window{e03818e u0 Splash Screen com.aistock.assistant}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@4f90945, mPriority=0, mIsAnimationCallback=false}
+I/AndroidRuntime(13562): VM exiting with result code 0.
+V/WindowManager(  505): Sent Transition #22 createdAt=11-04 12:05:50.946 via request=TransitionRequestInfo { type = OPEN, triggerTask = TaskInfo{userId=0 taskId=11 displayId=0 isRunning=true baseIntent=Intent { act=android.intent.action.MAIN cat=[android.intent.category.LAUNCHER] flg=0x10200000 cmp=com.aistock.assistant/.MainActivity } baseActivity=ComponentInfo{com.aistock.assistant/com.aistock.assistant.MainActivity} topActivity=ComponentInfo{com.aistock.assistant/com.aistock.assistant.MainActivity} origActivity=null realActivity=ComponentInfo{com.aistock.assistant/com.aistock.assistant.MainActivity} numActivities=1 lastActiveTime=1423098 supportsMultiWindow=true resizeMode=1 isResizeable=true minWidth=-1 minHeight=-1 defaultMinSize=220 token=WCT{RemoteToken{8babdc0 Task{7ba9f48 #11 type=standard A=10142:com.aistock.assistant}}} topActivityType=1 pictureInPictureParams=null shouldDockBigOverlays=false launchIntoPipHostTaskId=-1 lastParentTaskIdBeforePip=-1 displayCutoutSafeInsets=Rect(0, 128 - 0, 0) topActivityInfo=ActivityInfo{fd37af9 com.aistock.assistant.MainActivity} launchCookies=[] positionInParent=Point(0, 0) parentTaskId=-1 isFocused=false isVisible=false isVisibleRequested=false isSleeping=false topActivityInSizeCompat=false topActivityEligibleForLetterboxEducation= false topActivityLetterboxed= false isFromDoubleTap= false topActivityLetterboxVerticalPosition= -1 topActivityLetterboxHorizontalPosition= -1 topActivityLetterboxWidth=-1 topActivityLetterboxHeight=-1 locusId=null displayAreaFeatureId=1 cameraCompatControlState=hidden}, remoteTransition = null, displayChange = null }
+V/WindowManager(  505):     info={id=22 t=OPEN f=0x0 trk=0 r=[0@Point(0, 0)] c=[{WCT{RemoteToken{8babdc0 Task{7ba9f48 #11 type=standard A=10142:com.aistock.assistant}}} m=OPEN f=NONE leash=Surface(name=Task=11)/@0x7d4f054 sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0},{WCT{RemoteToken{b95b8a3 Task{c93c96c #9 type=standard A=10096:com.android.dialer}}} m=TO_BACK f=NONE leash=Surface(name=Task=9)/@0xb55fa5d sb=Rect(0, 0 - 1080, 2400) eb=Rect(0, 0 - 1080, 2400) d=0}]}
+D/nativeloader(13577): Configuring clns-6 for other apk /data/app/~~LL04i8fAUaaiE0AZtm66ug==/com.aistock.assistant-az9EF0z7vbXahgkxFnVpgA==/base.apk. target_sdk_version=36, uses_libraries=, library_path=/data/app/~~LL04i8fAUaaiE0AZtm66ug==/com.aistock.assistant-az9EF0z7vbXahgkxFnVpgA==/lib/x86_64:/data/app/~~LL04i8fAUaaiE0AZtm66ug==/com.aistock.assistant-az9EF0z7vbXahgkxFnVpgA==/base.apk!/lib/x86_64, permitted_path=/data:/mnt/expand:/data/user/0/com.aistock.assistant
+V/GraphicsEnvironment(13577): ANGLE GameManagerService for com.aistock.assistant: false
+V/GraphicsEnvironment(13577): com.aistock.assistant is not listed in per-application setting
+D/AndroidRuntime(13591): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(13591): Using default boot image
+I/AndroidRuntime(13591): Leaving lock profiling enabled
+D/AndroidRuntime(13591): Calling main entry com.android.commands.uiautomator.Launcher
+D/CoreBackPreview(  505): Window{1154476 u0 com.aistock.assistant/com.aistock.assistant.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@b331713, mPriority=0, mIsAnimationCallback=false}
+I/ActivityTaskManager(  505): Displayed com.aistock.assistant/.MainActivity for user 0: +1s174ms
+I/ImeTracker(  505): com.aistock.assistant:358c7dd3: onRequestHide at ORIGIN_SERVER_HIDE_INPUT reason HIDE_UNSPECIFIED_WINDOW
+I/ImeTracker(  505): com.aistock.assistant:358c7dd3: onCancelled at PHASE_SERVER_SHOULD_HIDE
+D/CoreBackPreview(  505): Window{e03818e u0 Splash Screen com.aistock.assistant EXITING}: Setting back callback null
+W/InputManager-JNI(  505): Input channel object 'e03818e Splash Screen com.aistock.assistant (client)' was disposed without first being removed with the input manager!
+D/AndroidRuntime(13591): Shutting down VM
+D/AndroidRuntime(13639): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(13639): Using default boot image
+I/AndroidRuntime(13639): Leaving lock profiling enabled
+D/AndroidRuntime(13639): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(13639): Shutting down VM
+D/ProfileInstaller(13577): Installing profile for com.aistock.assistant
+D/AndroidRuntime(13664): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(13664): Using default boot image
+I/AndroidRuntime(13664): Leaving lock profiling enabled
+D/AndroidRuntime(13664): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(13664): Shutting down VM
+D/AndroidRuntime(13688): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(13688): Using default boot image
+I/AndroidRuntime(13688): Leaving lock profiling enabled
+D/AndroidRuntime(13688): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(13688): Shutting down VM
+D/AndroidRuntime(13711): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(13711): Using default boot image
+I/AndroidRuntime(13711): Leaving lock profiling enabled
+D/AndroidRuntime(13711): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(13711): Shutting down VM
+D/AndroidRuntime(13729): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(13729): Using default boot image
+I/AndroidRuntime(13729): Leaving lock profiling enabled
+D/AndroidRuntime(13729): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(13729): Shutting down VM
+I/ImeTracker(13577): com.aistock.assistant:7e6c4436: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT_BY_INSETS_API
+I/ImeTracker(13577): com.aistock.assistant:ff18360e: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT
+I/ImeTracker(  505): com.aistock.assistant:7e6c4436: onFailed at PHASE_WM_SHOW_IME_RUNNER
+D/CoreBackPreview(  505): Window{1154476 u0 com.aistock.assistant/com.aistock.assistant.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@8113685, mPriority=0, mIsAnimationCallback=false}
+I/ImeTracker(13577): com.aistock.assistant:ff18360e: onShown
+I/ImeTracker(  505): com.aistock.assistant:5a56d662: onRequestHide at ORIGIN_SERVER_HIDE_INPUT reason HIDE_SOFT_INPUT_BY_BACK_KEY
+D/CoreBackPreview(  505): Window{1154476 u0 com.aistock.assistant/com.aistock.assistant.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@ae654eb, mPriority=0, mIsAnimationCallback=false}
+I/ImeTracker(13577): com.aistock.assistant:152d2090: onRequestHide at ORIGIN_CLIENT_HIDE_SOFT_INPUT reason HIDE_SOFT_INPUT_BY_INSETS_API
+I/ImeTracker(  505): com.aistock.assistant:152d2090: onCancelled at PHASE_SERVER_SHOULD_HIDE
+I/ImeTracker(13577): com.aistock.assistant:5a56d662: onHidden
+D/AndroidRuntime(13795): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(13795): Using default boot image
+I/AndroidRuntime(13795): Leaving lock profiling enabled
+D/AndroidRuntime(13795): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(13795): Shutting down VM
+I/ImeTracker(13577): com.aistock.assistant:7fa41337: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT_BY_INSETS_API
+I/ImeTracker(13577): com.aistock.assistant:9c76029a: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT
+D/CoreBackPreview(  505): Window{1154476 u0 com.aistock.assistant/com.aistock.assistant.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@e6c7d78, mPriority=0, mIsAnimationCallback=false}
+I/ImeTracker(13577): com.aistock.assistant:9c76029a: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+I/ImeTracker(13577): com.aistock.assistant:7fa41337: onShown
+I/ImeTracker(  505): com.aistock.assistant:fdf765a8: onRequestHide at ORIGIN_SERVER_HIDE_INPUT reason HIDE_SOFT_INPUT_BY_BACK_KEY
+D/CoreBackPreview(  505): Window{1154476 u0 com.aistock.assistant/com.aistock.assistant.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@494bf66, mPriority=0, mIsAnimationCallback=false}
+I/ImeTracker(13577): com.aistock.assistant:d6286de9: onRequestHide at ORIGIN_CLIENT_HIDE_SOFT_INPUT reason HIDE_SOFT_INPUT_BY_INSETS_API
+I/ImeTracker(  505): com.aistock.assistant:d6286de9: onCancelled at PHASE_SERVER_SHOULD_HIDE
+I/ImeTracker(13577): com.aistock.assistant:fdf765a8: onHidden
+D/AndroidRuntime(13845): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(13845): Using default boot image
+I/AndroidRuntime(13845): Leaving lock profiling enabled
+D/AndroidRuntime(13845): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(13845): Shutting down VM
+E/FrameTracker(13577): force finish cuj, time out: J<IME_INSETS_ANIMATION::0@1@com.aistock.assistant>
+D/AndroidRuntime(13869): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(13869): Using default boot image
+I/AndroidRuntime(13869): Leaving lock profiling enabled
+D/AndroidRuntime(13869): Calling main entry com.android.commands.uiautomator.Launcher
+E/FrameTracker(13577): force finish cuj, time out: J<IME_INSETS_ANIMATION::1@1@com.aistock.assistant>
+D/AndroidRuntime(13869): Shutting down VM
+I/ImeTracker(13577): com.aistock.assistant:b0b998fb: onRequestHide at ORIGIN_CLIENT_HIDE_SOFT_INPUT reason HIDE_SOFT_INPUT_BY_INSETS_API
+I/ImeTracker(13577): com.aistock.assistant:b0b998fb: onCancelled at PHASE_CLIENT_APPLY_ANIMATION
+D/AndroidRuntime(13893): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(13893): Using default boot image
+I/AndroidRuntime(13893): Leaving lock profiling enabled
+D/AndroidRuntime(13893): Calling main entry com.android.commands.uiautomator.Launcher
+E/FrameTracker(13577): force finish cuj, time out: J<IME_INSETS_ANIMATION::0@1@com.aistock.assistant>
+D/AndroidRuntime(13893): Shutting down VM
+E/FrameTracker(13577): force finish cuj, time out: J<IME_INSETS_ANIMATION::1@1@com.aistock.assistant>
+D/AndroidRuntime(13915): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(13915): Using default boot image
+I/AndroidRuntime(13915): Leaving lock profiling enabled
+D/AndroidRuntime(13915): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(13915): Shutting down VM
+D/AndroidRuntime(13933): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(13933): Using default boot image
+I/AndroidRuntime(13933): Leaving lock profiling enabled
+D/AndroidRuntime(13933): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(13933): Shutting down VM
+D/AndroidRuntime(13956): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(13956): Using default boot image
+I/AndroidRuntime(13956): Leaving lock profiling enabled
+D/AndroidRuntime(13956): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(13956): Shutting down VM
+D/AndroidRuntime(13974): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(13974): Using default boot image
+I/AndroidRuntime(13974): Leaving lock profiling enabled
+D/AndroidRuntime(13974): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(13974): Shutting down VM
+D/AndroidRuntime(13998): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(13998): Using default boot image
+I/AndroidRuntime(13998): Leaving lock profiling enabled
+D/AndroidRuntime(13998): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(13998): Shutting down VM
+D/AndroidRuntime(14022): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(14022): Using default boot image
+I/AndroidRuntime(14022): Leaving lock profiling enabled
+D/AndroidRuntime(14022): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(14022): Shutting down VM
+D/AndroidRuntime(14047): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(14047): Using default boot image
+I/AndroidRuntime(14047): Leaving lock profiling enabled
+D/AndroidRuntime(14047): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(14047): Shutting down VM
+D/AndroidRuntime(14072): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(14072): Using default boot image
+I/AndroidRuntime(14072): Leaving lock profiling enabled
+D/AndroidRuntime(14072): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(14072): Shutting down VM
+D/AndroidRuntime(14096): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(14096): Using default boot image
+I/AndroidRuntime(14096): Leaving lock profiling enabled
+D/AndroidRuntime(14096): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(14096): Shutting down VM
+I/AndroidRuntime(14096): NOTE: attach of thread 'binder:14096_3' failed
+I/ImeTracker(13577): com.aistock.assistant:db23cd76: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT_BY_INSETS_API
+I/ImeTracker(13577): com.aistock.assistant:d612dadd: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT
+D/CoreBackPreview(  505): Window{1154476 u0 com.aistock.assistant/com.aistock.assistant.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@23aedd3, mPriority=0, mIsAnimationCallback=false}
+I/ImeTracker(  505): com.aistock.assistant:db23cd76: onFailed at PHASE_WM_SHOW_IME_RUNNER
+I/ImeTracker(13577): com.aistock.assistant:d612dadd: onShown
+I/ImeTracker(  505): com.aistock.assistant:cea2582d: onRequestHide at ORIGIN_SERVER_HIDE_INPUT reason HIDE_SOFT_INPUT_BY_BACK_KEY
+D/CoreBackPreview(  505): Window{1154476 u0 com.aistock.assistant/com.aistock.assistant.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@38e8d79, mPriority=0, mIsAnimationCallback=false}
+I/ImeTracker(13577): com.aistock.assistant:af99d616: onRequestHide at ORIGIN_CLIENT_HIDE_SOFT_INPUT reason HIDE_SOFT_INPUT_BY_INSETS_API
+I/ImeTracker(  505): com.aistock.assistant:af99d616: onCancelled at PHASE_SERVER_SHOULD_HIDE
+I/ImeTracker(13577): com.aistock.assistant:cea2582d: onHidden
+D/AndroidRuntime(14141): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(14141): Using default boot image
+I/AndroidRuntime(14141): Leaving lock profiling enabled
+D/AndroidRuntime(14141): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(14141): Shutting down VM
+I/ImeTracker(13577): com.aistock.assistant:27c6333e: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT_BY_INSETS_API
+I/ImeTracker(13577): com.aistock.assistant:b9abe848: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT
+D/CoreBackPreview(  505): Window{1154476 u0 com.aistock.assistant/com.aistock.assistant.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@155df6e, mPriority=0, mIsAnimationCallback=false}
+I/ImeTracker(  505): com.aistock.assistant:27c6333e: onFailed at PHASE_WM_SHOW_IME_RUNNER
+I/ImeTracker(13577): com.aistock.assistant:b9abe848: onShown
+I/ImeTracker(  505): com.aistock.assistant:ea3f885c: onRequestHide at ORIGIN_SERVER_HIDE_INPUT reason HIDE_SOFT_INPUT_BY_BACK_KEY
+D/CoreBackPreview(  505): Window{1154476 u0 com.aistock.assistant/com.aistock.assistant.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@b312ecc, mPriority=0, mIsAnimationCallback=false}
+I/ImeTracker(13577): com.aistock.assistant:ecc41049: onRequestHide at ORIGIN_CLIENT_HIDE_SOFT_INPUT reason HIDE_SOFT_INPUT_BY_INSETS_API
+I/ImeTracker(  505): com.aistock.assistant:ecc41049: onCancelled at PHASE_SERVER_SHOULD_HIDE
+I/ImeTracker(13577): com.aistock.assistant:ea3f885c: onHidden
+D/AndroidRuntime(14187): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(14187): Using default boot image
+I/AndroidRuntime(14187): Leaving lock profiling enabled
+D/AndroidRuntime(14187): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(14187): Shutting down VM
+D/AndroidRuntime(14211): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(14211): Using default boot image
+I/AndroidRuntime(14211): Leaving lock profiling enabled
+D/AndroidRuntime(14211): Calling main entry com.android.commands.uiautomator.Launcher
+E/FrameTracker(13577): force finish cuj, time out: J<IME_INSETS_ANIMATION::0@1@com.aistock.assistant>
+D/AndroidRuntime(14211): Shutting down VM
+I/ImeTracker(13577): com.aistock.assistant:3fd5853: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT_BY_INSETS_API
+I/ImeTracker(13577): com.aistock.assistant:c369bc77: onRequestShow at ORIGIN_CLIENT_SHOW_SOFT_INPUT reason SHOW_SOFT_INPUT
+E/FrameTracker(13577): force finish cuj, time out: J<IME_INSETS_ANIMATION::1@1@com.aistock.assistant>
+D/CoreBackPreview(  505): Window{1154476 u0 com.aistock.assistant/com.aistock.assistant.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@5024adf, mPriority=0, mIsAnimationCallback=false}
+I/ImeTracker(  505): com.aistock.assistant:3fd5853: onFailed at PHASE_WM_SHOW_IME_RUNNER
+I/ImeTracker(13577): com.aistock.assistant:c369bc77: onShown
+E/FrameTracker(13577): force finish cuj, time out: J<IME_INSETS_ANIMATION::0@1@com.aistock.assistant>
+E/FrameTracker(13577): force finish cuj, time out: J<IME_INSETS_ANIMATION::1@1@com.aistock.assistant>
+I/ImeTracker(  505): com.aistock.assistant:cf316c0: onRequestHide at ORIGIN_SERVER_HIDE_INPUT reason HIDE_SOFT_INPUT_BY_BACK_KEY
+D/CoreBackPreview(  505): Window{1154476 u0 com.aistock.assistant/com.aistock.assistant.MainActivity}: Setting back callback OnBackInvokedCallbackInfo{mCallback=android.window.IOnBackInvokedCallback$Stub$Proxy@25b790c, mPriority=0, mIsAnimationCallback=false}
+I/ImeTracker(13577): com.aistock.assistant:8ceea686: onRequestHide at ORIGIN_CLIENT_HIDE_SOFT_INPUT reason HIDE_SOFT_INPUT_BY_INSETS_API
+I/ImeTracker(  505): com.aistock.assistant:8ceea686: onCancelled at PHASE_SERVER_SHOULD_HIDE
+I/ImeTracker(13577): com.aistock.assistant:cf316c0: onHidden
+D/AndroidRuntime(14487): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(14487): Using default boot image
+I/AndroidRuntime(14487): Leaving lock profiling enabled
+D/AndroidRuntime(14487): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(14487): Shutting down VM
+E/FrameTracker(13577): force finish cuj, time out: J<IME_INSETS_ANIMATION::0@1@com.aistock.assistant>
+D/AndroidRuntime(14511): >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+I/AndroidRuntime(14511): Using default boot image
+I/AndroidRuntime(14511): Leaving lock profiling enabled
+D/AndroidRuntime(14511): Calling main entry com.android.commands.uiautomator.Launcher
+D/AndroidRuntime(14511): Shutting down VM
