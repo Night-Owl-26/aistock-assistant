@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.excel.ExportSafetyTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-04T11:37:16.203Z" hostname="runnervmwuk1x" time="0.082">
+  <properties/>
+  <testcase name="hugeCsvIsRefused" classname="com.aistock.assistant.excel.ExportSafetyTest" time="0.081"/>
+  <testcase name="ordinaryValuesUnchanged" classname="com.aistock.assistant.excel.ExportSafetyTest" time="0.0"/>
+  <testcase name="formulaLikeTextStaysText" classname="com.aistock.assistant.excel.ExportSafetyTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

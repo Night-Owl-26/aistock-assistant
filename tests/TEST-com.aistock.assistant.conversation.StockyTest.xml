@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.conversation.StockyTest" tests="9" skipped="0" failures="0" errors="0" timestamp="2026-11-04T11:37:13.987Z" hostname="runnervmwuk1x" time="0.034">
+  <properties/>
+  <testcase name="aFailedSaveIsNeverReportedAsDone" classname="com.aistock.assistant.conversation.StockyTest" time="0.005"/>
+  <testcase name="withoutAModelOrWhenItFailsTheOnDeviceRulesAnswer" classname="com.aistock.assistant.conversation.StockyTest" time="0.003"/>
+  <testcase name="oldTurnsAreSummarisedInsteadOfSentForever" classname="com.aistock.assistant.conversation.StockyTest" time="0.002"/>
+  <testcase name="businessRulesStillApplyToModelProposals" classname="com.aistock.assistant.conversation.StockyTest" time="0.002"/>
+  <testcase name="workbookSheetsColumnsAndRows" classname="com.aistock.assistant.conversation.StockyTest" time="0.005"/>
+  <testcase name="paymentsBalancesAndPartyContext" classname="com.aistock.assistant.conversation.StockyTest" time="0.003"/>
+  <testcase name="answersComeFromToolDataNotFromTheModel" classname="com.aistock.assistant.conversation.StockyTest" time="0.004"/>
+  <testcase name="followUpUsesTheProductFromTheConversationAndWaitsForYes" classname="com.aistock.assistant.conversation.StockyTest" time="0.002"/>
+  <testcase name="correctionReplacesTheProposal" classname="com.aistock.assistant.conversation.StockyTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

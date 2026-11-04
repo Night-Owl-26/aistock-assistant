@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.excel.SmartWorkbookTest" tests="6" skipped="0" failures="0" errors="0" timestamp="2026-11-04T11:37:16.331Z" hostname="runnervmwuk1x" time="0.488">
+  <properties/>
+  <testcase name="voiceSizesFindTheRightProduct" classname="com.aistock.assistant.excel.SmartWorkbookTest" time="0.064"/>
+  <testcase name="theConfirmedColumnsAreReusedWithoutTheAiAndFailuresFallBackToTheRules" classname="com.aistock.assistant.excel.SmartWorkbookTest" time="0.109"/>
+  <testcase name="productsWithoutACategoryAreGroupedByTheAiOrByTheirNames" classname="com.aistock.assistant.excel.SmartWorkbookTest" time="0.094"/>
+  <testcase name="keywordRulesPickSensibleCategories" classname="com.aistock.assistant.excel.SmartWorkbookTest" time="0.03"/>
+  <testcase name="version3DatabasesUpgradeWithoutLosingData" classname="com.aistock.assistant.excel.SmartWorkbookTest" time="0.086"/>
+  <testcase name="aiMappedImportThenSpokenSaleThenExcelUpdate" classname="com.aistock.assistant.excel.SmartWorkbookTest" time="0.105"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

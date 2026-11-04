@@ -1,0 +1,13 @@
+total 79184
+drwxr-xr-x  4 runner runner     4096 Nov  4 11:40 .
+drwxr-xr-x 14 runner runner     4096 Nov  4 11:40 ..
+-rw-r--r--  1 runner runner 81021759 Nov  4 11:40 app-debug.apk
+-rw-r--r--  1 runner runner     2924 Nov  4 11:40 assemble.log
+-rw-r--r--  1 runner runner        0 Nov  4 11:40 files.txt
+-rw-r--r--  1 runner runner    16991 Nov  4 11:40 release-check.txt
+-rw-r--r--  1 runner runner     5963 Nov  4 11:40 release.log
+drwxr-xr-x  3 runner runner     4096 Nov  4 11:40 schemas
+-rw-r--r--  1 runner runner       41 Nov  4 11:40 sha.txt
+-rw-r--r--  1 runner runner       78 Nov  4 11:40 status.txt
+-rw-r--r--  1 runner runner     2143 Nov  4 11:40 test.log
+drwxr-xr-x  2 runner runner     4096 Nov  4 11:40 tests

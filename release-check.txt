@@ -1,0 +1,257 @@
+== badging
+package: name='com.aistock.assistant' versionCode='2' versionName='1.1.0' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'
+minSdkVersion:'26'
+targetSdkVersion:'36'
+uses-permission: name='android.permission.RECORD_AUDIO'
+uses-permission: name='android.permission.INTERNET'
+uses-permission: name='android.permission.ACCESS_NETWORK_STATE'
+uses-permission: name='android.permission.POST_NOTIFICATIONS'
+uses-permission: name='android.permission.FOREGROUND_SERVICE'
+uses-permission: name='android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS'
+uses-permission: name='android.permission.RECEIVE_BOOT_COMPLETED'
+uses-permission: name='android.permission.FOREGROUND_SERVICE_MICROPHONE'
+uses-permission: name='com.aistock.assistant.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION'
+application-label:'Thodar'
+application-label-af:'Thodar'
+application-label-am:'Thodar'
+application-label-ar:'Thodar'
+application-label-as:'Thodar'
+application-label-az:'Thodar'
+application-label-be:'Thodar'
+application-label-bg:'Thodar'
+application-label-bn:'Thodar'
+application-label-bs:'Thodar'
+application-label-ca:'Thodar'
+application-label-cs:'Thodar'
+application-label-da:'Thodar'
+application-label-de:'Thodar'
+application-label-el:'Thodar'
+application-label-en-AU:'Thodar'
+application-label-en-CA:'Thodar'
+application-label-en-GB:'Thodar'
+application-label-en-IN:'Thodar'
+application-label-en-XC:'Thodar'
+application-label-es:'Thodar'
+application-label-es-US:'Thodar'
+application-label-et:'Thodar'
+application-label-eu:'Thodar'
+application-label-fa:'Thodar'
+application-label-fi:'Thodar'
+application-label-fr:'Thodar'
+application-label-fr-CA:'Thodar'
+application-label-gl:'Thodar'
+application-label-gu:'Thodar'
+application-label-hi:'Thodar'
+application-label-hr:'Thodar'
+application-label-hu:'Thodar'
+application-label-hy:'Thodar'
+application-label-in:'Thodar'
+application-label-is:'Thodar'
+application-label-it:'Thodar'
+application-label-iw:'Thodar'
+application-label-ja:'Thodar'
+application-label-ka:'Thodar'
+application-label-kk:'Thodar'
+application-label-km:'Thodar'
+application-label-kn:'Thodar'
+application-label-ko:'Thodar'
+application-label-ky:'Thodar'
+application-label-lo:'Thodar'
+application-label-lt:'Thodar'
+application-label-lv:'Thodar'
+application-label-mk:'Thodar'
+application-label-ml:'Thodar'
+application-label-mn:'Thodar'
+application-label-mr:'Thodar'
+application-label-ms:'Thodar'
+application-label-my:'Thodar'
+application-label-nb:'Thodar'
+application-label-ne:'Thodar'
+application-label-nl:'Thodar'
+application-label-or:'Thodar'
+application-label-pa:'Thodar'
+application-label-pl:'Thodar'
+application-label-pt:'Thodar'
+application-label-pt-BR:'Thodar'
+application-label-pt-PT:'Thodar'
+application-label-ro:'Thodar'
+application-label-ru:'Thodar'
+application-label-si:'Thodar'
+application-label-sk:'Thodar'
+application-label-sl:'Thodar'
+application-label-sq:'Thodar'
+application-label-sr:'Thodar'
+application-label-sr-Latn:'Thodar'
+application-label-sv:'Thodar'
+application-label-sw:'Thodar'
+application-label-ta:'Thodar'
+application-label-te:'Thodar'
+application-label-th:'Thodar'
+application-label-tl:'Thodar'
+application-label-tr:'Thodar'
+application-label-uk:'Thodar'
+application-label-ur:'Thodar'
+application-label-uz:'Thodar'
+application-label-vi:'Thodar'
+application-label-zh-CN:'Thodar'
+application-label-zh-HK:'Thodar'
+application-label-zh-TW:'Thodar'
+application-label-zu:'Thodar'
+application-icon-160:'res/E4.xml'
+application-icon-65534:'res/E4.xml'
+application: label='Thodar' icon='res/E4.xml'
+launchable-activity: name='com.aistock.assistant.MainActivity'  label='' icon=''
+feature-group: label=''
+  uses-feature: name='android.hardware.faketouch'
+  uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+  uses-feature: name='android.hardware.microphone'
+  uses-implied-feature: name='android.hardware.microphone' reason='requested android.permission.RECORD_AUDIO permission'
+main
+other-receivers
+other-services
+supports-screens: 'small' 'normal' 'large' 'xlarge'
+supports-any-density: 'true'
+locales: '--_--' 'af' 'am' 'ar' 'as' 'az' 'be' 'bg' 'bn' 'bs' 'ca' 'cs' 'da' 'de' 'el' 'en-AU' 'en-CA' 'en-GB' 'en-IN' 'en-XC' 'es' 'es-US' 'et' 'eu' 'fa' 'fi' 'fr' 'fr-CA' 'gl' 'gu' 'hi' 'hr' 'hu' 'hy' 'in' 'is' 'it' 'iw' 'ja' 'ka' 'kk' 'km' 'kn' 'ko' 'ky' 'lo' 'lt' 'lv' 'mk' 'ml' 'mn' 'mr' 'ms' 'my' 'nb' 'ne' 'nl' 'or' 'pa' 'pl' 'pt' 'pt-BR' 'pt-PT' 'ro' 'ru' 'si' 'sk' 'sl' 'sq' 'sr' 'sr-Latn' 'sv' 'sw' 'ta' 'te' 'th' 'tl' 'tr' 'uk' 'ur' 'uz' 'vi' 'zh-CN' 'zh-HK' 'zh-TW' 'zu'
+densities: '160' '65534'
+native-code: 'arm64-v8a' 'armeabi-v7a'
+== manifest
+N: android=http://schemas.android.com/apk/res/android (line=2)
+  E: manifest (line=2)
+    A: http://schemas.android.com/apk/res/android:versionCode(0x0101021b)=2
+    A: http://schemas.android.com/apk/res/android:versionName(0x0101021c)="1.1.0" (Raw: "1.1.0")
+    A: http://schemas.android.com/apk/res/android:compileSdkVersion(0x01010572)=36
+    A: http://schemas.android.com/apk/res/android:compileSdkVersionCodename(0x01010573)="16" (Raw: "16")
+    A: package="com.aistock.assistant" (Raw: "com.aistock.assistant")
+    A: platformBuildVersionCode=36
+    A: platformBuildVersionName=16
+      E: uses-sdk (line=7)
+        A: http://schemas.android.com/apk/res/android:minSdkVersion(0x0101020c)=26
+        A: http://schemas.android.com/apk/res/android:targetSdkVersion(0x01010270)=36
+      E: uses-permission (line=11)
+        A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.permission.RECORD_AUDIO" (Raw: "android.permission.RECORD_AUDIO")
+      E: uses-permission (line=12)
+        A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.permission.INTERNET" (Raw: "android.permission.INTERNET")
+      E: uses-permission (line=13)
+        A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.permission.ACCESS_NETWORK_STATE" (Raw: "android.permission.ACCESS_NETWORK_STATE")
+      E: uses-permission (line=14)
+        A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.permission.POST_NOTIFICATIONS" (Raw: "android.permission.POST_NOTIFICATIONS")
+      E: uses-permission (line=15)
+        A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.permission.FOREGROUND_SERVICE" (Raw: "android.permission.FOREGROUND_SERVICE")
+      E: uses-permission (line=16)
+        A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" (Raw: "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS")
+      E: uses-permission (line=17)
+        A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.permission.RECEIVE_BOOT_COMPLETED" (Raw: "android.permission.RECEIVE_BOOT_COMPLETED")
+      E: uses-permission (line=18)
+        A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.permission.FOREGROUND_SERVICE_MICROPHONE" (Raw: "android.permission.FOREGROUND_SERVICE_MICROPHONE")
+      E: queries (line=20)
+          E: intent (line=21)
+              E: action (line=22)
+                A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.speech.RecognitionService" (Raw: "android.speech.RecognitionService")
+          E: intent (line=24)
+              E: action (line=25)
+                A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.intent.action.TTS_SERVICE" (Raw: "android.intent.action.TTS_SERVICE")
+      E: permission (line=29)
+        A: http://schemas.android.com/apk/res/android:name(0x01010003)="com.aistock.assistant.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" (Raw: "com.aistock.assistant.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION")
+        A: http://schemas.android.com/apk/res/android:protectionLevel(0x01010009)=0x00000002
+      E: uses-permission (line=33)
+        A: http://schemas.android.com/apk/res/android:name(0x01010003)="com.aistock.assistant.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" (Raw: "com.aistock.assistant.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION")
+      E: application (line=35)
+        A: http://schemas.android.com/apk/res/android:theme(0x01010000)=@0x7f0c000a
+        A: http://schemas.android.com/apk/res/android:label(0x01010001)=@0x7f0b003b
+        A: http://schemas.android.com/apk/res/android:icon(0x01010002)=@0x7f0a0000
+        A: http://schemas.android.com/apk/res/android:name(0x01010003)="com.aistock.assistant.AIStockApp" (Raw: "com.aistock.assistant.AIStockApp")
+        A: http://schemas.android.com/apk/res/android:allowBackup(0x01010280)=false
+        A: http://schemas.android.com/apk/res/android:supportsRtl(0x010103af)=true
+        A: http://schemas.android.com/apk/res/android:extractNativeLibs(0x010104ea)=false
+        A: http://schemas.android.com/apk/res/android:fullBackupContent(0x010104eb)=false
+        A: http://schemas.android.com/apk/res/android:usesCleartextTraffic(0x010104ec)=false
+        A: http://schemas.android.com/apk/res/android:roundIcon(0x0101052c)=@0x7f0a0000
+        A: http://schemas.android.com/apk/res/android:appComponentFactory(0x0101057a)="androidx.core.app.CoreComponentFactory" (Raw: "androidx.core.app.CoreComponentFactory")
+        A: http://schemas.android.com/apk/res/android:dataExtractionRules(0x0101063e)=@0x7f0e0000
+          E: activity (line=48)
+            A: http://schemas.android.com/apk/res/android:name(0x01010003)="com.aistock.assistant.MainActivity" (Raw: "com.aistock.assistant.MainActivity")
+            A: http://schemas.android.com/apk/res/android:exported(0x01010010)=true
+            A: http://schemas.android.com/apk/res/android:windowSoftInputMode(0x0101022b)=0x00000010
+              E: intent-filter (line=52)
+                  E: action (line=53)
+                    A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.intent.action.MAIN" (Raw: "android.intent.action.MAIN")
+                  E: category (line=55)
+                    A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.intent.category.LAUNCHER" (Raw: "android.intent.category.LAUNCHER")
+              E: meta-data (line=58)
+                A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.app.shortcuts" (Raw: "android.app.shortcuts")
+                A: http://schemas.android.com/apk/res/android:resource(0x01010025)=@0x7f0e0002
+          E: receiver (line=63)
+            A: http://schemas.android.com/apk/res/android:name(0x01010003)="com.aistock.assistant.business.ReminderReceiver" (Raw: "com.aistock.assistant.business.ReminderReceiver")
+            A: http://schemas.android.com/apk/res/android:exported(0x01010010)=false
+              E: intent-filter (line=66)
+                  E: action (line=67)
+                    A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.intent.action.BOOT_COMPLETED" (Raw: "android.intent.action.BOOT_COMPLETED")
+                  E: action (line=68)
+                    A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.intent.action.MY_PACKAGE_REPLACED" (Raw: "android.intent.action.MY_PACKAGE_REPLACED")
+          E: service (line=72)
+            A: http://schemas.android.com/apk/res/android:name(0x01010003)="com.aistock.assistant.voice.HandsFreeService" (Raw: "com.aistock.assistant.voice.HandsFreeService")
+            A: http://schemas.android.com/apk/res/android:exported(0x01010010)=false
+            A: http://schemas.android.com/apk/res/android:foregroundServiceType(0x01010599)=0x00000080
+          E: provider (line=77)
+            A: http://schemas.android.com/apk/res/android:name(0x01010003)="androidx.core.content.FileProvider" (Raw: "androidx.core.content.FileProvider")
+            A: http://schemas.android.com/apk/res/android:exported(0x01010010)=false
+            A: http://schemas.android.com/apk/res/android:authorities(0x01010018)="com.aistock.assistant.files" (Raw: "com.aistock.assistant.files")
+            A: http://schemas.android.com/apk/res/android:grantUriPermissions(0x0101001b)=true
+              E: meta-data (line=82)
+                A: http://schemas.android.com/apk/res/android:name(0x01010003)="android.support.FILE_PROVIDER_PATHS" (Raw: "android.support.FILE_PROVIDER_PATHS")
+                A: http://schemas.android.com/apk/res/android:resource(0x01010025)=@0x7f0e0001
+          E: provider (line=86)
+            A: http://schemas.android.com/apk/res/android:name(0x01010003)="androidx.startup.InitializationProvider" (Raw: "androidx.startup.InitializationProvider")
+            A: http://schemas.android.com/apk/res/android:exported(0x01010010)=false
+            A: http://schemas.android.com/apk/res/android:authorities(0x01010018)="com.aistock.assistant.androidx-startup" (Raw: "com.aistock.assistant.androidx-startup")
+              E: meta-data (line=90)
+                A: http://schemas.android.com/apk/res/android:name(0x01010003)="androidx.emoji2.text.EmojiCompatInitializer" (Raw: "androidx.emoji2.text.EmojiCompatInitializer")
+                A: http://schemas.android.com/apk/res/android:value(0x01010024)="androidx.startup" (Raw: "androidx.startup")
+              E: meta-data (line=93)
+                A: http://schemas.android.com/apk/res/android:name(0x01010003)="androidx.lifecycle.ProcessLifecycleInitializer" (Raw: "androidx.lifecycle.ProcessLifecycleInitializer")
+                A: http://schemas.android.com/apk/res/android:value(0x01010024)="androidx.startup" (Raw: "androidx.startup")
+              E: meta-data (line=96)
+                A: http://schemas.android.com/apk/res/android:name(0x01010003)="androidx.profileinstaller.ProfileInstallerInitializer" (Raw: "androidx.profileinstaller.ProfileInstallerInitializer")
+                A: http://schemas.android.com/apk/res/android:value(0x01010024)="androidx.startup" (Raw: "androidx.startup")
+          E: service (line=101)
+            A: http://schemas.android.com/apk/res/android:name(0x01010003)="androidx.room.MultiInstanceInvalidationService" (Raw: "androidx.room.MultiInstanceInvalidationService")
+            A: http://schemas.android.com/apk/res/android:exported(0x01010010)=false
+            A: http://schemas.android.com/apk/res/android:directBootAware(0x01010505)=true
+          E: receiver (line=106)
+            A: http://schemas.android.com/apk/res/android:name(0x01010003)="androidx.profileinstaller.ProfileInstallReceiver" (Raw: "androidx.profileinstaller.ProfileInstallReceiver")
+            A: http://schemas.android.com/apk/res/android:permission(0x01010006)="android.permission.DUMP" (Raw: "android.permission.DUMP")
+            A: http://schemas.android.com/apk/res/android:enabled(0x0101000e)=true
+            A: http://schemas.android.com/apk/res/android:exported(0x01010010)=true
+            A: http://schemas.android.com/apk/res/android:directBootAware(0x01010505)=false
+              E: intent-filter (line=112)
+                  E: action (line=113)
+                    A: http://schemas.android.com/apk/res/android:name(0x01010003)="androidx.profileinstaller.action.INSTALL_PROFILE" (Raw: "androidx.profileinstaller.action.INSTALL_PROFILE")
+              E: intent-filter (line=115)
+                  E: action (line=116)
+                    A: http://schemas.android.com/apk/res/android:name(0x01010003)="androidx.profileinstaller.action.SKIP_FILE" (Raw: "androidx.profileinstaller.action.SKIP_FILE")
+              E: intent-filter (line=118)
+                  E: action (line=119)
+                    A: http://schemas.android.com/apk/res/android:name(0x01010003)="androidx.profileinstaller.action.SAVE_PROFILE" (Raw: "androidx.profileinstaller.action.SAVE_PROFILE")
+              E: intent-filter (line=121)
+                  E: action (line=122)
+                    A: http://schemas.android.com/apk/res/android:name(0x01010003)="androidx.profileinstaller.action.BENCHMARK_OPERATION" (Raw: "androidx.profileinstaller.action.BENCHMARK_OPERATION")
+== signature
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): false
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v3.2 scheme (APK Signature Scheme v3.2): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+V2 Signer: certificate DN: CN=Thodar throwaway test key
+V2 Signer: certificate SHA-256 digest: a39d24fca40fb2b3e1ffab54c10d1e953baec6edf4f013c0c99ea6002fb767f4
+V2 Signer: certificate SHA-1 digest: 4223f258af2fc3a99cda0ae3268cc5a3504b3390
+V2 Signer: certificate MD5 digest: e46db27700b9197e615a211a76e2ef03
+V2 Signer: key algorithm: RSA
+V2 Signer: key size (bits): 2048
+V2 Signer: public key SHA-256 digest: b32018878a61c2a5c8a2163ef7accd9eb2ffd9ae28c5796b504098501dae26a5
+V2 Signer: public key SHA-1 digest: d52ea562fe055cc7f3c863864f29d8a20344796c
+V2 Signer: public key MD5 digest: fc9b1a9c0acc2e630fa447bbfa4731ae
+RELEASE CHECK PASSED

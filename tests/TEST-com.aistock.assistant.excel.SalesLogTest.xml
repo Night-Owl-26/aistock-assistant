@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.excel.SalesLogTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-11-04T11:37:16.314Z" hostname="runnervmwuk1x" time="0.013">
+  <properties/>
+  <testcase name="a_dated_product_list_is_a_sales_sheet_and_gives_its_products" classname="com.aistock.assistant.excel.SalesLogTest" time="0.013"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

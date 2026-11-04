@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.EndToEndTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-04T11:37:13.203Z" hostname="runnervmwuk1x" time="0.418">
+  <properties/>
+  <testcase name="assistantWritesCanBeUndone" classname="com.aistock.assistant.EndToEndTest" time="0.155"/>
+  <testcase name="spokenExamplesFromTheSpecificationChangeTheDatabase" classname="com.aistock.assistant.EndToEndTest" time="0.137"/>
+  <testcase name="mandatorySequence" classname="com.aistock.assistant.EndToEndTest" time="0.124"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

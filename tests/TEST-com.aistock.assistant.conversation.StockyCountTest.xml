@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.conversation.StockyCountTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-11-04T11:37:13.959Z" hostname="runnervmwuk1x" time="0.005">
+  <properties/>
+  <testcase name="counting_a_sheet_uses_every_row" classname="com.aistock.assistant.conversation.StockyCountTest" time="0.005"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
