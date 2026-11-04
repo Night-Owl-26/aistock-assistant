@@ -20,6 +20,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.async
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
@@ -165,10 +166,22 @@ class CloudSpeaker(private val server: ServerApi, private val fallback: SpeechOu
         if (System.currentTimeMillis() < phoneUntil) { fallback.speak(t, tamil); return }
         talking = true
         job = scope.launch {
+            // Sentence by sentence: the first one is spoken as soon as it is ready while the next is being made, so
+            // the owner hears the answer sooner, and a long reply is never cut short by one long request.
+            val parts = sentences(t.take(2000))
+            val lang = if (tamil) "ta-IN" else null
+            val v = voice()
+            var spoken = 0
             try {
-                val wav = server.textToSpeech(t.take(2000), null, voice())
-                val pcm = Wav.parse(wav) ?: throw IllegalStateException("not a WAV file")
-                withContext(Dispatchers.IO) { play(pcm) }
+                // Each piece's result is wrapped, so a failure in the piece being prepared cannot cut off the one playing.
+                var next = async(Dispatchers.IO) { runCatching { server.textToSpeech(parts[0], lang, v) } }
+                for (i in parts.indices) {
+                    val wav = next.await().getOrThrow()
+                    if (i + 1 < parts.size) next = async(Dispatchers.IO) { runCatching { server.textToSpeech(parts[i + 1], lang, v) } }
+                    val pcm = Wav.parse(wav) ?: throw IllegalStateException("not a WAV file")
+                    withContext(Dispatchers.IO) { play(pcm) }
+                    spoken = i + 1
+                }
                 lastProblem = null
             } catch (e: CancellationException) {
                 // stopped by the owner
@@ -176,11 +189,29 @@ class CloudSpeaker(private val server: ServerApi, private val fallback: SpeechOu
                 talking = false
                 phoneUntil = System.currentTimeMillis() + PHONE_VOICE_MS
                 lastProblem = e.message ?: e.toString()
-                fallback.speak(t, tamil)
+                // Whatever was not spoken yet is read by the phone's voice.
+                fallback.speak(parts.drop(spoken).joinToString(" ").ifBlank { t }, tamil)
             } finally {
                 talking = false
             }
         }
+    }
+
+    /** The reply in pieces of whole sentences: a short first one, then the rest (up to about 450 characters each). */
+    private fun sentences(text: String): List<String> {
+        val raw = text.split(Regex("(?<=[.!?।])\\s+|\\n+")).map { it.trim() }.filter { it.isNotEmpty() }
+        val out = ArrayList<String>()
+        val cur = StringBuilder()
+        for (r in raw) {
+            if (cur.isNotEmpty() && cur.length + r.length > 450) { out.add(cur.toString()); cur.clear() }
+            if (cur.isNotEmpty()) cur.append(' ')
+            cur.append(r)
+            // The first piece is kept short, so the first words come quickly; the rest goes in as few pieces as
+            // possible (each piece is one request against the voice limit).
+            if (out.isEmpty() && cur.length >= 40) { out.add(cur.toString()); cur.clear() }
+        }
+        if (cur.isNotEmpty()) out.add(cur.toString())
+        return out.ifEmpty { listOf(text) }
     }
 
     private suspend fun play(pcm: Wav.Pcm) {

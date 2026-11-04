@@ -147,7 +147,31 @@ export function speechApi(cfg, fetchImpl = fetch) {
   }
 
   /** Gemini speaks the reply in a natural voice; returns a WAV (its audio comes as raw 16-bit PCM). */
+  // Tanglish (Tamil written in English letters) read by a voice sounds foreign: "irukku" comes out as English.
+  // For a Tamil reply it is first written in Tamil script, with English words (products, stock, bill) kept as they are.
+  const scriptCache = new Map()
+  async function tamilScript(text) {
+    if (scriptCache.has(text)) return scriptCache.get(text)
+    const prompt = 'The following is Tamil written in English letters (Tanglish), possibly mixed with English. Rewrite it in Tamil script so a ' +
+      'Tamil speech engine pronounces it naturally. Keep English words (product names, sizes, units, stock, bill, cash, credit, brand names) ' +
+      'in English letters, keep numbers as digits and amounts as they are. Do not translate, add or remove anything. Output only the rewritten text.\n\n' + text
+    const r = await fetchImpl(`${cfg.geminiBase}/v1beta/models/${encodeURIComponent(cfg.textModel)}:generateContent`, {
+      method: 'POST', headers: gHeaders(), signal: AbortSignal.timeout(6_000),
+      body: JSON.stringify({ contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0, maxOutputTokens: 800 } }),
+    })
+    const out = r.ok ? geminiText(await parse(r)).trim() : ''
+    // Only a sensible answer is used: some Tamil script, and not wildly longer or shorter than the reply.
+    const ok = /[\u0B80-\u0BFF]/.test(out) && out.length < text.length * 3 + 40 && out.length > text.length / 3
+    const res = ok ? out : text
+    if (scriptCache.size > 300) scriptCache.clear()
+    scriptCache.set(text, res)
+    return res
+  }
+
   async function synthesizeGemini(args) {
+    if (args.language === 'ta-IN' && !/[\u0B80-\u0BFF]/.test(args.text) && /[a-z]{3}/i.test(args.text)) {
+      try { args = { ...args, text: await tamilScript(args.text) } } catch { /* spoken as written */ }
+    }
     const models = await geminiTtsModels()
     if (!models.length) return { status: 503, error: 'This Gemini key has no text-to-speech model.' }
     let last = null

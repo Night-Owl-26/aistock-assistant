@@ -201,3 +201,25 @@ test('a Gemini voice model out of its limit rests and the next one speaks; heari
   assert.equal(api.sttProvider(), 'gemini')
   assert.equal((await api.recognize({ audio: 'AAAA', language: 'ta-IN', phrases: [] })).provider, 'gemini')
 })
+
+test('a Tamil reply in English letters is written in Tamil script before it is spoken', async () => {
+  const cfg = loadConfig({ ...base, GEMINI_API_KEY: 'g', GEMINI_BASE_URL: 'https://gem.test', GEMINI_TTS_MODEL: 'tts-model', GEMINI_TEXT_MODEL: 'text-model' })
+  const spoken = []
+  let rewrites = 0
+  const f = async (url, init) => {
+    const b = JSON.parse(init.body)
+    if (String(url).includes('text-model')) { rewrites++; return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: 'Shirt XL stock 10 இருக்கு.' }] } }] }), { status: 200 }) }
+    spoken.push(b.contents[0].parts[0].text)
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ inlineData: { mimeType: 'audio/L16;rate=24000', data: Buffer.alloc(8).toString('base64') } }] } }] }), { status: 200 })
+  }
+  const api = speechApi(cfg, f)
+  assert.equal((await api.synthesize({ text: 'Shirt XL stock 10 irukku.', language: 'ta-IN' })).status, 200)
+  assert.equal(spoken.at(-1), 'Shirt XL stock 10 இருக்கு.')
+  await api.synthesize({ text: 'Shirt XL stock 10 irukku.', language: 'ta-IN' })
+  assert.equal(rewrites, 1, 'the same reply is not rewritten twice')
+  // English replies and text already in Tamil script are spoken as they are.
+  await api.synthesize({ text: 'Shirt XL has 10 pieces.', language: 'en-IN' })
+  assert.equal(spoken.at(-1), 'Shirt XL has 10 pieces.')
+  await api.synthesize({ text: 'சரி, 10 இருக்கு', language: 'ta-IN' })
+  assert.equal(rewrites, 1)
+})

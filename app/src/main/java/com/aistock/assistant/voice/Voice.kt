@@ -130,6 +130,7 @@ class Speaker(context: Context) : SpeechOutput {
             val wanted = if (tamilText || (tamil && text.none { it in 'a'..'z' })) Locale.forLanguageTag("ta-IN") else Locale.forLanguageTag("en-IN")
             val result = engine.setLanguage(wanted)
             if (result == TextToSpeech.LANG_MISSING_DATA || result == TextToSpeech.LANG_NOT_SUPPORTED) engine.setLanguage(Locale.ENGLISH)
+            else bestVoice(engine, wanted)?.let { try { engine.voice = it } catch (e: Exception) { } }
             val limit = try { TextToSpeech.getMaxSpeechInputLength() - 100 } catch (e: Exception) { 3_900 }
             talking = engine.speak(text.take(limit), TextToSpeech.QUEUE_FLUSH, null, "aistock-reply") == TextToSpeech.SUCCESS
         } catch (e: Exception) {
@@ -138,6 +139,22 @@ class Speaker(context: Context) : SpeechOutput {
     }
 
     override fun isSpeaking(): Boolean = talking || try { ready && tts?.isSpeaking == true } catch (e: Exception) { false }
+
+    private val chosen = HashMap<String, android.speech.tts.Voice?>()
+
+    /**
+     * The most natural installed voice for the language (the default is often a plain, robotic one): highest quality,
+     * the same country first (Indian English for en-IN), and one that works without internet when there is a choice.
+     */
+    private fun bestVoice(engine: TextToSpeech, wanted: Locale): android.speech.tts.Voice? = chosen.getOrPut(wanted.toLanguageTag()) {
+        try {
+            engine.voices?.filter { v ->
+                v.locale.language == wanted.language && !v.features.contains(TextToSpeech.Engine.KEY_FEATURE_NOT_INSTALLED)
+            }?.maxByOrNull { v ->
+                v.quality * 10 + (if (v.locale.country == wanted.country) 5 else 0) + (if (v.isNetworkConnectionRequired) 0 else 2) - v.latency
+            }
+        } catch (e: Exception) { null }
+    }
 
     override fun stop() {
         talking = false
