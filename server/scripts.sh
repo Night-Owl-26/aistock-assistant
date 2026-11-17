@@ -31,8 +31,26 @@ case "${1:-}" in
   reset-code) # ./scripts.sh reset-code owner@email.com  -> a 6-digit code (15 minutes) to read out to an owner who forgot the password
     docker compose exec -T api wget -qO- --header "Authorization: Bearer $(grep ^ADMIN_TOKEN .env | cut -d= -f2-)" \
       --header 'Content-Type: application/json' --post-data "{\"email\":\"$2\"}" http://127.0.0.1:8080/admin/password-code; echo ;;
+  timings) # ./scripts.sh timings [3h]  -> how long hearing (stt), Stocky's thinking (generate) and speaking (tts) took
+    sudo docker compose logs api --since "${2:-3h}" --no-log-prefix 2>/dev/null | python3 -c '
+import sys,json,re,collections
+url={};st=collections.defaultdict(list);seq=[]
+for l in sys.stdin:
+    i=l.find("{")
+    if i<0: continue
+    try: o=json.loads(l[i:])
+    except: continue
+    r=o.get("reqId")
+    if o.get("msg")=="incoming request": url[r]=o.get("req",{}).get("url","")
+    elif o.get("msg")=="request completed" and r in url:
+        m=re.search(r"/(ai/\w+|sync/\w+)",url[r])
+        if m: st[m.group(1)].append(o.get("responseTime",0)/1000); seq.append((m.group(1),o.get("responseTime",0)/1000,o.get("res",{}).get("statusCode")))
+for k,v in sorted(st.items()): print(f"{k:16} n={len(v):3} avg={sum(v)/len(v):5.1f}s max={max(v):5.1f}s")
+print("last 15:", " | ".join(f"{a} {b:.1f}s {c}" for a,b,c in seq[-15:]))
+'
+    ;;
   voice-test) # ./scripts.sh voice-test [Kore]  -> speaks a test sentence with Gemini; shows the model or the exact error
     docker compose exec -T api wget -qO- --header "Authorization: Bearer $(grep ^ADMIN_TOKEN .env | cut -d= -f2-)" \
       "http://127.0.0.1:8080/admin/voice-test?voice=${2:-Kore}"; echo ;;
-  *) echo "usage: ./scripts.sh backup|restore <file>|activate <businessId> <plan> [days] [ref]|find <email>|usage|payments|approve <#>|reject <#> [note]|reset-code <email>|voice-test [voice]" ;;
+  *) echo "usage: ./scripts.sh backup|restore <file>|activate <businessId> <plan> [days] [ref]|find <email>|usage|payments|approve <#>|reject <#> [note]|reset-code <email>|voice-test [voice]|timings [3h]" ;;
 esac
