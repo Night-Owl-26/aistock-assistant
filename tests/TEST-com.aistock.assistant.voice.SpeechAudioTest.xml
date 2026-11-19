@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.aistock.assistant.voice.SpeechAudioTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-11-17T14:58:53.894Z" hostname="runnervmccnms" time="0.004">
+  <properties/>
+  <testcase name="givesUpWhenNobodySpeaksAndStopsAtTheTimeLimit" classname="com.aistock.assistant.voice.SpeechAudioTest" time="0.002"/>
+  <testcase name="readsGoogleWavReplies" classname="com.aistock.assistant.voice.SpeechAudioTest" time="0.002"/>
+  <testcase name="stopsAfterAPauseOnceSomeoneHasSpoken" classname="com.aistock.assistant.voice.SpeechAudioTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>
