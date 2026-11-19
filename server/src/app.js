@@ -24,7 +24,19 @@ const fail = (status, code, message) => { throw new HttpError(status, code, mess
  * and the role must be allowed. Data of one business is never readable with another business's id.
  */
 export async function buildApp({ cfg, pool, fetchImpl = fetch, logger = false, WebSocketImpl, mailTransport = null }) {
-  const app = Fastify({ logger, bodyLimit: 1024 * 1024, trustProxy: true })
+  // Trust exactly one proxy hop (the nginx in front, which appends the real client IP to X-Forwarded-For).
+  // NOT `true`: that would take the left-most, client-supplied XFF value as req.ip, letting anyone forge it and
+  // slip past the per-IP rate limits on login, register and forgot-password. `trustProxy: cfg.trustedProxies`
+  // (default 1) reads the IP nginx added, which a client cannot control. Raise it only if more proxies are added.
+  const app = Fastify({ logger, bodyLimit: 1024 * 1024, trustProxy: cfg.trustedProxies })
+
+  // Belt-and-braces response headers (nginx may also set some). HSTS only matters over https; harmless on http.
+  app.addHook('onSend', async (req, reply) => {
+    reply.header('x-content-type-options', 'nosniff')
+    reply.header('x-frame-options', 'DENY')
+    reply.header('referrer-policy', 'no-referrer')
+    if (req.protocol === 'https') reply.header('strict-transport-security', 'max-age=31536000; includeSubDomains')
+  })
   const jwt = tokens(cfg)
   const gemini = geminiApi(cfg, fetchImpl)
   const speech = speechApi(cfg, fetchImpl)

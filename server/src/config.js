@@ -5,6 +5,14 @@ function need(name, fallback) {
   return v
 }
 
+/** Fastify trustProxy value: a hop count, a comma list of presets/CIDRs, or the safe private-range default. */
+function parseTrust(v) {
+  const s = String(v ?? '').trim()
+  if (!s) return ['loopback', 'linklocal', 'uniquelocal']
+  if (/^\d+$/.test(s)) return Number(s)
+  return s.split(/[,\s]+/).filter(Boolean)
+}
+
 export function loadConfig(env = process.env) {
   const get = (n, f) => (env[n] ?? f)
   const cfg = {
@@ -57,6 +65,11 @@ export function loadConfig(env = process.env) {
     refreshTtlDays: Number(get('REFRESH_TTL_DAYS', 60)),
     maxBackupBytes: Number(get('MAX_BACKUP_BYTES', 20 * 1024 * 1024)),
     registerPerHour: Number(get('REGISTER_PER_HOUR', 10)),
+    // Which hops to trust in X-Forwarded-For when working out req.ip (used for per-IP rate limits).
+    // Default: the private/loopback ranges nginx and Docker use, so req.ip becomes the real public client IP that
+    // nginx appends and a client cannot forge a left-most value. Override with a number of hops, or a comma list of
+    // presets ("loopback,uniquelocal") / CIDRs, only if the proxy layout differs.
+    trustedProxies: parseTrust(get('TRUSTED_PROXIES', '')),
     allowRegistration: get('ALLOW_REGISTRATION', 'true') !== 'false',
   }
   if (cfg.jwtSecret.length < 32) throw new Error('JWT_SECRET must be at least 32 characters')
